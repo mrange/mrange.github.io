@@ -115,7 +115,7 @@ function initSoundCloud() {
     sc.bind(SC.Widget.Events.FINISH, function() {
       // get information about currently playing sound
       sc.getCurrentSound(function(currentSound) {
-        // Nop
+        console.log('FINISH');
       });
     });
 
