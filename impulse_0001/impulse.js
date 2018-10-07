@@ -1,5 +1,6 @@
 var canvas;
 var gl;
+var sc;
 
 var verticesBuffer;
 var verticesTextureCoordBuffer;
@@ -20,12 +21,50 @@ var perspectiveMatrix;
 const date  = new Date
 const startTime = date.getTime();
 
+var playState = {
+  state     : "stopped",
+  position  : 0.0
+}
+
+function now() {
+  return (new Date).getTime();
+}
+
+function position() {
+  if(playState.state == "stopped") {
+    return playState.position;
+  } else {
+    return now() - playState.position;
+  }
+}
+
+function stop(position) {
+  playState.state     = "stopped";
+  playState.position  = position;
+}
+
+function play(position) {
+  playState.state     = "playing";
+  playState.position  = now () - position;
+}
+
+function seek(position) {
+  if(playState.state == "stopped") {
+    playState.position = position;
+  } else {
+    playState.position  = now () - position;
+  }
+}
+
 function start() {
+  sc     = SC.Widget("sc_player");
   canvas = document.getElementById("glcanvas");
   width  = canvas.width;
   height = canvas.height;
 
   initWebGL(canvas);      // Initialize the GL context
+
+  initSoundCloud();
 
   // Only continue if WebGL is available and working
 
@@ -53,6 +92,42 @@ function start() {
 
     setInterval(drawScene, 16);
   }
+}
+
+function initSoundCloud() {
+  sc.bind(SC.Widget.Events.READY, function() {
+    sc.bind(SC.Widget.Events.PLAY, function() {
+      // get information about currently playing sound
+      sc.getCurrentSound(function(currentSound) {
+        console.log('PLAY');
+        sc.getPosition(function(position) {play(position);});
+      });
+    });
+
+    sc.bind(SC.Widget.Events.PAUSE, function() {
+      // get information about currently playing sound
+      sc.getCurrentSound(function(currentSound) {
+        console.log('PAUSE');
+        sc.getPosition(function(position) {stop(position);});
+      });
+    });
+
+    sc.bind(SC.Widget.Events.FINISH, function() {
+      // get information about currently playing sound
+      sc.getCurrentSound(function(currentSound) {
+        // Nop
+      });
+    });
+
+    sc.bind(SC.Widget.Events.SEEK, function() {
+      // get information about currently playing sound
+      sc.getCurrentSound(function(currentSound) {
+        console.log('SEEK');
+        sc.getPosition(function(position) {seek(position);});
+      });
+    });
+
+  });
 }
 
 function initWebGL() {
@@ -205,8 +280,7 @@ function drawScene() {
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.uniform1i(gl.getUniformLocation(shaderProgram, "uSampler"), 0);
 
-  const currentTime = (new Date).getTime();
-  const iTime = (currentTime - startTime) / 1000.0;
+  const iTime = position() / 1000.0;
 
   gl.uniform2f(gl.getUniformLocation(shaderProgram, "iResolution"), width, height);
   gl.uniform1f(gl.getUniformLocation(shaderProgram, "iTime"), iTime);
