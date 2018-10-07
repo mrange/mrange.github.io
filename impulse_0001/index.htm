@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Impulse marvels at the beauty of glass</title>
+    <title>A study of glass</title>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <script src="https://w.soundcloud.com/player/api.js" type="text/javascript"></script>
     <script src="impulse.js" type="text/javascript"></script>
     <link href='https://fonts.googleapis.com/css?family=Josefin Slab' rel='stylesheet'>
     <style>
         body {
-            font-family: 'Josefin Slab';font-size: 22px;
+            font-family: 'Josefin Slab';font-size: 32px;
         }
     </style>
     <script id="shader-fs" type="x-shader/x-fragment">
@@ -35,33 +35,46 @@
       #define TOLERANCE       0.000001
       #define MAX_RAY_LENGTH  16.0
       #define MAX_BOUNCES     8
-      #define MAX_RAY_MARCHES 80
+      #define MAX_RAY_MARCHES 90
 
       #define PI              3.141592654
       #define TAU             (2.0*PI)
 
       #define DEG2RAD         (PI/180.0)
 
-      #define PERIOD          14.0
-      #define FADETIME        2.0
+      #define PERIODTIME      25.0
+      #define FADETIME        4.0
+
+      #define TIMEINPERIOD    (mod(iTime, PERIODTIME))
+      #define PERIOD          (mod(floor(iTime / PERIODTIME), 9.0))
+      //#define PERIOD          8
 
       #define AA              0
 
+      float sgn(float x)
+      {
+        return (x<0.0)?-1.0:1.0;
+      }
+
+      float smin(float a, float b, float k)
+      {
+        float res = exp( -k*a ) + exp( -k*b );
+        return -log( res )/k;
+      }
+
+      float pReflect(inout vec3 p, vec3 planeNormal, float offset)
+      {
+        float t = dot(p, planeNormal)+offset;
+        if (t < 0.0)
+        {
+          p = p - (2.0*t)*planeNormal;
+        }
+        return sgn(t);
+      }
 
       void pR(inout vec2 p, float a)
       {
         p = cos(a)*p + sin(a)*vec2(p.y, -p.x);
-      }
-
-      float getTimeInPeriod()
-      {
-      //  return mod(iTime/10.0, PERIOD) + 3.0;
-        return mod(iTime, PERIOD);
-      }
-
-      float getPeriod()
-      {
-        return floor(iTime / PERIOD);
       }
 
       float maxComp(in vec3 p)
@@ -79,48 +92,6 @@
       float sdRoundCube(in vec3 p, float r)
       {
         return lengthN(p, 8.0) - r;
-      }
-
-      float sgn(float x)
-      {
-        return (x<0.0)?-1.0:1.0;
-      }
-
-      void pR90(inout vec2 p)
-      {
-        p = vec2(p.y, -p.x);
-      }
-
-      void pR270(inout vec2 p)
-      {
-        p = vec2(-p.y, p.x);
-      }
-
-      float sdCapsule(vec3 p, in vec2 h)
-      {
-        pR90(p.xy);
-        float r = h.x;
-        float c = h.y/2.0;
-        return mix(length(p.xz) - r, length(vec3(p.x, abs(p.y) - c, p.z)) - r, step(c, abs(p.y)));
-      }
-
-      float capsule(in vec3 p, in vec2 f, in vec2 t, float r)
-      {
-        vec2 diff = t - f;
-        float a = atan(diff.y, diff.x);
-        p.xy -= f + diff*0.5;
-        pR(p.xy, a);
-
-        return sdCapsule(p, vec2(r, length(diff)));
-      }
-
-
-      float pMod1(inout float p, float size)
-      {
-        float halfsize = size*0.5;
-        float c = floor((p + halfsize)/size);
-        p = mod(p + halfsize, size) - halfsize;
-        return c;
       }
 
       vec3 pMod3(inout vec3 p, vec3 size)
@@ -148,6 +119,7 @@
         ref    = 0.2;
         trans  = 0.9;
         absorb = 0.5*vec3(1.0, 2.0, 3.0);
+
         float s  = sdSphere(p, 0.6);
         float is = sdSphere(p, 0.8);
         float rc = sdRoundCube(p, 1.0);
@@ -162,122 +134,130 @@
         return d;
       }
 
-      float sdTorus(vec3 p, vec2 t)
+      float impulse2(in vec3 p, out vec3 col, out float ref, out float trans, out vec3 absorb)
       {
-        vec2 q = vec2(length(p.xz)-t.x,p.y);
-        return length(q)-t.y;
-      }
-
-      float truchetArc(vec3 pos, float r)
-      {
-        return sdTorus(pos - vec3(0.0, 0.5, 0.0), vec2(0.5, r));
-      }
-
-      float sdCross(in vec3 p, in float r)
-      {
-        float xz = length(p.xz) - r;
-        float xy = length(p.xy) - r;
-        float yz = length(p.yz) - r;
-
-        return min(min(xz, xy), yz);
-      }
-
-      float rand(vec3 r) { return fract(sin(dot(r.xy,vec2(1.38984*sin(r.z),1.13233*cos(r.z))))*653758.5453); }
-
-      float truchetCell1(vec3 pos, float r1, float r2)
-      {
-        float t =
-          min(min(
-            truchetArc(pos, r1),
-            truchetArc(vec3(pos.z - 1.0,1.0-pos.x,pos.y - 1.0), r1)),
-            truchetArc(vec3(pos.y,1.0-pos.z,pos.x - 1.0), r1));
-        return t;
-      }
-
-      float truchetCell2(vec3 pos, float r1, float r2)
-      {
-        float c  = sdCross(pos - vec3(0.5), r1);
-        float s  = sdSphere(pos - vec3(0.5), r2);
-        return min(c, s);
-      }
-
-
-      float truchet(vec3 pos, float r1, float r2)
-      {
-        vec3 cellpos=fract(pos);
-        vec3 gridpos=floor(pos);
-
-        float rnd=rand(gridpos + vec3(10.0));
-        int s = int(rnd*8.0);
-
-        /*
-        if (s == 0) ;
-        else if (s == 1) cellpos = vec3(cellpos.x,1.0-cellpos.y,cellpos.z)
-
-        switch(s)
-        {
-        case 0:
-          break;
-        case 1:
-          cellpos = vec3(cellpos.x,1.0-cellpos.y,cellpos.z);
-          break;
-        case 2:
-          cellpos = vec3(1.0-cellpos.x,cellpos.y,cellpos.z);
-          break;
-        case 3:
-          cellpos = vec3(1.0-cellpos.x,1.0-cellpos.y,cellpos.z);
-          break;
-        case 4:
-          cellpos = vec3(cellpos.y,cellpos.x,1.0-cellpos.z);
-          break;
-        case 5:
-          cellpos = vec3(cellpos.y,1.0-cellpos.x,1.0-cellpos.z);
-          break;
-        case 6:
-          cellpos = vec3(1.0-cellpos.y,cellpos.x,1.0-cellpos.z);
-          break;
-        case 7:
-        default:
-          cellpos = vec3(1.0-cellpos.y,1.0-cellpos.x,1.0-cellpos.z);
-          break;
-        }
-      */
-
-        if(rnd < 0.8)
-        {
-          return truchetCell1(cellpos, r1, r2);
-        }
-        else
-        {
-          return truchetCell2(cellpos, r1, r2);
-        }
-      }
-
-      float impulse6(in vec3 p, out vec3 col, out float ref, out float trans, out vec3 absorb)
-      {
-        col    = vec3(1.0);
+        col    = vec3(0.3);
         ref    = 0.2;
         trans  = 0.9;
         absorb = 0.5*vec3(1.0, 2.0, 3.0);
 
-        float s  = 0.9;
-        float b1 = sdBox(p, vec3(1.0));
-        float b2 = sdBox(p, vec3(0.9));
-        float b3 = sdBox(p, vec3(0.88));
-        float t  = max(b2, truchet(p/s, 0.1, 0.35)*s);
-        float it = max(b3, truchet(p/s, 0.075, 0.30)*s);
-        float tb = max(t , -it);
-        float d = max(b1, -tb);
-        if (d == it)
+        float s1 = sdBox(p, vec3(1.0));
+        float s3 = sdSphere(p, 0.4);
+        pMod3(p, vec3(1.0));
+        float s2 = sdSphere(p, 0.48);
+        float s = max(s1, -s2);
+        s = min(s, s3);
+        if (s == s3)
         {
-          absorb = 2.5*vec3(1.0, -1.0, -2.0);
+          absorb = 1.0*vec3(1.0, -1.0, -2.0);
+        }
+
+        return s;
+      }
+
+      float mandelbulb(in vec3 p)
+      {
+        vec3 w = p;
+        float m = dot(w,w);
+
+        float dz = 1.0;
+
+        dz = 8.0*pow(sqrt(m),7.0)*dz + 1.0;
+
+        float r = length(w);
+        float b = 8.0*acos(w.y/r);
+        float a = 8.0*atan(w.x, w.z);
+        vec3 v  = vec3(sin(b)*sin(a), cos(b), sin(b)*cos(a));
+        w = p + pow(r,8.0)*v;
+
+        m = dot(w,w);
+
+        return 0.25*log(m)*sqrt(m)/dz;
+      }
+
+
+      float impulse3(in vec3 p, out vec3 col, out float ref, out float trans, out vec3 absorb)
+      {
+        col    = vec3(0.3);
+        ref    = 0.2;
+        trans  = 0.9;
+        absorb = 0.5*vec3(1.0, 2.0, 3.0);
+
+        float rc = sdRoundCube(p, 1.0);
+        float s  = 0.9;
+        float mb = mandelbulb(p/s)*s;
+        float s1 = sdSphere(p, 0.4);
+        float d = rc;
+        d = max(d, -mb);
+        d = min(d, s1);
+        if (d == s1)
+        {
+          absorb = 1.0*vec3(1.0, -1.0, -2.0);
         }
         return d;
       }
 
+      float bubbles(in vec3 p)
+      {
+        vec3 pp = p - vec3(0.1) - vec3(0.0, iTime*0.15 + 10.0, 0.0);
+        pReflect(pp, normalize(vec3(1.0, 0.5, 0.2)), 0.3);
+        pReflect(pp, normalize(vec3(0.2, 0.5, 1.0)), 0.2);
+        pMod3(pp, vec3(0.5, 0.3, 0.4));
+
+        vec3 ppp = p - vec3(0.2) - vec3(0.0, iTime*0.05 + 10.0, 0.0);
+        pReflect(ppp, normalize(vec3(0.7, 0.5, 0.4)), 0.3);
+        pReflect(ppp, normalize(vec3(0.5, 0.4, 0.7)), 0.1);
+        pMod3(ppp, vec3(0.7, 0.6, 0.4));
+
+        float ss = sdSphere(pp, 0.05);
+        float sss = sdSphere(ppp, 0.1);
+
+        return smin(ss, sss, 20.0);
+      }
+
+      float impulse4(in vec3 p, out vec3 col, out float ref, out float trans, out vec3 absorb)
+      {
+        col    = vec3(0.3);
+        ref    = 0.2;
+        trans  = 0.9;
+        absorb = 0.5*vec3(1.0, 2.0, 3.0);
+
+        float sb = sdRoundCube(p, 1.0);
+        float s = 2.5;
+        float bs = bubbles(p/s)*s;
+
+        return max(sb, -bs);
+      }
+
+      float impulse5(in vec3 p, out vec3 col, out float ref, out float trans, out vec3 absorb)
+      {
+        col    = vec3(0.3);
+        ref    = 0.2;
+        trans  = 0.9;
+        absorb = 0.5*vec3(1.0, 2.0, 3.0);
+
+        float sb = sdRoundCube(p, 1.0);
+        float t  = TIMEINPERIOD;
+        float s  = 2.5 / (1.0 + 4.0*t/PERIODTIME);
+        float bs = bubbles(p/s)*s;
+
+        return max(sb, -bs);
+      }
+
+
       float distanceField(in vec3 p, out vec3 col, out float ref, out float trans, out vec3 absorb)
       {
-        float i = impulse1(p, col, ref, trans, absorb);
+        int period = int(PERIOD);
+        float i = 10000000.0;
+        if (period == 0)      i = impulse1(p, col, ref, trans, absorb);
+        else if (period == 1) i = impulse2(p, col, ref, trans, absorb);
+        else if (period == 2) i = impulse3(p, col, ref, trans, absorb);
+        else if (period == 3) i = impulse4(p, col, ref, trans, absorb);
+        else if (period == 4) i = impulse2(p, col, ref, trans, absorb);
+        else if (period == 5) i = impulse3(p, col, ref, trans, absorb);
+        else if (period == 6) i = impulse2(p, col, ref, trans, absorb);
+        else if (period == 7) i = impulse5(p, col, ref, trans, absorb);
+        else if (period == 8) i = impulse1(p, col, ref, trans, absorb);
 
         float rc = sdRoundCube(p - vec3(0.0, -5.05, 0.0), 4.0);
 
@@ -371,7 +351,6 @@
 
       vec3 postProcess(in vec3 col, in vec2 q)
       {
-        //col = saturate(col);
         col=pow(clamp(col,0.0,1.0),vec3(0.75));
         col=col*0.6+0.4*col*col*(3.0-2.0*col);  // contrast
         col=mix(col, vec3(dot(col, vec3(0.33))), -0.4);  // satuation
@@ -389,7 +368,13 @@
 
         float tdist = 0.0;
 
+        int period = int(PERIOD);
+
         float refraction = 0.9;
+
+        if (period == 4) refraction = 1.2;
+        if (period == 5) refraction = 0.75;
+        if (period == 6) refraction = -0.8;
 
         bool inside = false;
 
@@ -400,11 +385,11 @@
         {
           if (maxComp(ragg) <  0.01) break;
           float dmod  = inside ? -1.0 : 1.0;
-          vec3 absorb = vec3(3.0, 2.0, 1.0);
-          vec3 col    = vec3(1.0);
-          float ref   = 0.2;
-          float trans = 0.9;
-          int rep     = 0;
+          vec3 absorb ;
+          vec3 col    ;
+          float ref   ;
+          float trans ;
+          int rep     ;
           float t     = rayMarch(dmod, ro, rd, mint, minstep, rep, col, ref, trans, absorb);
           tdist       += t;
 
@@ -424,7 +409,7 @@
             break;
           }
 
-          float fresnel = pow(1.0 - abs(dot(nor, rd)), 3.0);
+          float fresnel = pow(1.0 - abs(dot(nor, rd)), 2.0);
 
           ref = mix(ref, 1.0, fresnel);
           trans = mix(trans, 0.0, fresnel);
@@ -460,7 +445,6 @@
           float lin = mix(0.2, 1.0, l);
 
           vec3 sky  = getSkyColor(refl);
-          //col *= (0.7 + 0.3*abs(nor.zxy));
           vec3 mcol = mix(lin*col + lr, sky, ref);
 
           vec3 beer = vec3(1.0);
@@ -476,7 +460,7 @@
 
           if (refr == vec3(0.0))
           {
-             rd = refl;
+              rd = refl;
           }
           else
           {
@@ -484,7 +468,7 @@
             inside = !inside;
           }
 
-            /*
+          /* TODO: Fix visual artifacts on borders
           if (fresnel >)
           {
             //final += vec3(1.0);
@@ -495,7 +479,7 @@
           {
             minstep = 0.001;
           }
-      */
+          */
         }
 
 
@@ -504,16 +488,16 @@
 
       vec3 getSample(in vec2 p)
       {
-        // camera
+        float time   = TIMEINPERIOD;
+        int period   = int(PERIOD);
 
-        float time = getTimeInPeriod();
+        vec3 ro  = vec3(3.0, 0.1, 0.0);
+        if (period == 8) ro += 2.0*vec3(time/PERIODTIME);
+        if (period == 5) ro = 1.5*vec3(1.0, 1.5, 0.0);
 
-
-        vec3 ro  = vec3(2.0);
         vec3 la  = vec3(0.0);
 
-        //pR(ro.xz, PI/4.0 + time/PERIOD);
-        pR(ro.xz, iTime/8.0);
+        pR(ro.xz, iTime/PERIODTIME);
 
         vec3 ww = normalize(la - ro);
         vec3 uu = normalize(cross(vec3(0.0,1.0,0.0), ww ));
@@ -527,7 +511,7 @@
 
       void mainImage(out vec4 fragColor, in vec2 fragCoord)
       {
-        float time = getTimeInPeriod();
+        float time = TIMEINPERIOD;
         vec2 q=fragCoord.xy/iResolution.xy;
         vec2 p = -1.0 + 2.0*q;
         p.x *= iResolution.x/iResolution.y;
@@ -548,14 +532,12 @@
         col /= 4.0;
       #endif
 
-        float fadeIn   = smoothstep(0.0, FADETIME, time);
-        float whiteOut = smoothstep(PERIOD - FADETIME*2.0, PERIOD - FADETIME, time);
-        float fadeOut  = 1.0 - smoothstep(PERIOD - FADETIME, PERIOD, time);
-        fadeIn  = 1.0;
-        whiteOut= 0.0;
-        fadeOut = 1.0;
+        float whiteIn  = 1.0 - smoothstep(0.0, FADETIME, time);
+        float whiteOut = smoothstep(PERIODTIME - FADETIME, PERIODTIME, time);
 
-        fragColor = vec4(mix(postProcess(col, q), vec3(1.0), whiteOut)*fadeIn*fadeOut, 1.0);
+        if (iTime > PERIODTIME*9.0) whiteOut = 1.0;
+
+        fragColor = vec4(mix(postProcess(col, q), vec3(1.0), whiteOut + whiteIn), 1.0);
       }
     </script>
 
@@ -578,17 +560,15 @@
   <body onload="start()">
     <div style="display:flex;justify-content:center;align-items:center;">
       <div>
-        <h1>Impulse marvels at the beauty of glass</h1>
+        <h1>A study of glass</h1>
         <canvas id="glcanvas" width="960" height="540">
           Your browser doesn't appear to support the HTML5 <code>&lt;canvas&gt;</code> element.
         </canvas>
         <br/>
-        <p width="960">
-          Inspiration drawn from the many shader authors at shadertoy.com;
-          iq, shane, otaviogood, purton.
-        </p>
         <p>
-          Obvious to some this is not a video but rendered in the browser using WebGL.
+          Inspiration drawn from the many shader authors at shadertoy.com
+          <br/>
+          iq, shane, otaviogood, purton and others.
         </p>
         <br/>
         <iframe
