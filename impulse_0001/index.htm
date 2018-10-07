@@ -1,13 +1,16 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>WebGL - Hello World!</title>
+    <title>Impulse marvels at the beauty of glass</title>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <script src="https://w.soundcloud.com/player/api.js" type="text/javascript"></script>
     <script src="impulse.js" type="text/javascript"></script>
-
-   <!-- Fragment shader program -->
-
+    <link href='https://fonts.googleapis.com/css?family=Josefin Slab' rel='stylesheet'>
+    <style>
+        body {
+            font-family: 'Josefin Slab';font-size: 22px;
+        }
+    </style>
     <script id="shader-fs" type="x-shader/x-fragment">
       // -----------------------------------------------------------------------
       // BEGIN - Common prelude
@@ -556,8 +559,6 @@
       }
     </script>
 
-    <!-- Vertex shader program -->
-
     <script id="shader-vs" type="x-shader/x-vertex">
       attribute highp vec3 aVertexPosition;
       attribute highp vec3 aVertexNormal;
@@ -577,9 +578,18 @@
   <body onload="start()">
     <div style="display:flex;justify-content:center;align-items:center;">
       <div>
+        <h1>Impulse marvels at the beauty of glass</h1>
         <canvas id="glcanvas" width="960" height="540">
           Your browser doesn't appear to support the HTML5 <code>&lt;canvas&gt;</code> element.
         </canvas>
+        <br/>
+        <p width="960">
+          Inspiration drawn from the many shader authors at shadertoy.com;
+          iq, shane, otaviogood, purton.
+        </p>
+        <p>
+          Obvious to some this is not a video but rendered in the browser using WebGL.
+        </p>
         <br/>
         <iframe
           id="sc_player"
