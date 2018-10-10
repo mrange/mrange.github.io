@@ -36,6 +36,8 @@ var perspectiveMatrix;
 const date  = new Date
 const startTime = date.getTime();
 
+const msPerFrame = 1000.0/60.0;
+
 var playState = {
   state     : "stopped",
   position  : 0.0
@@ -105,7 +107,7 @@ function start() {
 
     // Set up to draw the scene periodically.
 
-    setInterval(drawScene, 16);
+    setTimeout(drawScene, msPerFrame);
   }
 }
 
@@ -280,6 +282,9 @@ function handleTextureLoaded(image, texture) {
 }
 
 function drawScene() {
+  const before = now();
+  const iTime = position() / 1000.0;
+
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
   gl.bindBuffer(gl.ARRAY_BUFFER, verticesBuffer);
@@ -295,13 +300,18 @@ function drawScene() {
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.uniform1i(gl.getUniformLocation(shaderProgram, "uSampler"), 0);
 
-  const iTime = position() / 1000.0;
-
   gl.uniform2f(gl.getUniformLocation(shaderProgram, "iResolution"), width, height);
   gl.uniform1f(gl.getUniformLocation(shaderProgram, "iTime"), iTime);
 
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, verticesIndexBuffer);
   gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+
+  const after = now();
+
+  const diff = after - before;
+  const wait = diff > msPerFrame - 1.0 ? 1.0 : msPerFrame - diff;
+
+  setTimeout(drawScene, wait);
 }
 
 function initShaders() {
