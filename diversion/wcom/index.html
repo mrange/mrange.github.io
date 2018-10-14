@@ -15,7 +15,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>iteego</title>
+    <title>wcom</title>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <script src="webgl-driver.js" type="text/javascript"></script>
     <link href='https://fonts.googleapis.com/css?family=Josefin Slab' rel='stylesheet'>
@@ -47,11 +47,8 @@
       // END - Common prelude
       // -----------------------------------------------------------------------
 
-      // Created by mrange/2018
-      // License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
-
       #define TOLERANCE       0.00001
-      #define MAX_RAY_LENGTH  25.0
+      #define MAX_RAY_LENGTH  16.0
       #define MAX_BOUNCES     5
       #define MAX_RAY_MARCHES 100
 
@@ -60,7 +57,7 @@
 
       #define DEG2RAD         (PI/180.0)
 
-      #define PERIOD          25.0
+      #define PERIOD          14.0
       #define FADETIME        2.0
 
       #define AA              0
@@ -97,6 +94,12 @@
         return lengthN(p, 8.0) - r;
       }
 
+      float sdBox(in vec3 p, in vec3 b)
+      {
+        vec3  di = abs(p) - b;
+        return maxComp(di);
+      }
+
       float sgn(float x)
       {
         return (x<0.0)?-1.0:1.0;
@@ -114,152 +117,158 @@
         return s;
       }
 
-      float sdCappedCylinder(in vec3 p, in vec2 h)
+      float fCapsule(vec3 p, float r, float c)
       {
-        vec2 d = abs(vec2(length(p.xy),p.z)) - h;
-        return min(max(d.x,d.y),0.0) + length(max(d,0.0));
-      }
-
-      float sdCapsule(vec3 p, in vec2 h)
-      {
-        float r = h.x;
-        float c = h.y - h.x;
         return mix(length(p.xz) - r, length(vec3(p.x, abs(p.y) - c, p.z)) - r, step(c, abs(p.y)));
       }
 
-      float sdSphere(in vec3 p, in float r)
+      float capsule(in vec3 p, float r, in vec3 off, in float rot)
       {
-        return length(p) - r;
+        p -= off;
+        pR(p.xy, rot*DEG2RAD);
+        return fCapsule(p, r, 5.0);
       }
 
-      float udRoundBox( vec3 p, vec3 b, float r )
+      float letterw(in vec3 p, float r)
       {
-        return length(max(abs(p)-b + r,0.0))-r;
+        vec3 o  = vec3(3.0, 0.0, 0.0);
+        float a = 17.0;
+
+        pMirror(p.x, 3.0);
+        float d0 = capsule(p, r, -0.5*o, a);
+        float d1 = capsule(p, r, 0.5*o, -a);
+        float d  = min(d0, d1);
+
+        return d;
       }
 
-      float iiteego(in vec3 p)
+      float letterm(in vec3 p, float r)
       {
-        pR90(p.zy);
-        vec3 e = vec3(0.2);
-        float i = udRoundBox(p, e + vec3(2.75, 2.85, 0.5), 0.25);
-        i = min(i, udRoundBox(p - vec3(0.0, -2.0 - 0.85 / 2.0 , 0.0), e + vec3(0.85, 1.4, 0.5), 0.25));
-        return i;
+        vec3 o  = vec3(3.0, 0.0, 0.0);
+        float a = 22.0;
+        p.x /= 1.2;
+
+        pMirror(p.x, 2.3);
+        p.x = -p.x;
+        float d0 = capsule(p, r, -0.5*o, 0.0);
+        float d1 = capsule(p - vec3(-1.1, 0.4, 0.0), r, 0.5*o, a);
+        float d  = min(d0, d1);
+
+        return d;
       }
 
-      float iteego(in float localtime, in vec3 p, out vec3 col, out float ref, out float trans, out vec3 absorb)
+      float fTorus(vec3 p, float smallRadius, float largeRadius)
       {
-        pR90(p.zy);
-        float i = udRoundBox(p, vec3(2.75, 2.85, 0.5), 0.25);
-        int mat = 0; // Black base
+        return length(vec2(length(p.xz) - largeRadius, p.y)) - smallRadius;
+      }
 
-        float ib= udRoundBox(p - vec3(0.0, 0.0, 0.25), vec3(1.9 , 2.0 , 0.3), 0.25);
-        i = max(i, -ib);
-        if (i == -ib) mat = 1; // White inner
+      float lettero(in vec3 p, float r)
+      {
+        pR90(p.yz);
+        p.x  /= 0.9;
 
-        float d = min(sdCappedCylinder(p, vec2(1.0, 0.5)), udRoundBox(p - vec3(0.0, -2.0 - 0.85 / 2.0 , 0.0), vec3(0.85, 1.4, 0.5), 0.25));
-        i = min(i, d);
-        if (i == d) mat = 0; // Black base
+        return fTorus(p, r, 6.0);
+      }
 
-        float is = min(sdCapsule(p - vec3(0.0, -2.0 - 0.85 / 2.0 , 0.5), vec2(1.05/2.0, 1.0)), sdSphere(p - vec3(0.0, 0.0, 0.5), 0.75));
-        i = max(i, -is);
-        if (i == -is) mat = 1; // White inner
+      float letterc(in vec3 p, float r)
+      {
+        pR90(p.yz);
+        p.x  /= 0.9;
 
-        float s = sdSphere(p - vec3(0.0, 0.0, 0.5), 0.65);
-        i = min(i, s);
-        if (i == s) mat = 2; // Red sphere
+        float  b = sdBox(p - vec3(6.0, 0.0, 0.0), vec3(4.0 - r));
+        float  t = fTorus(p, r, 6.0);
 
-        float c = sdCapsule(p - vec3(0.0, -2.0 - 0.85 / 2.0 , 0.5), vec2(0.85/2.0, 0.9));
-        i = min(i, c);
-        if (i == c) mat = 3; // Blue capsule
+        return max(t, -b);
+      }
 
-        float lt = localtime - 3.0;
+      float letters(in vec3 p, float bb, float off, float r)
+      {
+        float  w = letterw(p - vec3(0.0, 0.0, -off), r);
+        pR90(p.xz);
+        float  c = letterc(p - vec3(0.0, 0.0, -off), r);
+        pR90(p.xz);
+        float  o = lettero(p - vec3(0.0, 0.0, -off), r);
+        pR90(p.xz);
+        float  m = letterm(p - vec3(0.0, 0.0, -off), r);
 
-        if (mat == 1)
+        return max(min(min(w ,c), min(o ,m)), bb);
+      }
+
+      float logo(in vec3 p, out vec3 col, out float ref, out vec3 absorb)
+      {
+        float dist = 1.8;
+        float c2 = pMirror(p.z, 2.0*dist);
+        float c1 = pMirror(p.z, dist);
+        float c0 = pMirror(p.x, dist);
+        float c  = c0 * c1 * c2;
+        if (c > 0.0)
         {
-          // The white inner box
-          ref      = 0.2;
-          trans    = 0.0;
-          col      = vec3(1.0);
-          absorb   = vec3(1.0);
-        }
-        else if (mat == 2)
-        {
-          // The red sphere
-          ref      = 0.4;
-          trans    = 0.8;
-          col      = vec3(1.0);
-          //absorb   = ;
-      //    absorb   = 2.0*vec3(5.0);
-          absorb   =
-              mix(
-                  mix(10.0*vec3(1.0, 3.0, 5.0), -1.5*vec3(5.0), smoothstep(0.0, 1.0, lt)),
-                  2.0*vec3(-1.0, 3.0, 5.0),
-                  smoothstep(1.0, 4.0, lt));
-        }
-        else if (mat == 3)
-        {
-          // The blue capsule
-          ref      = 0.4;
-          trans    = 0.8;
-          col      = vec3(1.0);
-          //absorb   = ;
-          absorb   =
-              mix(
-                  mix(10.0*vec3(5.0, 3.0, 1.0), -1.5*vec3(5.0), smoothstep(1.0, 2.0, lt)),
-                  2.0*vec3(5.0, 3.0, -1.0),
-                  smoothstep(2.0, 5.0, lt));
+          ref    = 0.9;
+          col    = vec3(1.0);
+          absorb = 5.0*vec3(3.0, 2.0, 1.0);
         }
         else
         {
-          // The iteego black base
-          ref      = 0.1;
-          trans    = 0.0;
-          col      = vec3(0.15);
-          absorb   = 15.0*vec3(1.0);
+          ref    = 0.3;
+          col    = vec3(0.0);
+          absorb = 5.0*vec3(3.0, 2.0, 1.0);
         }
 
-        return i;
-
+        return sdRoundCube(p, 1.0);
       }
 
-      vec2 pModMirror2(inout vec2 p, vec2 size)
+      float angleWcom(float time)
       {
-        vec2 halfsize = size*0.5;
-        vec2 c = floor((p + halfsize)/size);
-        p = mod(p + halfsize, size) - halfsize;
-        p *= mod(c,vec2(2.0))*2.0 - vec2(1.0);
-        return c;
+        time = max(time, 0.0);
+        return smoothstep(0.0, 1.0, time)*3.0*PI/2.0;
       }
 
-      float rand(vec3 r)
-      {
-        return fract(sin(dot(r.xy,vec2(1.38984*sin(r.z),1.13233*cos(r.z))))*653758.5453);
-      }
-
-      float distanceField(in vec3 p, out vec3 col, out float ref, out float trans, out vec3 absorb)
+      float wcom(in vec3 p, out vec3 col, out float ref, out vec3 absorb)
       {
         float time = getTimeInPeriod();
+        float a1 = smoothstep(3.0, 3.8, time)*PI/2.0;
+        float a2 = angleWcom((time - 4.0)/2.0);
+        float a3 = smoothstep(6.2, 8.2, time)*3.0*PI/2.0;
+        pR(p.yz, a1 + a3);
+        pR(p.xz, -a2);
 
-        vec2 instance = pModMirror2(p.xz, vec2(3.5 - smoothstep(0.0, PERIOD, time)));
-        float period = rand(vec3(instance, 0.0) + vec3(100.0, 200.0, 300.0))*length(instance);
-        float localtime = time - 0.5*PERIOD*period;
+        float bb = sdBox(p - vec3(0.0, 0.0, 0.0), vec3(1.2));
+        float rc = sdRoundCube(p - vec3(0.0, 0.0, 0.0), 1.0);
 
-        pR(p.xy, -PI*(1.0 - smoothstep(1.0, 3.0, localtime)));
-      //  pR(p.yz, -0.15);
-        float s  = 0.2;
-        float ii = iiteego((p - vec3(0.0, 1.00, 0.0))/s)*s;
-        float i  = iteego(localtime, (p - vec3(0.0, 1.00, 0.0))/s, col, ref, trans, absorb)*s;
-        float rc = max(sdRoundCube(p, 1.0), -ii);
+        float s   = 0.1;
+        float i   = logo((p - vec3(0.0, 1.11, 0.0))/s, col, ref, absorb)*s;
+        float ils = letters(p/s, bb, 10.0, 1.5)*s;
+        float ls  = letters(p/s, bb, 10.5, 1.0)*s;
+
         float d = rc;
-        d = min(rc, i);
-        if (rc == d)
+        d = max(d, -ils);
+
+        rc = d;
+
+        d = min(d, ls);
+        d = min(d, i);
+
+        if (d == rc)
         {
-          ref      = 0.2;
-          trans    = 0.0;
-          col      = vec3(1.0);
-          absorb   = 5.0*vec3(2.0, 1.5, 1.0);
+          col = vec3(1.0);
+          ref = 0.0;
+          absorb = 5.0*vec3(3.0, 2.0, 1.0);
         }
+        else if (d == ls)
+        {
+          ref    = 0.9;
+          col    = vec3(1.0);
+          absorb = 5.0*vec3(3.0, 2.0, 1.0);
+        }
+
+
         return d;
+      }
+
+
+      float distanceField(in vec3 p, out vec3 col, out float ref, out vec3 absorb)
+      {
+        return wcom(p, col, ref, absorb);
       }
 
       vec3 saturate(in vec3 a)   { return clamp(a, 0.0, 1.0); }
@@ -267,15 +276,13 @@
       float saturate(in float a) { return clamp(a, 0.0, 1.0); }
 
       const vec3 lightPos1 = 100.0*vec3(-0.3, 0.15, 1.0);
-      const vec3 lightPos2 = 100.0*vec3(-0.5,-2.0, 1.2);
+      const vec3 lightPos2 = 100.0*vec3(-0.5,-2.0, -1.2);
 
       const vec3 lightCol1 = vec3(8.0/8.0,7.0/8.0,6.0/8.0);
       const vec3 lightCol2 = vec3(8.0/8.0,6.0/8.0,7.0/8.0);
 
       vec3 getSkyColor(vec3 rayDir)
       {
-        float time = getTimeInPeriod();
-        pR(rayDir.zy, -PI/2.0 - time/PERIOD);
         vec3 lightDir1 = normalize(lightPos1);
         vec3 lightDir2 = normalize(lightPos2);
 
@@ -287,9 +294,9 @@
         float roundBox = length(max(abs(rayDir.xz/max(0.0,rayDir.y))-vec2(0.9, 4.0),0.0))-0.1;
         final += vec3(0.8)* pow(saturate(1.0 - roundBox*0.5), 6.0);
 
-        final += pow(lightCol1, vec3(2.0, 1.5, 1.5)) * pow(ld1, 8.0);
-        final += lightCol1 * pow(ld1, 200.0);
-        final += pow(lightCol2, vec3(2.0, 1.5, 1.5)) * pow(ld2, 4.0);
+        //final += pow(lightCol1, vec3(2.0, 1.5, 1.5)) * pow(ld1, 8.0);
+        //final += lightCol1 * pow(ld1, 200.0);
+        final += pow(lightCol2, vec3(2.0, 1.5, 1.5)) * pow(ld2, 6.0);
         final += lightCol2 * pow(ld2, 200.0);
         return final;
       }
@@ -299,21 +306,20 @@
         vec3  eps = vec3(.001,0.0,0.0);
         vec3 col;
         float ref;
-        float trans;
         vec3 nor;
         vec3 absorb;
-        nor.x = distanceField(pos+eps.xyy, col, ref, trans, absorb) - distanceField(pos-eps.xyy, col, ref, trans, absorb);
-        nor.y = distanceField(pos+eps.yxy, col, ref, trans, absorb) - distanceField(pos-eps.yxy, col, ref, trans, absorb);
-        nor.z = distanceField(pos+eps.yyx, col, ref, trans, absorb) - distanceField(pos-eps.yyx, col, ref, trans, absorb);
+        nor.x = distanceField(pos+eps.xyy, col, ref, absorb) - distanceField(pos-eps.xyy, col, ref, absorb);
+        nor.y = distanceField(pos+eps.yxy, col, ref, absorb) - distanceField(pos-eps.yxy, col, ref, absorb);
+        nor.z = distanceField(pos+eps.yyx, col, ref, absorb) - distanceField(pos-eps.yyx, col, ref, absorb);
         return normalize(nor);
       }
 
-      float rayMarch(in float dmod, in vec3 ro, inout vec3 rd, float mint, float maxt, out int rep, out vec3 col, out float ref, out float trans, out vec3 absorb)
+      float rayMarch(in float dmod, in vec3 ro, inout vec3 rd, float mint, float maxt, out int rep, out vec3 col, out float ref, out vec3 absorb)
       {
         float t = mint;
         for (int i = 0; i < MAX_RAY_MARCHES; i++)
         {
-          float distance_ = distanceField(ro + rd*t, col, ref, trans, absorb);
+          float distance_ = distanceField(ro + rd*t, col, ref, absorb);
           float distance = dmod*distance_;
           if (distance < TOLERANCE || t > maxt) break;
           t += max(distance, 0.001);
@@ -329,11 +335,10 @@
         float t = mint;
         vec3 col;
         float ref;
-        float trans;
         vec3 absorb;
         for (int i=0; i<24; i++)
         {
-          float distance = distanceField(pos + ld*t, col, ref, trans, absorb);
+          float distance = distanceField(pos + ld*t, col, ref, absorb);
           res = min(res, k*distance/t);
           if (ll <= t) break;
           if(res <= minShadow) break;
@@ -344,21 +349,23 @@
 
       vec3 postProcess(in vec3 col, in vec2 q)
       {
-        //col = saturate(col);
-        col=pow(clamp(col,0.0,1.0),vec3(0.75));
+        col=pow(clamp(col,0.0,1.0),vec3(0.45));
         col=col*0.6+0.4*col*col*(3.0-2.0*col);  // contrast
         col=mix(col, vec3(dot(col, vec3(0.33))), -0.4);  // satuation
         col*=0.5+0.5*pow(19.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.7);  // vigneting
         return col;
       }
 
+
+
       vec3 render(in vec3 ro, in vec3 rd)
       {
-        vec3 lightPos = 1.0*vec3(1.5, 3.0, 1.0);
+        float time = getTimeInPeriod();
+        vec3 lightPos = 2.0*vec3(1.5, 3.0, 1.0);
 
-        vec3 final  = vec3(0.0);
+        vec3 col    = vec3(0.0);
 
-        vec3 ragg   = vec3(1.0);
+        vec3 ragg2 = vec3(1.0);
 
         float tdist = 0.0;
 
@@ -368,14 +375,13 @@
 
         for (int i = 0; i < MAX_BOUNCES; ++i)
         {
-          if (maxComp(ragg) <  0.01) break;
+          if (maxComp(ragg2) <  0.01) break;
           float dmod  = inside ? -1.0 : 1.0;
           vec3 absorb = vec3(3.0, 2.0, 1.0);
-          vec3 col    = vec3(1.0);
-          float ref   = 0.2;
-          float trans = 0.9;
+          vec3 mat    = vec3(1.0);
+          float rscale= 0.9;
           int rep     = 0;
-          float t     = rayMarch(dmod, ro, rd, 0.01, MAX_RAY_LENGTH, rep, col, ref, trans, absorb);
+          float t     = rayMarch(dmod, ro, rd, 0.01, MAX_RAY_LENGTH, rep, mat, rscale, absorb);
           tdist       += t;
 
           vec3 pos    = ro + t*rd;
@@ -390,7 +396,7 @@
           else
           {
             // Ray intersected sky
-            final += ragg*getSkyColor(rd);
+            col += ragg2*getSkyColor(rd);
             break;
           }
 
@@ -422,8 +428,8 @@
           float lin = mix(0.2, 1.0, l);
 
           vec3 sky  = getSkyColor(refl);
-          //col *= (0.9 + 0.1*abs(nor.zxy));
-          vec3 mcol = mix(lin*col, sky, ref);
+          mat *= (0.7 + 0.3*abs(nor.zxy));
+          vec3 mcol = 0.8*lin*mat + 0.2*sky;
 
           vec3 beer = vec3(1.0);
 
@@ -431,8 +437,8 @@
           {
             beer = exp(-absorb*t);
           }
-          final      += (1.0 - trans)*ragg*beer*mcol;
-          ragg       *= trans*beer;
+          col        += (1.0 - rscale)*ragg2*beer*mcol;
+          ragg2      *= rscale*beer;
 
           ro        = pos;
 
@@ -452,7 +458,7 @@
         }
 
 
-        return final;
+        return col;
       }
 
       vec3 getSample(in vec2 p)
@@ -462,16 +468,16 @@
 
         // camera
 
-        vec3 rob = vec3(-0.1, 3.5, 0.0);
-        vec3 ro  = (0.5 + 2.5*time/PERIOD)*rob;
+        vec3 rob = vec3(0.1, 3.5, -0.0);
+        vec3 ro  = (0.5 + time/PERIOD)*rob;
         vec3 la  = 1.1/3.5*rob;
 
-        pR(ro.xz, PI/4.0 + time/PERIOD);
+        pR(ro.xz, time/4.0);
 
         vec3 ww = normalize(la - ro);
-        vec3 uu = normalize(cross(vec3(0.0,-1.0,0.0), ww ));
+        vec3 uu = normalize(cross( vec3(0.0,1.0,0.0), ww ));
         vec3 vv = normalize(cross(ww,uu));
-        vec3 rd = normalize( p.x*uu + p.y*vv + (3.0 - 0.75*length(p))*ww );
+        vec3 rd = normalize( p.x*uu + p.y*vv + 2.5*ww );
 
         vec3 col = render(ro, rd);
 
@@ -502,9 +508,10 @@
       #endif
 
         float fadeIn = smoothstep(0.0, FADETIME, time);
-        float fadeOut = smoothstep(PERIOD - FADETIME, PERIOD, time);
+        float fadeOut = 1.0 - smoothstep(PERIOD - FADETIME, PERIOD, time);
 
-        fragColor = vec4(mix(postProcess(col, q)*fadeIn, vec3(1.0), fadeOut), 1.0);
+
+        fragColor = vec4(postProcess(col, q)*fadeIn*fadeOut, 1.0);
 
       }
     </script>
@@ -528,7 +535,7 @@
   <body onload="start()">
     <div style="display:flex;justify-content:center;align-items:center;">
       <div>
-        <h1>iteego</h1>
+        <h1>wcom</h1>
         <canvas id="glcanvas" width="1280" height="720">
           Your browser doesn't appear to support the HTML5 <code>&lt;canvas&gt;</code> element.
         </canvas>
