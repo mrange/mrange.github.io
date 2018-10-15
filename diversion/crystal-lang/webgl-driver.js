@@ -31,14 +31,13 @@ var vertexPositionAttribute;
 var vertexNormalAttribute;
 var textureCoordAttribute;
 
-const date  = new Date
-const startTime = date.getTime();
-
 const msPerFrame = 1000.0/60.0;
 
 function now() {
   return (new Date).getTime();
 }
+
+let startTime = now();
 
 function start() {
   canvas = document.getElementById("glcanvas");
@@ -68,6 +67,8 @@ function start() {
     // Next, load and set up the textures we'll be using.
 
     texture = createTexture("Hello World!");
+
+    startTime = now();
 
     // Set up to draw the scene periodically.
 
