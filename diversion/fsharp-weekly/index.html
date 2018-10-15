@@ -61,18 +61,7 @@
 
       #define DEG2RAD         (PI/180.0)
 
-      #define AA              1
-
-      float sgn(float x)
-      {
-        return (x<0.0)?-1.0:1.0;
-      }
-
-      float smin(float a, float b, float k)
-      {
-        float res = exp( -k*a ) + exp( -k*b );
-        return -log( res )/k;
-      }
+      #define AA              0
 
       void pR(inout vec2 p, float a)
       {
@@ -126,6 +115,14 @@
         return mix(length(p.xz) - r, length(vec3(p.x, abs(p.y) - c, p.z)) - r, step(c, abs(p.y)));
       }
 
+      float sdCappedCapsule(vec3 p, in vec2 h)
+      {
+        pR90(p.xy);
+        float r = h.x;
+        float c = h.y/2.0;
+        return mix(length(p.xz) - r, length(vec3(p.x, abs(p.y) - c, p.z)) - r, step(c, abs(p.y)));
+      }
+
       float capsule(in vec3 p, in vec2 f, in vec2 t, float r)
       {
         vec2 diff = t - f;
@@ -139,20 +136,45 @@
       const float fsharpr  = 31.0/260.0;
       const float fsharpor = 0.02;
 
-      float twolines(in vec3 p)
+      float box2d(in vec2 p, in vec2 b)
       {
-        p -= vec3(-0.5, -2.0*fsharpr, 0.0);
-        float d1 = capsule(p, vec2(0.0, 4.0*fsharpr), vec2(1.0, 4.0*fsharpr), fsharpr + fsharpor);
-        float d2 = capsule(p, vec2(0.0, 0.0), vec2(1.0, 0.0), fsharpr + fsharpor);
-        return min(d1, d2);
+        vec2 d = abs(p) - b;
+        return min(max(d.x,d.y),0.0) + length(max(d,0.0));
+      }
+
+      float manyCapsule(in vec3 p)
+      {
+        float s = 4.0*fsharpr;
+        p.y = mod(p.y, s) - 0.5*s;
+        return length(p.yz) - (fsharpr + fsharpor);
+      }
+
+      float manySphere(in vec3 p)
+      {
+        float sx = 4.0*fsharpr;
+        float sy = 1.0;
+        p.x = mod(p.x, sx) - 0.5*sx;
+        p.y = mod(p.y, sy) - 0.5*sy;
+        return length(p) - (fsharpr + fsharpor);
+      }
+
+      void pR45(inout vec2 p)
+      {
+        p = (p + vec2(p.y, -p.x))*sqrt(0.5);
       }
 
       float logoPound(in vec3 p)
       {
-        float d1 = twolines(p);
+        float b1 = box2d(p.xy, vec2(0.5));
+        float d1 = manyCapsule(p);
+        float d2 = manySphere(p);
         pR90(p.xy);
-        float d2 = twolines(p);
-        return min(d1, d2);
+        float d3 = manyCapsule(p);
+        float d4 = manySphere(p);
+        pR45(p.xy);
+        float b2 = box2d(p.xy, vec2(0.7));
+
+        return min(max(b1, min(d1, d3)), max(b2, min(d2, d4)));
       }
 
       float logoF(in vec3 p)
@@ -164,9 +186,6 @@
         return min(d1, min(d2, d3));
       }
 
-      void pR45(inout vec2 p) {
-        p = (p + vec2(p.y, -p.x))*sqrt(0.5);
-      }
       float linstep(in float f, in float t, in float x)
       {
         return clamp((x - f)/(t - f), 0.0, 1.0);
@@ -297,7 +316,7 @@
 
       vec3 normal(in vec3 pos)
       {
-        vec3  eps = vec3(.001,0.0,0.0);
+        vec3 eps = vec3(.001,0.0,0.0);
         vec3 col;
         float ref;
         float trans;
