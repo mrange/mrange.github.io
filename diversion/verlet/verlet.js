@@ -14,7 +14,7 @@
 */
 
 const td    = 0.02;
-const gy    = 0.03;
+const gy    = 0.10;
 
 class Particle {
   constructor(mass, x, y, vx, vy) {
@@ -50,9 +50,9 @@ class Particle {
 };
 
 class Constraint {
-  constructor(rope, ratio, l, r) {
+  constructor(rope, slack, l, r) {
     this.rope = rope;
-    this.d    = ratio*Particle.l1(l, r);
+    this.d    = slack*Particle.l1(l, r);
     this.l    = l;
     this.r    = r;
   }
@@ -83,95 +83,171 @@ class Constraint {
 
 }
 
-const particles = [
-  new Particle(1.0/0.0, 150, 50, 0 ,0),
+class ParticleSystem {
+  constructor(ps, cs) {
+    this.ps = ps;
+    this.cs = cs;
+  }
 
-  new Particle(10, 100, 100, 0 ,0),
-  new Particle(10, 100, 200, 0 ,0),
-  new Particle(10, 200, 200, 0 ,0),
-  new Particle(10, 200, 100, 0 ,0),
+  timeStep(relaxations) {
+    const ps  = this.ps;
+    const lps = ps.length;
 
-  new Particle(10, 100, 400, 0 ,0),
-  new Particle(10, 100, 500, 0 ,0),
-  new Particle(10, 200, 500, 0 ,0),
-  new Particle(10, 200, 400, 0 ,0),
-];
+    const cs  = this.cs;
+    const lcs = cs.length;
 
-const constraints = [
-  new Constraint(true , 2.0, particles[0], particles[1]),
+    for (let i = 0; i < lps; ++i) {
+      const p = ps[i];
+      p.verlet();
+    }
 
-  new Constraint(false, 1.0, particles[1], particles[2]),
-  new Constraint(false, 1.0, particles[2], particles[3]),
-  new Constraint(false, 1.0, particles[3], particles[4]),
-  new Constraint(false, 1.0, particles[4], particles[1]),
-  new Constraint(false, 1.0, particles[1], particles[3]),
+    for (let r = 0; r < relaxations; ++r) {
+      for (let i = 0; i < lcs; ++i) {
+        const c = cs[i];
+        c.relax();
+      }
+    }
+  }
 
-  new Constraint(true , 1.0, particles[5], particles[3]),
+  drawParticles() {
+    const ps  = this.ps;
+    const lps = ps.length;
 
-  new Constraint(false, 1.0, particles[5], particles[6]),
-  new Constraint(false, 1.0, particles[6], particles[7]),
-  new Constraint(false, 1.0, particles[7], particles[8]),
-  new Constraint(false, 1.0, particles[8], particles[5]),
-  new Constraint(false, 1.0, particles[5], particles[7]),
-]
+    context.fillStyle = "green"
+
+    for (let i = 0; i < lps; ++i) {
+      const p = ps[i];
+      const x = p.x;
+      const y = p.y;
+      context.fillRect(x - 5, y - 5, 10, 10);
+    }
+  }
+
+  drawConstraints() {
+    const cs  = this.cs;
+    const lcs = cs.length;
+
+    context.strokeStyle = "yellow"
+    context.beginPath();
+
+    for (let i = 0; i < lcs; ++i) {
+      const c = cs[i];
+      const l = c.l;
+      const r = c.r;
+      context.moveTo(l.x, l.y);
+      context.lineTo(r.x, r.y);
+    }
+    context.stroke();
+  }
+
+  clear() {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  update(relaxations) {
+    this.timeStep(relaxations);
+    this.clear();
+    this.drawConstraints();
+    this.drawParticles();
+  }
+}
+
+class ParticleSystemBuilder {
+  constructor() {
+    this.ps = []
+    this.cs = []
+  }
+
+  particle(m, x, y, vx = 0, vy = 0) {
+    const p = new Particle(m, x, y, vx, vy);
+    this.ps.push(p);
+    return p;
+  }
+
+  fixPoint(x, y) {
+    return this.particle(1.0/0.0, x, y);
+  }
+
+  constraint(l, r, rope = false, slack = 1.0) {
+    const c = new Constraint(rope, slack, l, r);
+    this.cs.push(c);
+    return c;
+  }
+
+  stick(l, r) {
+    return this.constraint(l, r);
+  }
+
+  rope(l, r, slack = 1.0) {
+    return this.constraint(l, r, true, slack);
+  }
+
+  chain(l, r, m, chains, slack = 1.0, rope = true, vx = 0, vy = 0) {
+    const cs = chains < 1.0 ? 1.0 : chains;
+    const cm = m / (cs - 1.0);
+    const l1 = Particle.l1(l, r);
+    const s   = l1 / cs;
+    const sx  = (r.x - l.x)*s/l1;
+    const sy  = (r.y - l.y)*s/l1;
+
+    let c     = l;
+
+    for (let i = 1; i < chains; ++i) {
+      const nx  = c.x + sx;
+      const ny  = c.y + sy;
+      const n   = this.particle(cm, nx, ny, vx, vy);
+      this.constraint(c, n, rope, slack);
+      c = n;
+    }
+
+    this.constraint(c, r, rope, slack);
+  }
+
+  box(m, cx, cy, w, h, vx = 0, vy = 0) {
+    const cm  = m / 4.0;
+    const p00 = this.particle(cm, cx - w/2.0, cy - h/2.0, vx, vy);
+    const p01 = this.particle(cm, cx - w/2.0, cy + h/2.0, vx, vy);
+    const p10 = this.particle(cm, cx + w/2.0, cy - h/2.0, vx, vy);
+    const p11 = this.particle(cm, cx + w/2.0, cy + h/2.0, vx, vy);
+    this.stick(p00, p01);
+    this.stick(p00, p10);
+    this.stick(p01, p11);
+    this.stick(p10, p11);
+    this.stick(p00, p11);
+    return [p00, p01, p10, p11];
+  }
+
+  createParticleSystem() {
+    return new ParticleSystem(this.ps, this.cs);
+  }
+}
 
 var canvas  ;
 var context ;
 var width   ;
 var height  ;
 
-function timeStep() {
-  for (let i = 0; i < particles.length; ++i) {
-    const particle = particles[i];
-    particle.verlet();
-  }
-
-  for (let r = 0; r < 5; ++r) {
-    for (let i = 0; i < constraints.length; ++i) {
-      const constraint = constraints[i];
-      const l = constraint.relax();
-    }
-  }
-}
-
-function drawParticles() {
-  context.fillStyle = "green"
-  for (let i = 0; i < particles.length; ++i) {
-    const particle = particles[i];
-    const x = particle.x;
-    const y = particle.y;
-    context.fillRect(x - 5, y - 5, 10, 10);
-  }
-}
-
-function drawConstraints() {
-  context.strokeStyle = "yellow"
-  context.beginPath();
-  for (let i = 0; i < constraints.length; ++i) {
-    const constraint = constraints[i];
-    const l = constraint.l;
-    const r = constraint.r;
-    context.moveTo(l.x, l.y);
-    context.lineTo(r.x, r.y);
-  }
-  context.stroke();
-}
-
-function clear() {
-  context.clearRect(0, 0, canvas.width, canvas.height);
-}
-
-function update() {
-  timeStep();
-  clear();
-  drawConstraints();
-  drawParticles();
-}
+var ps      ;
 
 function start() {
   canvas  = document.getElementById("canvas");
   width   = canvas.width;
   height  = canvas.height;
   context = canvas.getContext("2d");
-  setInterval(update, 20);
+
+  const b = new ParticleSystemBuilder();
+
+  const cx   = width/2.0;
+
+  const fp   = b.fixPoint(cx, 0);
+  const box0 = b.box(40, cx, 150, 100, 100);
+  const box1 = b.box(20, cx + 200, 150, 75, 75);
+  const box2 = b.box(10, cx + 400, 150, 50, 50);
+  b.chain(fp, box0[0], 1.0, 4.0, 1.5);
+  b.chain(box0[3], box1[0], 1.0, 4.0);
+  b.chain(box1[3], box2[0], 1.0, 4.0);
+
+  ps = b.createParticleSystem();
+
+  setInterval(() => ps.update(3), 20);
 }
