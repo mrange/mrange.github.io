@@ -243,11 +243,13 @@ function start() {
   const box0 = b.box(40, cx, 150, 100, 100);
   const box1 = b.box(20, cx + 200, 150, 75, 75);
   const box2 = b.box(10, cx + 400, 150, 50, 50);
-  b.chain(fp, box0[0], 1.0, 4.0, 1.5);
+  const box3 = b.box(5 , cx + 500, 150, 25, 25);
+  b.chain(fp, box0[0], 1.0, 5.0, 1.5);
   b.chain(box0[3], box1[0], 1.0, 4.0);
-  b.chain(box1[3], box2[0], 1.0, 4.0);
+  b.chain(box1[3], box2[0], 1.0, 3.0);
+  b.chain(box2[3], box3[0], 1.0, 2.0);
 
   ps = b.createParticleSystem();
 
-  setInterval(() => ps.update(3), 20);
+  setInterval(() => ps.update(2), 20);
 }
