@@ -14,7 +14,7 @@
 */
 
 const td    = 0.02;
-const gy    = 0.10;
+const gy    = 0.00;
 
 class Particle {
   constructor(mass, x, y, px, py) {
@@ -92,9 +92,10 @@ class Constraint {
 }
 
 class TireConstraint {
-  constructor(l, r) {
+  constructor(l, r, v = null) {
     this.l    = l;
     this.r    = r;
+    this.v    = v;
   }
 
   relax() {
@@ -120,20 +121,31 @@ class TireConstraint {
     const ndx   = dx / l1;
     const ndy   = dy / l1;
 
-    const lvx   = lx - lpx;
-    const lvy   = ly - lpy;
+    const v     = this.v;
 
-    const rvx   = rx - rpx;
-    const rvy   = ry - rpy;
+    if (v) {
+      console.log("Hello");
+      l.x         = v*ndx + lpx;
+      l.y         = v*ndy + lpy;
 
-    const lv    = lvx*ndx + lvy*ndy;
-    const rv    = rvx*ndx + rvy*ndy;
+      r.x         = v*ndx + rpx;
+      r.y         = v*ndy + rpy;
+    } else {
+      const lvx   = lx - lpx;
+      const lvy   = ly - lpy;
 
-    l.x         = lv*ndx + lpx;
-    l.y         = lv*ndy + lpy;
+      const rvx   = rx - rpx;
+      const rvy   = ry - rpy;
 
-    r.x         = rv*ndx + rpx;
-    r.y         = rv*ndy + rpy;
+      const lv    = lvx*ndx + lvy*ndy;
+      const rv    = rvx*ndx + rvy*ndy;
+
+      l.x         = lv*ndx + lpx;
+      l.y         = lv*ndy + lpy;
+
+      r.x         = rv*ndx + rpx;
+      r.y         = rv*ndy + rpy;
+    }
   }
 
 }
@@ -249,6 +261,10 @@ class ParticleSystemBuilder {
     this.transform([c, s, 0, -s, c, 0, 0, 0, 1]);
   }
 
+  scale(x, y) {
+    this.transform([x, 0, 0, 0, y, 0, 0, 0, 1]);
+  }
+
   translate(x, y) {
     this.transform([1, 0, x, 0, 1, y, 0, 0, 1]);
   }
@@ -333,10 +349,46 @@ class ParticleSystemBuilder {
     return [p00, p01, p10, p11];
   }
 
+  wheels(wm, cm, bm, vx = 0, vy = 0) {
+    const luw = this.particle(wm/2, -4, -1, vx, vy);
+    const llw = this.particle(wm/2, -4, +1, vx, vy);
+    const ruw = this.particle(wm/2, +4, -1, vx, vy);
+    const rlw = this.particle(wm/2, +4, +1, vx, vy);
+    const c   = this.particle(cm  ,  0,  0 , vx, vy);
+    const lb  = this.particle(bm/2, -1, +7, vx, vy);
+    const rb  = this.particle(bm/2, +1, +7, vx, vy);
+
+    const lt  = this.tire(luw, llw);
+    const rt  = this.tire(ruw, rlw);
+
+    this.stick(luw, llw);
+    this.stick(ruw, rlw);
+    this.stick(luw, ruw);
+    this.stick(llw, rlw);
+    this.stick(llw, c);
+    this.stick(ruw, c);
+
+    const lc = this.stick(llw, lb);
+    const rc = this.stick(rlw, rb);
+
+    this.stick(c, lb);
+    this.stick(c, rb);
+
+    this.stick(lb, rb);
+
+    return [lb, rb, lc, rc, lt, rt];
+  }
+
   createParticleSystem() {
     return new ParticleSystem(this.ps, this.cs);
   }
 }
+
+function now() {
+  return (new Date).getTime();
+}
+
+const startTime = now();
 
 var canvas  ;
 var context ;
@@ -355,24 +407,32 @@ function start() {
 
   const origo = b.fixPoint(0, 0);
 
-  b.translate(0, -height/2 + 5);
-
-  const fp   = b.fixPoint(0, 0);
-  const box0 = b.box(40, 0, 150, 100, 100);
-  const box1 = b.box(20, 200, 150, 75, 75);
-  const box2 = b.box(10, 400, 150, 50, 50);
-  const box3 = b.box(5 , 500, 150, 25, 25);
-  b.chain(fp, box0[0], 1, 5, 1);
-  b.chain(box0[3], box1[0], 1, 4, 1);
-  b.chain(box1[3], box2[0], 1, 3, 1);
-  b.chain(box2[3], box3[0], 1, 2, 1);
-
   b.identity();
-  b.rotate(0.1);
+  b.translate(0, -10);
+  b.scale(10, 10);
+  b.rotate(Math.PI/2);
 
-  const skid = b.box(40, 0, 0, 100, 100);
-  b.tire(skid[1], skid[3]);
+  const uw = b.wheels(10, 40, 2);
+
+  b.rotate(Math.PI);
+  const lw = b.wheels(5, 10, 2);
+
+  b.stick(uw[0], lw[1]);
+  b.stick(uw[1], lw[0]);
+  b.stick(uw[0], lw[0]);
+
   ps = b.createParticleSystem();
 
-  setInterval(() => ps.update(2), 20);
+  const sd = uw[2].d;
+
+  lw[4].v = -1;
+  lw[5].v = -1;
+
+  setInterval(() => {
+    const t = (now() - startTime) / 1000.0;
+    const s = 1 + 0.3*Math.sin(t);
+    uw[2].d = sd*s;
+    uw[3].d = sd/s;
+    ps.update(2);
+  }, 20);
 }
