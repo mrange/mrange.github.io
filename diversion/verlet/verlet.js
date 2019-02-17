@@ -61,23 +61,31 @@ class Constraint {
     const l     = this.l;
     const r     = this.r;
 
-    const dx    = l.x - r.x;
-    const dy    = l.y - r.y;
+    const lx    = l.x;
+    const ly    = l.y;
+    const rx    = r.x;
+    const ry    = r.y;
+
+    const dx    = lx - rx;
+    const dy    = ly - ry;
+
     const l2    = dx*dx + dy*dy;
     const l1    = Math.sqrt(l2);
+
     const ndx   = dx / l1;
     const ndy   = dy / l1;
+
     const diff  = l1 - this.d;
 
     if (!this.rope || diff > 0) {
       const dl    = diff*l.imass/(l.imass + r.imass);
       const dr    = diff*r.imass/(l.imass + r.imass);
 
-      l.x         -= dl*ndx;
-      l.y         -= dl*ndy;
+      l.x         = lx - dl*ndx;
+      l.y         = ly - dl*ndy;
 
-      r.x         += dr*ndx;
-      r.y         += dr*ndy;
+      r.x         = rx + dr*ndx;
+      r.y         = ry + dr*ndy;
     }
   }
 
@@ -113,10 +121,15 @@ class ParticleSystem {
     const ps  = this.ps;
     const lps = ps.length;
 
-    context.fillStyle = "green"
 
     for (let i = 0; i < lps; ++i) {
       const p = ps[i];
+      const im= p.imass;
+      if (im > 0) {
+        context.fillStyle = "green"
+      } else {
+        context.fillStyle = "red"
+      }
       const x = p.x;
       const y = p.y;
       context.fillRect(x - 5, y - 5, 10, 10);
@@ -127,9 +140,9 @@ class ParticleSystem {
     const cs  = this.cs;
     const lcs = cs.length;
 
-    context.strokeStyle = "yellow"
     context.beginPath();
 
+    context.strokeStyle = "yellow"
     for (let i = 0; i < lcs; ++i) {
       const c = cs[i];
       const l = c.l;
@@ -239,15 +252,15 @@ function start() {
 
   const cx   = width/2.0;
 
-  const fp   = b.fixPoint(cx, 0);
+  const fp   = b.fixPoint(cx, 5);
   const box0 = b.box(40, cx, 150, 100, 100);
   const box1 = b.box(20, cx + 200, 150, 75, 75);
   const box2 = b.box(10, cx + 400, 150, 50, 50);
   const box3 = b.box(5 , cx + 500, 150, 25, 25);
   b.chain(fp, box0[0], 1.0, 5.0, 1.5);
-  b.chain(box0[3], box1[0], 1.0, 4.0);
-  b.chain(box1[3], box2[0], 1.0, 3.0);
-  b.chain(box2[3], box3[0], 1.0, 2.0);
+  b.chain(box0[3], box1[0], 1.0, 4.0, 1.0);
+  b.chain(box1[3], box2[0], 1.0, 3.0, 1.0);
+  b.chain(box2[3], box3[0], 1.0, 2.0, 1.0);
 
   ps = b.createParticleSystem();
 
