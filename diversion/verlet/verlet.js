@@ -292,6 +292,12 @@ class ParticleSystemBuilder {
     return this.constraint(l, r, true, slack);
   }
 
+  tire(l, r) {
+    const c = new TireConstraint(l, r);
+    this.cs.push(c);
+    return c;
+  }
+
   chain(l, r, m, chains, slack = 1, rope = true, vx = 0, vy = 0) {
     const cs = chains < 1 ? 1 : chains;
     const cm = m / (cs - 1);
@@ -347,7 +353,8 @@ function start() {
   context.translate(width/2, height/2);
   const b = new ParticleSystemBuilder();
 
-  b.rotate(3.1415/6);
+  const origo = b.fixPoint(0, 0);
+
   b.translate(0, -height/2 + 5);
 
   const fp   = b.fixPoint(0, 0);
@@ -360,6 +367,11 @@ function start() {
   b.chain(box1[3], box2[0], 1, 3, 1);
   b.chain(box2[3], box3[0], 1, 2, 1);
 
+  b.identity();
+  b.rotate(0.1);
+
+  const skid = b.box(40, 0, 0, 100, 100);
+  b.tire(skid[1], skid[3]);
   ps = b.createParticleSystem();
 
   setInterval(() => ps.update(2), 20);
