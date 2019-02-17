@@ -124,7 +124,6 @@ class TireConstraint {
     const v     = this.v;
 
     if (v) {
-      console.log("Hello");
       l.x         = v*ndx + lpx;
       l.y         = v*ndy + lpy;
 
@@ -349,34 +348,93 @@ class ParticleSystemBuilder {
     return [p00, p01, p10, p11];
   }
 
-  wheels(wm, cm, bm, vx = 0, vy = 0) {
-    const luw = this.particle(wm/2, -4, -1, vx, vy);
-    const llw = this.particle(wm/2, -4, +1, vx, vy);
-    const ruw = this.particle(wm/2, +4, -1, vx, vy);
-    const rlw = this.particle(wm/2, +4, +1, vx, vy);
-    const c   = this.particle(cm  ,  0,  0 , vx, vy);
-    const lb  = this.particle(bm/2, -1, +7, vx, vy);
-    const rb  = this.particle(bm/2, +1, +7, vx, vy);
+  wheels(wm, cm, vx = 0, vy = 0) {
+    const co  = 1.0;
+    const wo  = 4.0;
+    const ww  = wo - co;
+    const wh  = 2*co;
+    const wc  = Math.sqrt(ww*ww + wh*wh);
+    const luw = this.particle(wm/2, -wo, -co, vx, vy);
+    const llw = this.particle(wm/2, -wo, +co, vx, vy);
+    const ruw = this.particle(wm/2, +wo, -co, vx, vy);
+    const rlw = this.particle(wm/2, +wo, +co, vx, vy);
+    const luc = this.particle(cm/4, -co, -co, vx, vy);
+    const llc = this.particle(cm/4, -co, +co, vx, vy);
+    const ruc = this.particle(cm/4, +co, -co, vx, vy);
+    const rlc = this.particle(cm/4, +co, +co, vx, vy);
 
     const lt  = this.tire(luw, llw);
     const rt  = this.tire(ruw, rlw);
 
     this.stick(luw, llw);
     this.stick(ruw, rlw);
-    this.stick(luw, ruw);
-    this.stick(llw, rlw);
-    this.stick(llw, c);
-    this.stick(ruw, c);
 
-    const lc = this.stick(llw, lb);
-    const rc = this.stick(rlw, rb);
+    const lus = this.stick(luw, luc);
+    const lls = this.stick(llw, llc);
+    const lcs = this.stick(llw, luc);
+    const rus = this.stick(ruw, ruc);
+    const rls = this.stick(rlw, rlc);
+    const rcs = this.stick(ruw, rlc);
 
-    this.stick(c, lb);
-    this.stick(c, rb);
+    const lud = lus.d;
+    const lld = lls.d;
+    const lcd = lcs.d;
+    const rud = rus.d;
+    const rld = rls.d;
+    const rcd = rcs.d;
 
-    this.stick(lb, rb);
+    this.stick(luc, ruc);
+    this.stick(llc, rlc);
+    this.stick(llc, luc);
+    this.stick(rlc, ruc);
+    this.stick(llc, ruc);
 
-    return [lb, rb, lc, rc, lt, rt];
+    const wf = a => {
+      const c = Math.cos(a);
+      const s = Math.sin(a);
+
+      const utx = co*s + wo;
+      const uty = -co*c;
+
+      const ucx = co;
+      const ucy = -co;
+
+      const udx = utx - ucx;
+      const udy = uty - ucy;
+
+      const ul  = Math.sqrt(udx*udx + udy*udy);
+
+      const ltx = -co*s + wo;
+      const lty = co*c;
+
+      const lcx = co;
+      const lcy = co;
+
+      const ldx = ltx - lcx;
+      const ldy = lty - lcy;
+
+      const ll  = Math.sqrt(ldx*ldx + ldy*ldy);
+
+      const cdx = ltx - ucx;
+      const cdy = lty - ucy;
+
+      const cl  = Math.sqrt(cdx*cdx + cdy*cdy);
+
+      lus.d = ul*lud/ww;
+      lls.d = ll*lld/ww;
+      lcs.d = cl*lcd/wc;
+
+      rus.d = ll*rud/ww;
+      rls.d = ul*rld/ww;
+      rcs.d = cl*rcd/wc;
+    }
+
+    const vf = v => {
+      lt.v = v;
+      rt.v = v;
+    }
+
+    return [llc, rlc, wf, vf];
   }
 
   createParticleSystem() {
@@ -390,6 +448,17 @@ function now() {
 
 const startTime = now();
 
+const keys = [];
+const key_q = "Q".charCodeAt(0);
+const key_w = "W".charCodeAt(0);
+const key_p = "P".charCodeAt(0);
+const key_o = "O".charCodeAt(0);
+
+keys[key_q] = false;
+keys[key_w] = false;
+keys[key_p] = false;
+keys[key_o] = false;
+
 var canvas  ;
 var context ;
 var width   ;
@@ -397,7 +466,12 @@ var height  ;
 
 var ps      ;
 
+let speed   = 0;
+let angle   = 0;
+
 function start() {
+  window.addEventListener("keydown" , e => keys[e.keyCode] = true);
+  window.addEventListener("keyup"   , e => keys[e.keyCode] = false);
   canvas  = document.getElementById("canvas");
   width   = canvas.width;
   height  = canvas.height;
@@ -408,31 +482,40 @@ function start() {
   const origo = b.fixPoint(0, 0);
 
   b.identity();
-  b.translate(0, -10);
-  b.scale(10, 10);
+  b.translate(0, -4);
+  b.scale(7, 7);
   b.rotate(Math.PI/2);
 
-  const uw = b.wheels(10, 40, 2);
+  const uw = b.wheels(10, 40);
 
   b.rotate(Math.PI);
-  const lw = b.wheels(5, 10, 2);
+  const lw = b.wheels(5, 10);
 
   b.stick(uw[0], lw[1]);
   b.stick(uw[1], lw[0]);
   b.stick(uw[0], lw[0]);
 
+  const fwf = uw[2];
+  const bwf = lw[2];
+  const bvf = lw[3];
+
   ps = b.createParticleSystem();
 
-  const sd = uw[2].d;
-
-  lw[4].v = -1;
-  lw[5].v = -1;
-
   setInterval(() => {
-    const t = (now() - startTime) / 1000.0;
-    const s = 1 + 0.3*Math.sin(t);
-    uw[2].d = sd*s;
-    uw[3].d = sd/s;
-    ps.update(2);
+    if (keys[key_q]) {
+      angle += 0.01;
+    }
+    if (keys[key_w]) {
+      angle -= 0.01;
+    }
+    if (keys[key_p]) {
+      speed += 0.01;
+    }
+    if (keys[key_o]) {
+      speed -= 0.01;
+    }
+    bvf(speed);
+    fwf(angle);
+    ps.update(5);
   }, 20);
 }
