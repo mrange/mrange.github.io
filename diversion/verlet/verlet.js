@@ -17,19 +17,19 @@ const td    = 0.02;
 const gy    = 0.10;
 
 class Particle {
-  constructor(mass, x, y, vx, vy) {
-    this.imass= 1.0/mass  ;
-    this.x    = x         ;
-    this.y    = y         ;
-    this.px   = x - vx*td ;
-    this.py   = y - vy*td ;
+  constructor(mass, x, y, px, py) {
+    this.imass= 1/mass;
+    this.x    = x;
+    this.y    = y;
+    this.px   = px;
+    this.py   = py;
   }
 
   verlet() {
     if (this.imass > 0) {
       const x  = this.x;
       const y  = this.y;
-      const nx = 2*x - this.px     ;
+      const nx = 2*x - this.px;
       const ny = 2*y - this.py + gy;
       this.x  = nx;
       this.y  = ny;
@@ -87,6 +87,53 @@ class Constraint {
       r.x         = rx + dr*ndx;
       r.y         = ry + dr*ndy;
     }
+  }
+
+}
+
+class TireConstraint {
+  constructor(l, r) {
+    this.l    = l;
+    this.r    = r;
+  }
+
+  relax() {
+    const l     = this.l;
+    const r     = this.r;
+
+    const lx    = l.x;
+    const ly    = l.y;
+    const rx    = r.x;
+    const ry    = r.y;
+
+    const lpx   = l.px;
+    const lpy   = l.py;
+    const rpx   = r.px;
+    const rpy   = r.py;
+
+    const dx    = lx - rx;
+    const dy    = ly - ry;
+
+    const l2    = dx*dx + dy*dy;
+    const l1    = Math.sqrt(l2);
+
+    const ndx   = dx / l1;
+    const ndy   = dy / l1;
+
+    const lvx   = lx - lpx;
+    const lvy   = ly - lpy;
+
+    const rvx   = rx - rpx;
+    const rvy   = ry - rpy;
+
+    const lv    = lvx*ndx + lvy*ndy;
+    const rv    = rvx*ndx + rvy*ndy;
+
+    l.x         = lv*ndx + lpx;
+    l.y         = lv*ndy + lpy;
+
+    r.x         = rv*ndx + rpx;
+    r.y         = rv*ndy + rpy;
   }
 
 }
@@ -154,7 +201,9 @@ class ParticleSystem {
   }
 
   clear() {
-    context.clearRect(0, 0, canvas.width, canvas.height);
+    const cx = canvas.width/2;
+    const cy = canvas.height/2;
+    context.clearRect(-cx, -cy, 2*cx, 2*cy);
   }
 
   update(relaxations) {
@@ -167,21 +216,69 @@ class ParticleSystem {
 
 class ParticleSystemBuilder {
   constructor() {
-    this.ps = []
-    this.cs = []
+    this.t  = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+    this.ps = [];
+    this.cs = [];
   }
 
-  particle(m, x, y, vx = 0, vy = 0) {
-    const p = new Particle(m, x, y, vx, vy);
-    this.ps.push(p);
-    return p;
+  identity() {
+    this.t  = [1, 0, 0, 0, 1, 0, 0, 0, 1];
   }
 
-  fixPoint(x, y) {
-    return this.particle(1.0/0.0, x, y);
+  transform(t) {
+    const ct = this.t;
+    const nt = [];
+
+    for (let y = 0; y < 3; ++y) {
+      for (let x = 0; x < 3; ++x) {
+        let r = 0;
+        for (let i = 0; i < 3; ++i) {
+          // This is inefficient looping for large matrix but a 3x3 fits into l1 cache
+          r += t[y*3 + i]*ct[i*3 + x];
+        }
+        nt.push(r);
+      }
+    }
+
+    this.t = nt;
   }
 
-  constraint(l, r, rope = false, slack = 1.0) {
+  rotate(a) {
+    const c = Math.cos(a);
+    const s = Math.sin(a);
+    this.transform([c, s, 0, -s, c, 0, 0, 0, 1]);
+  }
+
+  translate(x, y) {
+    this.transform([1, 0, x, 0, 1, y, 0, 0, 1]);
+  }
+
+  apply(x, y) {
+    const ct = this.t;
+    return [ct[0]*x + ct[1]*y + ct[2], ct[3]*x + ct[4]*y + ct[5]];
+  }
+
+  particle(m, x, y, vx = 0, vy = 0, applyTransform = true) {
+    const px  = x - vx*td;
+    const py  = y - vy*td;
+    if (applyTransform) {
+      const pos = this.apply(x, y);
+      const ppos= this.apply(px, py);
+      const p   = new Particle(m, pos[0], pos[1], ppos[0], ppos[1]);
+      this.ps.push(p);
+      return p;
+    } else {
+      const p   = new Particle(m, x, y, px, py);
+      this.ps.push(p);
+      return p;
+    }
+  }
+
+  fixPoint(x, y, applyTransform = true) {
+    return this.particle(1/0, x, y, 0, 0, applyTransform);
+  }
+
+  constraint(l, r, rope = false, slack = 1) {
     const c = new Constraint(rope, slack, l, r);
     this.cs.push(c);
     return c;
@@ -191,13 +288,13 @@ class ParticleSystemBuilder {
     return this.constraint(l, r);
   }
 
-  rope(l, r, slack = 1.0) {
+  rope(l, r, slack = 1) {
     return this.constraint(l, r, true, slack);
   }
 
-  chain(l, r, m, chains, slack = 1.0, rope = true, vx = 0, vy = 0) {
-    const cs = chains < 1.0 ? 1.0 : chains;
-    const cm = m / (cs - 1.0);
+  chain(l, r, m, chains, slack = 1, rope = true, vx = 0, vy = 0) {
+    const cs = chains < 1 ? 1 : chains;
+    const cm = m / (cs - 1);
     const l1 = Particle.l1(l, r);
     const s   = l1 / cs;
     const sx  = (r.x - l.x)*s/l1;
@@ -208,7 +305,7 @@ class ParticleSystemBuilder {
     for (let i = 1; i < chains; ++i) {
       const nx  = c.x + sx;
       const ny  = c.y + sy;
-      const n   = this.particle(cm, nx, ny, vx, vy);
+      const n   = this.particle(cm, nx, ny, vx, vy, false);
       this.constraint(c, n, rope, slack);
       c = n;
     }
@@ -217,11 +314,11 @@ class ParticleSystemBuilder {
   }
 
   box(m, cx, cy, w, h, vx = 0, vy = 0) {
-    const cm  = m / 4.0;
-    const p00 = this.particle(cm, cx - w/2.0, cy - h/2.0, vx, vy);
-    const p01 = this.particle(cm, cx - w/2.0, cy + h/2.0, vx, vy);
-    const p10 = this.particle(cm, cx + w/2.0, cy - h/2.0, vx, vy);
-    const p11 = this.particle(cm, cx + w/2.0, cy + h/2.0, vx, vy);
+    const cm  = m / 4;
+    const p00 = this.particle(cm, cx - w/2, cy - h/2, vx, vy);
+    const p01 = this.particle(cm, cx - w/2, cy + h/2, vx, vy);
+    const p10 = this.particle(cm, cx + w/2, cy - h/2, vx, vy);
+    const p11 = this.particle(cm, cx + w/2, cy + h/2, vx, vy);
     this.stick(p00, p01);
     this.stick(p00, p10);
     this.stick(p01, p11);
@@ -247,20 +344,21 @@ function start() {
   width   = canvas.width;
   height  = canvas.height;
   context = canvas.getContext("2d");
-
+  context.translate(width/2, height/2);
   const b = new ParticleSystemBuilder();
 
-  const cx   = width/2.0;
+  b.rotate(3.1415/6);
+  b.translate(0, -height/2 + 5);
 
-  const fp   = b.fixPoint(cx, 5);
-  const box0 = b.box(40, cx, 150, 100, 100);
-  const box1 = b.box(20, cx + 200, 150, 75, 75);
-  const box2 = b.box(10, cx + 400, 150, 50, 50);
-  const box3 = b.box(5 , cx + 500, 150, 25, 25);
-  b.chain(fp, box0[0], 1.0, 5.0, 1.5);
-  b.chain(box0[3], box1[0], 1.0, 4.0, 1.0);
-  b.chain(box1[3], box2[0], 1.0, 3.0, 1.0);
-  b.chain(box2[3], box3[0], 1.0, 2.0, 1.0);
+  const fp   = b.fixPoint(0, 0);
+  const box0 = b.box(40, 0, 150, 100, 100);
+  const box1 = b.box(20, 200, 150, 75, 75);
+  const box2 = b.box(10, 400, 150, 50, 50);
+  const box3 = b.box(5 , 500, 150, 25, 25);
+  b.chain(fp, box0[0], 1, 5, 1);
+  b.chain(box0[3], box1[0], 1, 4, 1);
+  b.chain(box1[3], box2[0], 1, 3, 1);
+  b.chain(box2[3], box3[0], 1, 2, 1);
 
   ps = b.createParticleSystem();
 
