@@ -16,6 +16,10 @@
 const td    = 0.02;
 const gy    = 0.00;
 
+function l1(x, y) {
+  return Math.sqrt(x*x + y*y);
+}
+
 class Particle {
   constructor(mass, x, y, px, py) {
     this.imass= 1/mass;
@@ -38,14 +42,20 @@ class Particle {
     }
   }
 
-  static l2(l, r) {
-    const dx = l.x - r.x;
-    const dy = l.y - r.y;
-    return dx*dx + dy*dy;
+  static l1(l, r) {
+    return l1(l.x - r.x, l.y - r.y);
   }
 
-  static l1(l, r) {
-    return Math.sqrt(Particle.l2(l, r));
+
+  speedUp(ax, ay) {
+    if (this.imass > 0) {
+      const vx  = (this.x - this.px) / td;
+      const vy  = (this.y - this.py) / td;
+      const nvx = vx + ax*td;
+      const nvy = vy + ay*td;
+      this.px   = this.x - nvx*td;
+      this.py   = this.y - nvy*td;
+    }
   }
 };
 
@@ -69,13 +79,12 @@ class Constraint {
     const dx    = lx - rx;
     const dy    = ly - ry;
 
-    const l2    = dx*dx + dy*dy;
-    const l1    = Math.sqrt(l2);
+    const dl1   = l1(dx, dy);
 
-    const ndx   = dx / l1;
-    const ndy   = dy / l1;
+    const ndx   = dx / dl1;
+    const ndy   = dy / dl1;
 
-    const diff  = l1 - this.d;
+    const diff  = dl1 - this.d;
 
     if (!this.rope || diff > 0) {
       const dl    = diff*l.imass/(l.imass + r.imass);
@@ -92,10 +101,9 @@ class Constraint {
 }
 
 class TireConstraint {
-  constructor(l, r, v = null) {
+  constructor(l, r) {
     this.l    = l;
     this.r    = r;
-    this.v    = v;
   }
 
   relax() {
@@ -115,36 +123,25 @@ class TireConstraint {
     const dx    = lx - rx;
     const dy    = ly - ry;
 
-    const l2    = dx*dx + dy*dy;
-    const l1    = Math.sqrt(l2);
+    const dl1   = l1(dx, dy);
 
-    const ndx   = dx / l1;
-    const ndy   = dy / l1;
+    const ndx   = dx / dl1;
+    const ndy   = dy / dl1;
 
-    const v     = this.v;
+    const lvx   = lx - lpx;
+    const lvy   = ly - lpy;
 
-    if (v) {
-      l.x         = v*ndx + lpx;
-      l.y         = v*ndy + lpy;
+    const rvx   = rx - rpx;
+    const rvy   = ry - rpy;
 
-      r.x         = v*ndx + rpx;
-      r.y         = v*ndy + rpy;
-    } else {
-      const lvx   = lx - lpx;
-      const lvy   = ly - lpy;
+    const lv    = lvx*ndx + lvy*ndy;
+    const rv    = rvx*ndx + rvy*ndy;
 
-      const rvx   = rx - rpx;
-      const rvy   = ry - rpy;
+    l.x         = lv*ndx + lpx;
+    l.y         = lv*ndy + lpy;
 
-      const lv    = lvx*ndx + lvy*ndy;
-      const rv    = rvx*ndx + rvy*ndy;
-
-      l.x         = lv*ndx + lpx;
-      l.y         = lv*ndy + lpy;
-
-      r.x         = rv*ndx + rpx;
-      r.y         = rv*ndy + rpy;
-    }
+    r.x         = rv*ndx + rpx;
+    r.y         = rv*ndy + rpy;
   }
 
 }
@@ -314,12 +311,12 @@ class ParticleSystemBuilder {
   }
 
   chain(l, r, m, chains, slack = 1, rope = true, vx = 0, vy = 0) {
-    const cs = chains < 1 ? 1 : chains;
-    const cm = m / (cs - 1);
-    const l1 = Particle.l1(l, r);
-    const s   = l1 / cs;
-    const sx  = (r.x - l.x)*s/l1;
-    const sy  = (r.y - l.y)*s/l1;
+    const cs  = chains < 1 ? 1 : chains;
+    const cm  = m / (cs - 1);
+    const dl1 = Particle.l1(l, r);
+    const s   = dl1 / cs;
+    const sx  = (r.x - l.x)*s/dl1;
+    const sy  = (r.y - l.y)*s/dl1;
 
     let c     = l;
 
@@ -363,8 +360,8 @@ class ParticleSystemBuilder {
     const ruc = this.particle(cm/4, +co, -co, vx, vy);
     const rlc = this.particle(cm/4, +co, +co, vx, vy);
 
-    const lt  = this.tire(luw, llw);
-    const rt  = this.tire(ruw, rlw);
+    this.tire(luw, llw);
+    this.tire(ruw, rlw);
 
     this.stick(luw, llw);
     this.stick(ruw, rlw);
@@ -429,12 +426,30 @@ class ParticleSystemBuilder {
       rcs.d = cl*rcd/wc;
     }
 
-    const vf = v => {
-      lt.v = v;
-      rt.v = v;
+    const af = a => {
+      const ldx = luw.x - llw.x;
+      const ldy = luw.y - llw.y;
+      const ll1 = l1(ldx, ldy);
+      const lndx= ldx / ll1;
+      const lndy= ldy / ll1;
+      const lax = a*lndx;
+      const lay = a*lndy;
+
+      const rdx = ruw.x - rlw.x;
+      const rdy = ruw.y - rlw.y;
+      const rl1 = l1(rdx, rdy);
+      const rndx= rdx / rl1;
+      const rndy= rdy / rl1;
+      const rax = a*rndx;
+      const ray = a*rndy;
+
+      luw.speedUp(lax, lay);
+      llw.speedUp(lax, lay);
+      ruw.speedUp(rax, ray);
+      rlw.speedUp(rax, ray);
     }
 
-    return [llc, rlc, wf, vf];
+    return [llc, rlc, wf, af];
   }
 
   createParticleSystem() {
@@ -466,7 +481,7 @@ var height  ;
 
 var ps      ;
 
-let speed   = 0;
+let accel   = 0;
 let angle   = 0;
 
 function start() {
@@ -497,24 +512,24 @@ function start() {
 
   const fwf = uw[2];
   const bwf = lw[2];
-  const bvf = lw[3];
+  const baf = lw[3];
 
   ps = b.createParticleSystem();
 
   setInterval(() => {
-    if (keys[key_q]) {
+    if (keys[key_q] && angle < Math.PI/4) {
       angle += 0.01;
     }
-    if (keys[key_w]) {
+    if (keys[key_w] && angle > -Math.PI/4) {
       angle -= 0.01;
     }
     if (keys[key_p]) {
-      speed += 0.01;
+      accel += 1;
     }
     if (keys[key_o]) {
-      speed -= 0.01;
+      accel -= 1;
     }
-    bvf(speed);
+    baf(accel);
     fwf(angle);
     ps.update(5);
   }, 20);
