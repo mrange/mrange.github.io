@@ -101,9 +101,10 @@ class Constraint {
 }
 
 class TireConstraint {
-  constructor(l, r) {
+  constructor(l, r, s) {
     this.l    = l;
     this.r    = r;
+    this.s    = s;
   }
 
   relax() {
@@ -137,11 +138,25 @@ class TireConstraint {
     const lv    = lvx*ndx + lvy*ndy;
     const rv    = rvx*ndx + rvy*ndy;
 
-    l.x         = lv*ndx + lpx;
-    l.y         = lv*ndy + lpy;
+    const lvtx  = lv*ndx;
+    const lvty  = lv*ndy;
 
-    r.x         = rv*ndx + rpx;
-    r.y         = rv*ndy + rpy;
+    const lvnx  = lvx - lvtx;
+    const lvny  = lvy - lvty;
+
+    const rvtx  = rv*ndx;
+    const rvty  = rv*ndy;
+
+    const rvnx  = rvx - rvtx;
+    const rvny  = rvy - rvty;
+
+    const s     = this.s;
+
+    l.x         = s*lvnx + lvtx + lpx;
+    l.y         = s*lvny + lvty + lpy;
+
+    r.x         = s*rvnx + rvtx + rpx;
+    r.y         = s*rvny + rvty + rpy;
   }
 
 }
@@ -304,8 +319,8 @@ class ParticleSystemBuilder {
     return this.constraint(l, r, true, slack);
   }
 
-  tire(l, r) {
-    const c = new TireConstraint(l, r);
+  tire(l, r, s) {
+    const c = new TireConstraint(l, r, s);
     this.cs.push(c);
     return c;
   }
@@ -345,7 +360,7 @@ class ParticleSystemBuilder {
     return [p00, p01, p10, p11];
   }
 
-  wheels(wm, cm, vx = 0, vy = 0) {
+  wheels(wm, cm, ws, vx = 0, vy = 0) {
     const co  = 1.0;
     const wo  = 4.0;
     const ww  = wo - co;
@@ -360,8 +375,8 @@ class ParticleSystemBuilder {
     const ruc = this.particle(cm/4, +co, -co, vx, vy);
     const rlc = this.particle(cm/4, +co, +co, vx, vy);
 
-    this.tire(luw, llw);
-    this.tire(ruw, rlw);
+    this.tire(luw, llw, ws);
+    this.tire(ruw, rlw, ws);
 
     this.stick(luw, llw);
     this.stick(ruw, rlw);
@@ -497,14 +512,14 @@ function start() {
   const origo = b.fixPoint(0, 0);
 
   b.identity();
-  b.translate(0, -4);
-  b.scale(7, 7);
+  b.translate(0, -6);
+  b.scale(5, 5);
   b.rotate(Math.PI/2);
 
-  const uw = b.wheels(10, 40);
+  const uw = b.wheels(10, 40, 0.9);
 
   b.rotate(Math.PI);
-  const lw = b.wheels(5, 10);
+  const lw = b.wheels(10, 20, 0.97);
 
   b.stick(uw[0], lw[1]);
   b.stick(uw[1], lw[0]);
@@ -517,17 +532,27 @@ function start() {
   ps = b.createParticleSystem();
 
   setInterval(() => {
-    if (keys[key_q] && angle < Math.PI/4) {
-      angle += 0.01;
+    if (keys[key_q] && angle < Math.PI/6) {
+      angle += 0.02;
     }
-    if (keys[key_w] && angle > -Math.PI/4) {
-      angle -= 0.01;
+    if (keys[key_w] && angle > -Math.PI/6) {
+      angle -= 0.02;
+    }
+    if (!keys[key_q] && !keys[key_w]) {
+      if (angle > 0.02) {
+        angle -= 0.02;
+      } else if (angle < -0.02) {
+        angle += 0.02;
+      } else
+      {
+        angle = 0.0;
+      }
     }
     if (keys[key_p]) {
-      accel += 1;
+      accel += 10;
     }
     if (keys[key_o]) {
-      accel -= 1;
+      accel -= 10;
     }
     baf(accel);
     fwf(angle);
