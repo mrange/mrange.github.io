@@ -168,6 +168,9 @@ class ParticleSystem {
   }
 
   timeStep(relaxations) {
+    const cx = canvas.width/2;
+    const cy = canvas.height/2;
+
     const ps  = this.ps;
     const lps = ps.length;
 
@@ -184,7 +187,21 @@ class ParticleSystem {
         const c = cs[i];
         c.relax();
       }
+
+      for (let i = 0; i < lps; ++i) {
+        const p = ps[i];
+        const x = p.x;
+        const y = p.y;
+
+        const nx = Math.min(cx, Math.max(-cx, x));
+        const ny = Math.min(cy, Math.max(-cy, y));
+        p.x = nx;
+        p.y = ny;
+
+      }
     }
+
+
   }
 
   drawParticles() {
@@ -227,6 +244,12 @@ class ParticleSystem {
     const cx = canvas.width/2;
     const cy = canvas.height/2;
     context.clearRect(-cx, -cy, 2*cx, 2*cy);
+    context.strokeStyle = "red"
+
+    context.beginPath();
+    context.rect(-cx + 1, -cy + 1, 2*cx - 2, 2*cy - 2);
+    context.stroke();
+
   }
 
   update(relaxations) {
@@ -257,7 +280,7 @@ class ParticleSystemBuilder {
         let r = 0;
         for (let i = 0; i < 3; ++i) {
           // This is inefficient looping for large matrix but a 3x3 fits into l1 cache
-          r += t[y*3 + i]*ct[i*3 + x];
+          r += ct[y*3 + i]*t[i*3 + x];
         }
         nt.push(r);
       }
@@ -513,11 +536,10 @@ function start() {
 
   b.identity();
   b.scale(5, 5);
-  b.translate(0, -30);
-  b.rotate(Math.PI/2);
 
   const uw = b.wheels(10, 40, 0.75);  // 0.75 is not so slippery
 
+  b.translate(0, 10);
   b.rotate(Math.PI);
   const lw = b.wheels(10, 20, 0.97);  // 0.97 is really slippery
 
@@ -533,7 +555,7 @@ function start() {
   b.stick(pc, lw[0]);
   b.stick(pc, lw[1]);
 
-  b.translate(90, 0);
+  b.translate(0, -20);
   const ww = b.wheels(10, 80, 0.75);  // 0.97 is no so slippery
 
   const pw = b.particle(5, 0, 5);
