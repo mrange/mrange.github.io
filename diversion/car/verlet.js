@@ -512,8 +512,8 @@ function start() {
   const origo = b.fixPoint(0, 0);
 
   b.identity();
-  b.translate(0, -6);
   b.scale(5, 5);
+  b.translate(0, -30);
   b.rotate(Math.PI/2);
 
   const uw = b.wheels(10, 40, 0.75);  // 0.75 is not so slippery
@@ -528,6 +528,19 @@ function start() {
   const fwf = uw[2];
   const bwf = lw[2];
   const baf = lw[3];
+
+  const pc = b.particle(5, 0, -5);
+  b.stick(pc, lw[0]);
+  b.stick(pc, lw[1]);
+
+  b.translate(90, 0);
+  const ww = b.wheels(10, 80, 0.75);  // 0.97 is no so slippery
+
+  const pw = b.particle(5, 0, 5);
+  b.stick(pw, ww[0]);
+  b.stick(pw, ww[1]);
+
+  b.rope(pc, pw, 2);
 
   ps = b.createParticleSystem();
 
