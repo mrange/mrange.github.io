@@ -537,7 +537,7 @@ function start() {
   b.identity();
   b.scale(5, 5);
 
-  const uw = b.wheels(10, 40, 0.75);  // 0.75 is not so slippery
+  const uw = b.wheels(10, 40, 0.85);  // 0.85 is a bit slippery
 
   b.translate(0, 10);
   b.rotate(Math.PI);
@@ -556,24 +556,22 @@ function start() {
   b.stick(pc, lw[1]);
 
   b.translate(0, -20);
-  const ww = b.wheels(10, 80, 0.75);  // 0.97 is no so slippery
+  const fpw = b.particle(30, 0, 5);
+  b.rope(pc, fpw, 2);
 
-  const pw = b.particle(5, 0, 5);
-  b.stick(pw, ww[0]);
-  b.stick(pw, ww[1]);
-
-  b.rope(pc, pw, 2);
+  b.translate(0, -10);
+  const bww = b.wheels(10, 60, 0.90);  // 0.90 is slippery
+  b.stick(fpw, bww[0]);
+  b.stick(fpw, bww[1]);
 
   ps = b.createParticleSystem();
 
   setInterval(() => {
     if (keys[key_q] && angle < Math.PI/6) {
       angle += 0.02;
-    }
-    if (keys[key_w] && angle > -Math.PI/6) {
+    } else if (keys[key_w] && angle > -Math.PI/6) {
       angle -= 0.02;
-    }
-    if (!keys[key_q] && !keys[key_w]) {
+    } else {
       if (angle > 0.02) {
         angle -= 0.02;
       } else if (angle < -0.02) {
@@ -584,10 +582,11 @@ function start() {
       }
     }
     if (keys[key_p]) {
-      accel += 10;
-    }
-    if (keys[key_o]) {
-      accel -= 10;
+      accel = 500;
+    } else if (keys[key_o]) {
+      accel = -1000;
+    } else {
+      accel = 0;
     }
     baf(accel);
     fwf(angle);
