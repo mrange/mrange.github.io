@@ -41,8 +41,8 @@ let startTime = now();
 
 function start() {
   canvas = document.getElementById("glcanvas");
-  width  = canvas.width;
-  height = canvas.height;
+  width  = Math.round(window.innerWidth);
+  height = Math.round(window.innerHeight);
 
   initWebGL(canvas);      // Initialize the GL context
 
@@ -171,7 +171,7 @@ function createTexture(url) {
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
 
   const image = new Image();
   image.crossOrigin = "anonymous";
