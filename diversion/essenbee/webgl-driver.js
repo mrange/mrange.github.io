@@ -31,6 +31,7 @@ var vertexPositionAttribute;
 var vertexNormalAttribute;
 var textureCoordAttribute;
 
+const scaleDown = 2.0;
 const msPerFrame = 1000.0/60.0;
 
 function now() {
@@ -41,8 +42,11 @@ let startTime = now();
 
 function start() {
   canvas = document.getElementById("glcanvas");
-  width  = Math.round(window.innerWidth);
-  height = Math.round(window.innerHeight);
+  canvas.width  = window.innerWidth/scaleDown;
+  canvas.height = window.innerHeight/scaleDown;
+
+  width  = canvas.width;
+  height = canvas.height;
 
   initWebGL(canvas);      // Initialize the GL context
 
