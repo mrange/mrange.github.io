@@ -31,7 +31,7 @@ var vertexPositionAttribute;
 var vertexNormalAttribute;
 var textureCoordAttribute;
 
-const maxWidth = 2*1920;
+const maxWidth = 1920;
 const msPerFrame = 1000.0/60.0;
 
 function now() {
