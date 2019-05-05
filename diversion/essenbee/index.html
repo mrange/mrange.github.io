@@ -64,8 +64,10 @@
       {
         p *= 10.0;
         p.x = mod(p.x, 1.0);
+        float yscale = 1.0 - smoothstep(1.0, 5.0, p.y);
+        if (yscale < 0.1 || p.y < 0.0) return vec4(0.0);
+
         vec4 col = texture2D(iChannel0, p);
-        float yscale = 1.0 / (1.0 + max(p.y - 1.0, 0.0));
         return vec4(col.xyz, col.w*yscale);
       }
 
@@ -83,29 +85,43 @@
         float time = iTime;
 
         // zoom
-        p = vec2(0.5, -0.05) + p*0.75*pow(0.9, 20.0*(0.5+0.5*cos(0.25*time)));
+        p = vec2(0.5, -0.05) + p*0.75*pow(0.9, 20.0*(0.5+0.5*cos(0.3*sqrt(2.0)*time)));
 
         vec4 col = vec4(0.0);
-        vec3 ss = mix(vec3(0.2,0.2, 1.0), vec3(0.5,-0.2,0.5), 0.5+0.5*sin(0.5*time));
+        vec3 ss = mix(vec3(0.2, 0.2, 0.5), vec3(0.2,-0.2,1.0), 2.2 + 1.25*sin(time/2.0));
 
         vec2 c = vec2(-0.76, 0.15);
-        rot(c, 0.2*sin(time/6.0));
+        rot(c, 0.2*sin(time*sqrt(3.0)/12.0));
         float f = 0.0;
         vec2 z = p;
 
-        const int maxIter = 130;
+        float transparency = 1.0;
+
+        const int maxIter = 100;
+        const float maxIterF = float(maxIter);
         for(int i=0; i<=maxIter; ++i)
         {
-          if((dot(z,z)>4.0) || (col.w>0.05)) break;
+          float re2 = z.x*z.x;
+          float im2 = z.y*z.y;
+          if((re2 + im2>4.0) || (transparency<0.1)) break;
+          float reim = z.x*z.y;
 
           // fc(z) = z² + c
-          z = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + c;
+          z = vec2(re2 - im2, 2.0*reim) + c;
 
-          col = sample(ss.xy + ss.z*z)*sqrt((float(maxIter)-f)/float(maxIter));
+          float shade = sqrt((maxIterF-f/2.0)/maxIterF);
+
+          vec4 sample = shade*sample(ss.xy + ss.z*z);
+
+          transparency *= 1.0 - clamp(sample.w, 0.0, 1.0);
+          vec4 newCol = vec4(col.xyz + sample.xyz*(1.0 - col.w)*sample.w, 1.0 - transparency);
+
+          col = newCol;
+
           f += 1.0;
         }
 
-        vec3 bg = 0.3*(vec3(97.0,104.0,246.0)/255.0)*sqrt(f/float(maxIter));
+        vec3 bg = 0.3*(vec3(97.0,104.0,246.0)/255.0)*sqrt(f/maxIterF);
 
         col.xyz = mix(bg, col.xyz, col.w);
 
@@ -133,8 +149,5 @@
     <canvas id="glcanvas" class="gl" width="1920" height="1200">
       Your browser doesn't appear to support the HTML5 <code>&lt;canvas&gt;</code> element.
     </canvas>
-    <span style="display:flex;justify-content:center;align-content:center;font-size: 200px">
-        infinite alfs
-    </span>
   </body>
 </html>

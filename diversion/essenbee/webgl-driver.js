@@ -66,7 +66,7 @@ function start() {
 
     // Next, load and set up the textures we'll be using.
 
-    texture = createTexture("essenbee2.png");
+    texture = createTexture("essenbee.png");
 
     startTime = now();
 
@@ -189,7 +189,7 @@ function handleTextureLoaded(image, texture) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.generateMipmap(gl.TEXTURE_2D);
   gl.bindTexture(gl.TEXTURE_2D, null);
 }
 
