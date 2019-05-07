@@ -62,7 +62,7 @@
 
       vec4 sample(vec2 p)
       {
-        p *= 10.0;
+        p *= 5.0;
         p.x = mod(p.x, 1.0);
         float yscale = 1.0 - smoothstep(1.0, 5.0, p.y);
         if (yscale < 0.1 || p.y < 0.0) return vec4(0.0);
@@ -109,9 +109,10 @@
           // fc(z) = z² + c
           z = vec2(re2 - im2, 2.0*reim) + c;
 
-          float shade = sqrt((maxIterF-f/2.0)/maxIterF);
+          float shade = (1.0-0.7*f/maxIterF);
 
-          vec4 sample = shade*sample(ss.xy + ss.z*z);
+          vec4 sample = sample(ss.xy + ss.z*z);
+          sample.xyz *= shade;
 
           transparency *= 1.0 - clamp(sample.w, 0.0, 1.0);
           vec4 newCol = vec4(col.xyz + sample.xyz*(1.0 - col.w)*sample.w, 1.0 - transparency);
@@ -127,6 +128,7 @@
 
         fragColor = vec4(col.xyz, 1.0);
       }
+
     </script>
 
     <script id="shader-vs" type="x-shader/x-vertex">
