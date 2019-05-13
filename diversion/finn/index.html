@@ -64,12 +64,14 @@
       vec4 sample(vec2 p)
       {
         p *= 5.0;
-        p.x = mod(p.x, 1.0);
+        float xscale = 1.0 - smoothstep(1.0, 15.0, abs(p.x));
         float yscale = 1.0 - smoothstep(1.0, 5.0, p.y);
-        if (yscale < 0.1 || p.y < 0.0) return vec4(0.0);
+        float scale = xscale*yscale;
+        p.x = mod(p.x, 1.0);
+        if (scale < 0.1 || p.y < 0.0) return vec4(0.0);
 
         vec4 col = texture2D(iChannel0, p);
-        return vec4(col.xyz, col.w*yscale);
+        return vec4(col.xyz, col.w*scale);
       }
 
       void rot(inout vec2 p, float a)
