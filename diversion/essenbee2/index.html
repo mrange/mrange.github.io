@@ -60,14 +60,6 @@
 
       // Based upon: https://www.shadertoy.com/view/3sXSD2
 
-      mat2 rot (in float degree)
-      {
-        float rad = radians (degree);
-        float c = cos (rad);
-        float s = sin (rad);
-        return mat2 (vec2 (c, s),vec2 (-s, c));
-      }
-
       // using a slightly adapted implementation of iq's simplex noise from
       // https://www.shadertoy.com/view/Msf3WH with hash(), noise() and fbm()
       vec2 hash (in vec2 p)
@@ -101,27 +93,27 @@
 
       float fbm (in vec2 p, float time)
       {
-        mat2 rot = rot (12.0*sin(time/2.0));
-        float d = noise (p); p *= rot;
-        d += .5*noise (p); p *= rot;
-        d += .25*noise (p); p *= rot;
-        d += .125*noise (p); p *= rot;
-        d += .0625*noise (p);
+        float c =  cos(time/sqrt(3.0));
+        float d =  noise (p                 );
+        d += .5*   noise (p + vec2(+c  ,+0.0));
+        d += .25*  noise (p + vec2(+0.0,+c  ));
+        d += .125* noise (p + vec2(-c  ,+0.0));
+        d += .0625*noise (p + vec2(+0.0,-c  ));
         d /= (1. + .5 + .25 + .125 + .0625);
         return .5 + .5*d;
       }
 
-      vec2 toPolar (in vec2 cart)
+      vec2 toPolar (in vec2 p)
       {
-        float r = length (cart);
-        float phi = atan (cart.y, cart.x);
-        return vec2 (r, phi);
+        float r = length (p);
+        float a = atan (p.y, p.x);
+        return vec2 (r, a);
       }
 
-      vec2 toRect (in vec2 polar)
+      vec2 toRect (in vec2 p)
       {
-        float x = polar.x*cos (polar.y);
-        float y = polar.x*sin (polar.y);
+        float x = p.x*cos (p.y);
+        float y = p.x*sin (p.y);
         return vec2 (x, y);
       }
 
@@ -192,6 +184,7 @@
   </head>
 
   <body onload="start()">
+    <img id="image0" src="essenbee.png" style="visibility: collapse"/>
     <canvas id="glcanvas" class="gl">
       Your browser doesn't appear to support the HTML5 <code>&lt;canvas&gt;</code> element.
     </canvas>
