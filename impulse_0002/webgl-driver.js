@@ -225,6 +225,11 @@ function drawScene() {
   gl.bindBuffer(gl.ARRAY_BUFFER, verticesNormalBuffer);
   gl.vertexAttribPointer(vertexNormalAttribute, 3, gl.FLOAT, false, 0, 0);
 
+  // TODO: Bind to FFT/Amplitude
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, texture0);
+  gl.uniform1i(gl.getUniformLocation(shaderProgram, "uSampler"), 0);
+
   gl.activeTexture(gl.TEXTURE1);
   gl.bindTexture(gl.TEXTURE_2D, texture1);
   gl.uniform1i(gl.getUniformLocation(shaderProgram, "uSampler"), 1);
