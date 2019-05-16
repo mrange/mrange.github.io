@@ -23,7 +23,7 @@ var verticesIndexBuffer;
 var image;
 var texture1;
 var texture2;
-
+var audio;
 var width;
 var height;
 
@@ -54,6 +54,8 @@ function start() {
   canvas.width  = actualWidth;
   canvas.height = actualHeight;
 
+  audio = document.getElementById("music");
+
   initWebGL(canvas);      // Initialize the GL context
 
   // Only continue if WebGL is available and working
@@ -79,12 +81,18 @@ function start() {
     texture1 = createTexture("image1");
     texture2 = createTexture("image2");
 
-    startTime = now();
-
-    // Set up to draw the scene periodically.
-
-    setTimeout(drawScene, msPerFrame);
   }
+}
+
+function go() {
+  audio.controls = false;
+  audio.style = "visibility: collapse";
+
+  startTime = now();
+
+  // Set up to draw the scene periodically.
+
+  setTimeout(drawScene, msPerFrame);
 }
 
 function initWebGL() {
