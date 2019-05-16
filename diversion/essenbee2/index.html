@@ -62,6 +62,7 @@
 
       // using a slightly adapted implementation of iq's simplex noise from
       // https://www.shadertoy.com/view/Msf3WH with hash(), noise() and fbm()
+
       vec2 hash (in vec2 p)
       {
         p = vec2 (dot (p, vec2 (127.1, 311.7)),
@@ -142,9 +143,14 @@
 
         for (int i = 0; i < count; ++i)
         {
-          float time = iTime + float(i);
-          float d1 = abs ((p.y*haze)*thickness / (p.y - e1*fbm (p + 1.5*time*vec2(0,-1), time*0.11)*a1))*s1;
-          float d2 = abs ((p.y*haze)*thickness / (p.y - e2*fbm (p - 1.5*time*vec2(0,1), time*0.09)*a2))*s2;
+          float fi = float(i);
+          float time = iTime + fi;
+          float fe1 = (pow(fi + 1.0, 0.2))*e1;
+          float fe2 = fe1;
+          vec2 o1 = 1.5*time*vec2(0,-1);
+          vec2 o2 = o1;
+          float d1 = abs ((p.y*haze)*thickness / (p.y - fe1*fbm (p + o1, time*0.11)*a1))*s1;
+          float d2 = abs ((p.y*haze)*thickness / (p.y - fe2*fbm (p + o2, time*0.09)*a2))*s2;
           col += d1*size*vec3 (.1, .8, 2.);
           col += d2*size*vec3 (2., .1, .8);
         }
