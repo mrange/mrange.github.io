@@ -75,7 +75,7 @@ function start() {
 
     // Next, load and set up the textures we'll be using.
 
-    texture = createTexture("finn.png");
+    texture = createTexture("image0");
 
     startTime = now();
 
@@ -174,18 +174,18 @@ function initBuffers() {
       new Uint16Array(vertexIndices), gl.STATIC_DRAW);
 }
 
-function createTexture(url) {
+function createTexture(id) {
+  const image = document.getElementById(id);
+
   // create new texture
   const texture = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
 
-  const image = new Image();
-  image.crossOrigin = "anonymous";
-  image.onload = function() {
-    handleTextureLoaded(image, texture)
-  }
-  image.src = url;
+  handleTextureLoaded(image, texture)
+
   return texture;
 }
 
