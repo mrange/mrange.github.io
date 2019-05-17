@@ -32,7 +32,7 @@ var vertexPositionAttribute;
 var vertexNormalAttribute;
 var textureCoordAttribute;
 
-const maxWidth = 1920;
+const maxWidth = 1280;
 const msPerFrame = 1000.0/60.0;
 
 function now() {
@@ -210,6 +210,12 @@ function handleTextureLoaded(image, texture) {
   gl.bindTexture(gl.TEXTURE_2D, null);
 }
 
+function bindTexture(uniform, texture, i) {
+  gl.activeTexture(gl.TEXTURE0 + i);
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.uniform1i(gl.getUniformLocation(shaderProgram, uniform), i);
+}
+
 function drawScene() {
   const before = now();
   const iTime = (before - startTime) / 1000.0;
@@ -225,14 +231,11 @@ function drawScene() {
   gl.bindBuffer(gl.ARRAY_BUFFER, verticesNormalBuffer);
   gl.vertexAttribPointer(vertexNormalAttribute, 3, gl.FLOAT, false, 0, 0);
 
-  // TODO: Bind to FFT/Amplitude
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, texture0);
-  gl.uniform1i(gl.getUniformLocation(shaderProgram, "uSampler"), 0);
+  // TODO: Bind to FFT/Amplitude to iChannel0
+  bindTexture("iChannel0", texture1, 0);
+  bindTexture("iChannel1", texture1, 1);
+  bindTexture("iChannel2", texture2, 2);
 
-  gl.activeTexture(gl.TEXTURE1);
-  gl.bindTexture(gl.TEXTURE_2D, texture1);
-  gl.uniform1i(gl.getUniformLocation(shaderProgram, "uSampler"), 1);
 
   gl.activeTexture(gl.TEXTURE2);
   gl.bindTexture(gl.TEXTURE_2D, texture2);
