@@ -15,7 +15,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>impulse-0002: impulse gathering 2019 invitation</title>
+    <title>impulse-0002: from dusk till dawn</title>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <script src="webgl-driver.js" type="text/javascript"></script>
     <link href='https://fonts.googleapis.com/css?family=Josefin Slab' rel='stylesheet'>
@@ -25,16 +25,9 @@
             color: white;
             font-family: 'Josefin Slab';font-size: 32px;
         }
-        canvas.gl {
-          position:fixed;
-          z-index:-1;
-          left:0;
-          top:0;
-          width:100%;
-          height:100%;
-        }
     </style>
     <script id="shader-fs" type="x-shader/x-fragment">#version 300 es
+
       // -----------------------------------------------------------------------
       // BEGIN - Common prelude
       // -----------------------------------------------------------------------
@@ -43,1425 +36,827 @@
       uniform vec2 iResolution;
       uniform float iTime;
       uniform sampler2D iChannel0;
-      uniform sampler2D iChannel1;
-      uniform sampler2D iChannel2;
 
-      in vec2 vTextureCoord;
-
-      out vec4 outColor;
+      in highp vec2 vTextureCoord;
 
       void mainImage(out vec4 fragColor, in vec2 fragCoord);
 
+      out vec4 fragmentColor;
+
       void main(void) {
-        mainImage(outColor, vTextureCoord*iResolution);
+        mainImage(fragmentColor, vTextureCoord*iResolution);
       }
       // -----------------------------------------------------------------------
       // END - Common prelude
       // -----------------------------------------------------------------------
 
+      // Created by mrange/2019
       // License Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unported License.
 
-      // A "retro" invitation created for my old Atari ST buddies for a
-      //  summer get-together. I wanted the Atari ST demo feeling with
-      //  chiptune music (soundcloud is sometimes struggling to load)
-      //  and unpolished and a bit too colorful screens.
-      //  Of course, it all needs to end with an impossible to read
-      //  scrolltext. It's just how it was supposed to work on the
-      //  old Atari ST :)
+      #define PI  3.141592654
+      #define TAU (2.0*PI)
 
-      // Inspiration and code shamelessly borrowed from the many
-      //  talented shader authors at shadertoy:
-      //  iq, shane, evilryu, otaviogood, purton and others.
+      #define TOLERANCE       0.001
+      #define END_STEP_FACTOR 3
+      #define MAX_ITER        75
+      #define MIN_DISTANCE    0.1
+      #define MAX_DISTANCE    30.0
+      #define GLOBAL_SCALE    1.2
 
-      // Shaders harvested for inspiration and code for specific effects:
-      //  Scrolltext - Code based on: https://www.shadertoy.com/view/wsSXzz
-      //  Mandelbrot zoom - Code is basically orbit traps added to: https://www.shadertoy.com/view/4df3Rn
-      //  Cloud marching - Code heavily inspired by: https://www.shadertoy.com/view/XslGRr
+      const float seaScale = 55.0;
 
-      // Resources that helped with write raymarchers:
-      //  http://9bitscience.blogspot.com/2013/07/raymarching-distance-fields_14.html
-      //  http://www.iquilezles.org/www/articles/distfunctions/distfunctions.htm
-      //  http://mercury.sexy/hg_sdf/
+      #define INTERVAL 34.0
+      #define PERIOD int(iTime/INTERVAL)
+      #define TIMEINPERIOD mod(iTime, INTERVAL)
 
-      // Cool stuff on how to use distance fields to zoom "decals" and apply
-      //  effects like outer glow. Is used for scrolltext
-      //  https://steamcdn-a.akamaihd.net/apps/valve/2007/SIGGRAPH2007_AlphaTestedMagnification.pdf
-
-      // -----------------------------------------------------------------------------
-      // Common code and definitions - BEGIN
-      // -----------------------------------------------------------------------------
-
-      #define PI              3.141592654
-      #define TAU             (2.0*PI)
-
-      #define AA 2
-
-      // Font rendering macros (ASCII codes)
-      #define _SPACE 32
-      #define _EXCLAMATION 33
-      #define _COMMA 44
-      #define _DASH 45
-      #define _PERIOD 46
-      #define _SLASH 47
-      #define _COLON 58
-      #define _AT 64
-      #define _A 65
-      #define _B 66
-      #define _C 67
-      #define _D 68
-      #define _E 69
-      #define _F 70
-      #define _G 71
-      #define _H 72
-      #define _I 73
-      #define _J 74
-      #define _K 75
-      #define _L 76
-      #define _M 77
-      #define _N 78
-      #define _O 79
-      #define _P 80
-      #define _Q 81
-      #define _R 82
-      #define _S 83
-      #define _T 84
-      #define _U 85
-      #define _V 86
-      #define _W 87
-      #define _X 88
-      #define _Y 89
-      #define _Z 90
-
-      #define _a 97
-      #define _b 98
-      #define _c 99
-      #define _d 100
-      #define _e 101
-      #define _f 102
-      #define _g 103
-      #define _h 104
-      #define _i 105
-      #define _j 106
-      #define _k 107
-      #define _l 108
-      #define _m 109
-      #define _n 110
-      #define _o 111
-      #define _p 112
-      #define _q 113
-      #define _r 114
-      #define _s 115
-      #define _t 116
-      #define _u 117
-      #define _v 118
-      #define _w 119
-      #define _x 120
-      #define _y 121
-      #define _z 122
-
-      #define _0 48
-      #define _1 49
-      #define _2 50
-      #define _3 51
-      #define _4 52
-      #define _5 53
-      #define _6 54
-      #define _7 55
-      #define _8 56
-      #define _9 57
-
-      const int numLetters = 253;
-      const int letterArray[numLetters] = int[numLetters](
-        _I,_M,_P,_U,_L,_S,_E,_EXCLAMATION,_SPACE,_DASH,_SPACE,
-        _I,_t,_SPACE,_i,_s,_SPACE,_t,_i,_m,_e,_SPACE,_f,_o,_r,_SPACE,_t,_h,_e,_SPACE,_I,_M,_P,_U,_L,_S,_E,_SPACE,
-        _DASH,_SPACE,_i,_n,_v,_i,_t,_i,_o,_n,_a,_t,_i,_o,_n,_a,_l,_SPACE,_o,_n,_l,_y,_SPACE,_DASH,_SPACE,_2,_0,_1,_9,_PERIOD,_SPACE,
-        _2,_0,_1,_8,_SPACE,_w,_a,_s,_SPACE,_a,_SPACE,_g,_r,_e,_a,_t,_SPACE,_s,_u,_c,_c,_e,_s,_s,_SPACE,
-        _a,_n,_d,_SPACE,_2,_0,_1,_9,_SPACE,_d,_e,_s,_e,_r,_v,_e,_s,_SPACE,_a,_SPACE,_w,_o,_r,_t,_h,_y,_SPACE,
-        _r,_e,_p,_e,_a,_t,_PERIOD,_SPACE,
-        _S,_o,_SPACE,_f,_e,_l,_l,_o,_w,_SPACE,_h,_a,_c,_k,_e,_r,_s,_COMMA,_SPACE,_p,_i,_c,_k,_SPACE,_u,_p,_SPACE,
-        _y,_o,_u,_r,_SPACE,_c,_o,_m,_p,_u,_t,_e,_r,_s,_COMMA,_SPACE,_k,_e,_y,_b,_o,_a,_r,_d,_s,_SPACE,_a,_n,_d,_SPACE,
-        _j,_o,_y,_s,_t,_i,_c,_k,_s,_SPACE,_a,_n,_d,_SPACE,_t,_r,_a,_v,_e,_l,_SPACE,_t,_o,_SPACE,
-        _G,_o,_t,_h,_e,_n,_b,_u,_r,_g,_SPACE,_i,_n,_SPACE,_M,_a,_y,_PERIOD,_SPACE,
-        _B,_e,_SPACE,_t,_h,_e,_r,_e,_SPACE,_o,_r,_SPACE,_b,_e,_SPACE,_s,_q,_u,_a,_r,_e,_EXCLAMATION,_EXCLAMATION,_EXCLAMATION
-      );
-
-
-      vec4 sampleText(in vec2 uv, int start, int count, bool repeat)
+      float rand(in vec2 co)
       {
-        float fl = floor(uv + 0.5).x;
-        float cursorPos = fl;
-        int arrayPos = int(cursorPos);
-        if (arrayPos < 0)
-        {
-          return vec4(0.0, 0.0, 0.0, 1.0);
-        }
-        if (!repeat && arrayPos >= count)
-        {
-          return vec4(0.0, 0.0, 0.0, 1.0);
-        }
-
-        arrayPos %= count;
-        arrayPos += start;
-
-        int letter = letterArray[arrayPos];
-        vec2 lp = vec2(letter % 16, 15 - letter/16);
-        vec2 uvl = lp + fract(uv+0.5)-0.5;
-
-        // Sample the font texture. Make sure to not use mipmaps.
-        // Add a small amount to the distance field to prevent a strange bug on some gpus. Slightly mysterious. :(
-        vec2 tp = (uvl+0.5)*(1.0/16.0);
-        return texture(iChannel2, tp, -100.0) + vec4(0.0, 0.0, 0.0, 0.000000001);
+        return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);
       }
 
-      vec3 scrollText(vec2 uv, float time, vec3 fontColor, vec3 glowColor, vec3 background)
+      vec2 hash(in vec2 p)
       {
-        vec3 col = background;
-
-        const float appearTime = 6.0;
-
-        vec2 p = uv + vec2(time, 0.0);
-
-        if (abs(p.y) > 0.5)
-        {
-          return col;
-        }
-
-        vec4 samp = sampleText(p, 0, numLetters, true);
-        float dist = samp.w;
-
-        col += glowColor*(1.0 - smoothstep(0.55, 0.66, dist));
-
-        if (step(0.55, dist) == 0.0)
-        {
-          col = vec3(0.0);
-        }
-
-        if (step(0.5, dist) == 0.0)
-        {
-          col = fontColor;
-        }
-
-
-        return col;
-      }
-
-      vec3 saturate(vec3 a) { return clamp(a, 0.0, 1.0); }
-      vec2 saturate(vec2 a) { return clamp(a, 0.0, 1.0); }
-      float saturate(float a) { return clamp(a, 0.0, 1.0); }
-
-      float mod1(inout float p, in float size)
-      {
-        float halfsize = size*0.5;
-        float c = floor((p + halfsize)/size);
-        p = mod(p + halfsize, size) - halfsize;
-        return c;
-      }
-
-      vec2 mod2(inout vec2 p, in vec2 size)
-      {
-        vec2 c = floor((p + size*0.5)/size);
-        p = mod(p + size*0.5,size) - size*0.5;
-        return c;
-      }
-
-      float rand(vec3 r)
-      {
-        return fract(sin(dot(r.xy,vec2(1.38984*sin(r.z),1.13233*cos(r.z))))*653758.5453);
-      }
-
-      vec2 toHyperSpace(in vec2 p)
-      {
-        float r2 = dot(p, p);
-        float t = 1.0 + 1.0/sqrt(1.0 - r2);
-        return (t + 1.0)*p;
-      }
-
-      vec2 toPolar(in vec2 p)
-      {
-        return vec2(length(p), atan(p.y,p.x));
-      }
-
-      vec2 toRectangular(in vec2 p)
-      {
-        return vec2(p.x*cos(p.y), p.x*sin(p.y));
-      }
-
-      vec3 toSpherical(vec3 p)
-      {
-        float l = length(p);
-        return vec3(length(p), acos(p.z/l), atan(p.y, p.x));
-      }
-
-      vec3 toRectangular(vec3 p)
-      {
-        float l = length(p);
-        return vec3(p.x*sin(p.y)*cos(p.z), p.x*sin(p.y)*sin(p.z), p.x*cos(p.y));
-      }
-
-      vec3 mod3(inout vec3 p, vec3 size)
-      {
-        vec3 c = floor((p + size*0.5)/size);
-        p = mod(p + size*0.5, size) - size*0.5;
-        return c;
-      }
-
-      float maxComp(in vec3 p)
-      {
-        return max(p.x,max(p.y,p.z));
-      }
-
-      float maxComp(in vec2 p)
-      {
-        return max(p.x, p.y);
+        p=vec2(dot(p,vec2(127.1,311.7)),dot(p,vec2(269.5,183.3)));
+        return fract(sin(p)*18.5453);
       }
 
       void rot(inout vec2 p, in float a)
       {
-        p = cos(a)*p + sin(a)*vec2(p.y, -p.x);
+        float c = cos(a);
+        float s = sin(a);
+
+        p = vec2(p.x*c + p.y*s, -p.x*s + p.y*c);
       }
 
-      vec2 toSmith(vec2 p)
-      {
-        // z = (p + 1)/(-p + 1)
-        // (x,y) = ((1+x)*(1-x)-y*y,2y)/((1-x)*(1-x) + y*y)
-        float d = (1.0 - p.x)*(1.0 - p.x) + p.y*p.y;
-        float x = (1.0 + p.x)*(1.0 - p.x) - p.y*p.y;
-        float y = 2.0*p.y;
-        return vec2(x,y)/d;
-      }
-
-      vec2 fromSmith(vec2 p)
-      {
-        // z = (p - 1)/(p + 1)
-        // (x,y) = ((x+1)*(x-1)+y*y,2y)/((x+1)*(x+1) + y*y)
-        float d = (p.x + 1.0)*(p.x + 1.0) + p.y*p.y;
-        float x = (p.x + 1.0)*(p.x - 1.0) + p.y*p.y;
-        float y = 2.0*p.y;
-        return vec2(x,y)/d;
-      }
-
-      vec3 fadeIn(in vec3 col, in vec3 fadeTo, in float start, in float done, in float time)
-      {
-        float fadeIn = smoothstep(start, done, time);
-        return mix(fadeTo, col, fadeIn);
-      }
-
-      vec3 fadeOut(in vec3 col, in vec3 fadeTo, in float start, in float done, in float time)
-      {
-        float fadeOut = 1.0 - smoothstep(start, done, time);
-        return mix(fadeTo, col, fadeOut);
-      }
-
-      float unionRound(float a, float b, float r)
-      {
-        vec2 u = max(vec2(r - a,r - b), vec2(0));
-        return max(r, min (a, b)) - length(u);
-      }
-
-      float softMin(in float a, in float b, in float k)
-      {
-        float res = exp( -k*a ) + exp( -k*b );
-        return -log( res )/k;
-      }
-
-      float sdSphere(in vec3 p, in float r)
-      {
-        return length(p) - r;
-      }
-
-      float sdBox(in vec3 p, in vec3 b)
-      {
-        vec3  di = abs(p) - b;
-        float mc = maxComp(di);
-        return min(mc,length(max(di,0.0)));
-      }
-
-      float sdSoftBox(in vec3 p, in float r)
-      {
-        p *= p;
-        p *= p;
-        p *= p;
-        return pow(p.x + p.y + p.z, 1.0/8.0) - r;
-      }
-
-      float sdCross(in vec3 p)
-      {
-        float da = maxComp(abs(p.xy));
-        float db = maxComp(abs(p.yz));
-        float dc = maxComp(abs(p.zx));
-        return min(da,min(db,dc))-1.0;
-      }
-
-      float sdPlane(in vec3 p, in vec3 n, in float m)
-      {
-        return dot(p, n) + m;
-      }
-
-      mat4 mscale(vec3 s)
-      {
-        return mat4(
-          s.x, 0.0, 0.0, 0.0,
-          0.0, s.y, 0.0, 0.0,
-          0.0, 0.0, s.z, 0.0,
-          0.0, 0.0, 0.0, 1.0);
-      }
-
-      mat4 mrotX(in float a)
+      mat2 mrot(in float a)
       {
         float c = cos(a);
         float s = sin(a);
-        return mat4(
-          c,-s, 0, 0,
-          s, c, 0, 0,
-          0, 0, 1, 0,
-          0, 0, 0, 0);
+        return mat2(c, s, -s, c);
       }
 
-      mat4 mrotY(in float a)
+      const float gravity = 1.0;
+      const float waterTension = 0.01;
+
+      vec2 wave(in float t, in float a, in float w, in float p)
       {
-        float c = cos(a);
-        float s = sin(a);
-        return mat4(
-          c, 0,-s, 0,
-          0, 1, 0, 0,
-          s, 0, c, 0,
-          0, 0, 0, 1);
+        float x = t;
+        float y = a*sin(t*w + p);
+        return vec2(x, y);
       }
 
-      mat4 mrotZ(in float a)
+      vec2 dwave(in float t, in float a, in float w, in float p)
       {
-        float c = cos(a);
-        float s = sin(a);
-        return mat4(
-          1, 0, 0, 0,
-          0, c,-s, 0,
-          0, s, c, 0,
-          0, 0, 0, 1);
+        float dx = 1.0;
+        float dy = a*w*cos(t*w + p);
+        return vec2(dx, dy);
       }
 
-      mat4 mtrans(in vec3 t)
+      #define AMPMOD tanh(0.02*k*h)
+
+      vec2 gravityWave(in float t, in float a, in float k, in float h)
       {
-        return mat4(
-          1, 0, 0, t.x,
-          0, 1, 0, t.y,
-          0, 0, 1, t.z,
-          0, 0, 0, 1);
+        float w = sqrt(gravity*k);
+        return wave(t, a*AMPMOD, k, w*iTime);
       }
 
-      // -----------------------------------------------------------------------------
-      // Common code and definitions - END
-      // -----------------------------------------------------------------------------
-
-      // -----------------------------------------------------------------------------
-      // Retro Impulse Intro - BEGIN
-      // -----------------------------------------------------------------------------
-
-      #define RII_START       0.0
-      #define RII_DONE        (RII_START + 69.0)
-
-      #define RII_FADEINTIME 0.25
-      #define RII_FLASHDOWNTIME 0.75
-
-      vec3 rii_scrollText(in float gtime, in vec2 uv, in vec3 background)
+      vec2 gravityWaveD(in float t, in float a, in float k, in float h)
       {
-        vec3 col = background;
-
-        const float appearTime = 6.0;
-
-      //  uv.y += 0.05*sin(8.0*uv.x + TIME);
-
-        vec2 p = uv*3.0 + vec2(4.0*(gtime - appearTime) - 6.0, -2.5);
-
-        if(abs(p.y) > 0.5)
-        {
-          return col;
-        }
-
-        vec4 samp = sampleText(p, 0, numLetters, true);
-        float dist = samp.w;
-
-        if (step(0.55, dist) == 0.0)
-        {
-          col = vec3(0.0);
-        }
-
-        if (step(0.5, dist) == 0.0)
-        {
-          col = vec3(1.0);
-        }
-
-        return col;
+        float w = sqrt(gravity*k);
+        return dwave(t, a*AMPMOD, k, w*iTime);
       }
 
-      const int rii_numBars = 6;
-      const vec3 rii_bars[rii_numBars] = vec3[rii_numBars](
-          1.0*vec3(135.0, 160.0, 255.0)/255.0,
-          1.0*vec3(140.0, 141.0, 255.0)/255.0,
-          1.0*vec3(155.0, 099.0, 255.0)/255.0,
-          1.0*vec3(167.0, 060.0, 255.0)/255.0,
-          1.0*vec3(175.0, 034.0, 255.0)/255.0,
-          1.0*vec3(187.0, 000.0, 255.0)/255.0
-      );
-
-      float rii_flash(in float gtime, in float time)
+      vec2 capillaryWave(in float t, in float a, in float k, in float h)
       {
-        return step(time, gtime)*(1.0 - smoothstep(time, time + RII_FLASHDOWNTIME, gtime));
+        float w = sqrt((gravity*k + waterTension*k*k*k));
+        return wave(t, a*AMPMOD, k, w*iTime);
       }
 
-      vec3 rii_logo(in float gtime, in vec2 uv, in vec3 background)
+      vec2 capillaryWaveD(in float t, in float a, in float k, in float h)
       {
-        vec3 col = background;
-
-        const float electrifyTime = 25.0;
-
-        float period = 1.0;
-        float time = mod(gtime, period);
-
-        vec2 p = uv*vec2(3.0, 4.0) - vec2(-3.0, -3.5 + time - time*time);
-
-        if(abs(p.y) > 0.5)
-        {
-          return col;
-        }
-
-        vec4 samp = sampleText(p - vec2(-0.5, 0.0), 0, 8, false);
-        float dist = samp.w;
-
-        col = rii_bars[0]*smoothstep(0.5, 0.66, dist);
-
-        if (step(0.5, dist) == 0.0)
-        {
-          col = vec3(samp.y + 0.3);
-        }
-
-        if (gtime > electrifyTime)
-        {
-          float tx = mod((p.x + 2.5)*48.0, 511.0);
-          float wave = texelFetch(iChannel0, ivec2(tx,1), 0).x;
-
-        //wave = 0.5;
-
-          for(int i = 0; i < rii_numBars; ++i)
-          {
-            float r = (float(i + rii_numBars)/float(2*rii_numBars));
-            float shade = pow(r, 4.0);
-            float disty = r*r*0.4*sin(p.x + (5.0 + float(i))*gtime);
-
-            col += shade*rii_bars[i]*(1.0 - smoothstep(0.0, 0.5, abs(wave - p.y - 0.5 + disty)));
-            col += shade*(1.0 - smoothstep(0.0, 0.15, abs(wave - p.y - 0.5 + disty)));
-          }
-          float fo = abs(cos(PI*p.y));
-          col *= sqrt(fo);
-
-          col += rii_flash(gtime, electrifyTime);
-        }
-
-
-        return col;
+        float w = sqrt((gravity*k + waterTension*k*k*k));
+        return dwave(t, a*AMPMOD, k, w*iTime);
       }
 
-
-      vec3 rii_rasterBars(in float gtime, in vec2 uv, in vec3 background)
+      vec4 sea(in vec2 p, in float h, in float ia)
       {
-        vec3 col = background;
+        float y = 0.0;
+        vec3 d = vec3(0.0);
 
-        const float unflatTime = 31.5;
+        float k = 1.5;
+        float kk = 1.2;
+        float a = ia*0.2;
+        float aa = 1.0/(kk*kk);
 
-        vec2 pol = toSmith(uv);
-        rot(pol, smoothstep(unflatTime, unflatTime + 120.0, gtime)*3.14*sin(gtime));
-        //pol.x += 0.75*sin(TIME*1.5);
-        pol.y += smoothstep(unflatTime, unflatTime + 60.0, gtime)*0.5*cos(gtime);
-        //pol.y += sin(TIME + uv.y + uv.x)*0.5;
-        //pol.x *= 0.6 + 0.4*cos(TIME + uv.y - 0.5);
-        uv = fromSmith(pol);
+        const float scale = seaScale;
 
-        for(int i = 0; i < rii_numBars; ++i)
-        {
-            float shade = (float(i + rii_numBars)/float(2*rii_numBars));
-            vec3 barCol = rii_bars[rii_numBars - i - 1]*shade;
-            float a = 0.5*float(i) + 2.0*gtime;
-            float y = 0.5*sin(a);
-            float f = step(-0.1,uv.y + y)*(1.0 - step(0.1,uv.y + y));
-            float h =
-                rii_flash(gtime, unflatTime) +
-                step(unflatTime, gtime)*shade*0.5*cos(30.0*(uv.y + y))*f;
-            col = mix(col, barCol + h, 0.9*f);
-        }
-
-        return col;
-      }
-
-      float rii_length8(in vec2 uv)
-      {
-        uv = uv*uv;
-        uv = uv*uv;
-        uv = uv*uv;
-        return pow(uv.x + uv.y, 1.0/8.0);
-      }
-
-      vec3 rii_synth(in float gtime, in vec2 uv, in vec3 background)
-      {
-        vec3 col = background;
-
-        const float appearInTime = 19.0;
-        const float waveTime = 40.0;
-        const float waveDevelopTime = 20.0;
-
-        vec2 pol = toPolar(uv);
-        //pol.y += sin(TIME + uv.y + uv.x)*0.5;
-        pol.x *= 1.0 + smoothstep(waveTime, waveTime + waveDevelopTime, gtime)*0.6*cos(gtime + uv.y - 0.5);
-        uv = toRectangular(pol);
-
-        vec2 cp = uv;
-
-        vec2 ci = mod2(cp, vec2(0.2));
-
-        rot(ci, 1.0 - step(waveTime, gtime)*0.25*(gtime - waveTime));
-
-        float ffi = abs(mod(10.0*abs(ci.x + ci.y), 511.0));
-
-        float d = rii_length8(cp);
-
-        float fft  = texelFetch(iChannel0, ivec2(ffi,0), 0).x;
-
-        if (d < 0.075)
-        {
-          col += smoothstep(appearInTime, appearInTime + RII_FADEINTIME,gtime)*0.75*(vec3(fft*fft, 0.0, fft) + fft*fft*fft);
-        }
-
-        return col;
-      }
-
-      const int rii_numBalls = 12;
-      const vec3 rii_balls[rii_numBalls] = vec3[rii_numBalls](
-          vec3(1.0, 0.0, 0.0),
-          vec3(1.0, 0.5, 0.0),
-          vec3(1.0, 1.0, 0.0),
-          vec3(0.5, 1.0, 0.0),
-          vec3(0.0, 1.0, 0.0),
-          vec3(0.0, 1.0, 0.5),
-          vec3(0.0, 1.0, 1.0),
-          vec3(0.0, 0.5, 1.0),
-          vec3(0.0, 0.0, 1.0),
-          vec3(0.5, 0.0, 1.0),
-          vec3(1.0, 0.0, 1.0),
-          vec3(1.0, 0.0, 0.5)
-      );
-
-      vec3 rii_nerdBalls(in float gtime, vec2 uv, vec3 background)
-      {
-        vec3 col = background;
-
-        const float appearTime = 12.5;
-
-        const float softBallTime = 37.5;
-        const float softBallDuration = 10.0;
-
-        const int ballCount = rii_numBalls*2;
-        const float ballRadius = 0.1;
-
-        if (gtime < appearTime)
-        {
-          return col;
-        }
-        float ga = gtime;
-        vec2 gr = 0.3*vec2(cos(2.0*ga/3.0), cos(2.0*ga/5.0)) + vec2(0.7);
-
-        float f = smoothstep(softBallTime, softBallTime + softBallDuration, gtime);
-        float minf = mix(300.0, 30.0 + 25.0*sin(ga), f);
-        float powf = mix(0.01, 1.5, f);
-
-        float d = 10000.0;
-        vec3 c = vec3(1.0);
-
-        for (int i = 0; i < ballCount; ++i)
-        {
-          float a = ga + float(i)/10.0;
-          float r = float(i + ballCount) / float(2*ballCount);
-
-          vec2 p = uv + r*gr*vec2(cos(4.0*a), sin(3.0*a));
-          float dd = length(p) - ballRadius;
-          d = softMin(dd, d, minf);
-          c = mix(rii_balls[i%rii_numBalls], c, dd <= 0.0 ? 0.0 : pow(dd, powf));
-        }
-
-        if (d < -0.02)
-        {
-          float dif = cos((d + ballRadius)/ballRadius);
-          float spe = 0.75*pow(dif, 10.0);
-          col = c*dif;// + spe;
-        }
-        else if (d < 0.0)
-        {
-          col = vec3(0.0);
-        }
-
-        return col;
-      }
-
-      void rii_main(in vec2 fragCoord, inout vec3 col)
-      {
-        if (!(RII_START < iTime && iTime <= RII_DONE)) return;
-        float gtime = iTime;
-
-        vec2 q = fragCoord/iResolution.xy;
-        vec2 p = 2.0*q - 1.0;
-
-        vec2 uv = p*vec2(iResolution.x/iResolution.y, 1.0);
-
-        vec3 c = vec3(0.0);
-
-        c = rii_synth(gtime, uv, c);
-        c = rii_rasterBars(gtime, uv, c);
-        c = rii_nerdBalls(gtime, uv, c);
-        c = rii_logo(gtime, uv, c);
-        c = rii_scrollText(gtime, uv, c);
-
-        col = fadeOut(c, vec3(1.0), RII_DONE - 0.25, RII_DONE, iTime);
-      }
-
-
-
-      // -----------------------------------------------------------------------------
-      // Retro Impulse Intro - END
-      // -----------------------------------------------------------------------------
-
-      // -----------------------------------------------------------------------------
-      // Introducing Impulse Box - BEGIN
-      // -----------------------------------------------------------------------------
-
-      #define III_START       RII_DONE
-      #define III_DONE        (III_START + 75.0)
-
-      #define III_TOLERANCE           0.001
-      #define III_NORM_OFF            0.001
-      #define III_MAX_RAY_LENGTH      6.0
-
-      #define III_MAX_RAY_MARCHES     70
-
-      #define III_BOXSIZE             0.2
-
-      #define III_PERIOD              15.0
-      #define III_CURRENT_PERIOD      int(gtime/III_PERIOD)
-      #define III_TIME_IN_PERIOD      mod(gtime,III_PERIOD)
-
-
-      float iii_sdHoleyBox(in vec3 p)
-      {
-        vec3 bp = p;
-        float bd = sdSoftBox(bp, III_BOXSIZE);
-        mod3(bp, vec3(0.62*III_BOXSIZE));
-        float msd = sdSphere(bp, 0.38*III_BOXSIZE);
-        float hbd = max(bd, -msd);
-
-        return hbd;
-      }
-
-      void iii_nerdRotate(inout vec3 p)
-      {
-        float a2 = 2.0*iTime/sqrt(2.0);
-        float a3 = 1.0*iTime/sqrt(3.0);
-        float a5 = 0.5*iTime/sqrt(5.0);
-        rot(p.yz, a5);
-        rot(p.xy, -a3);
-        rot(p.xz, -a2);
-      }
-
-      float iii_theCube(in vec3 p, out int m)
-      {
-        vec3 bp = p;
-        float bd = sdSoftBox(bp, III_BOXSIZE);
-
-        float d = bd;
-
-        m = 1;
-
-        return d;
-      }
-
-      float iii_nerdBalls(in vec3 p, out int m)
-      {
-        float a2 = TAU*iTime/sqrt(2.0);
-        float a3 = TAU*iTime/sqrt(3.0);
-
-        float d = III_MAX_RAY_LENGTH;
-
-        for (int i = 0; i < 7; ++i)
-        {
-          vec3 sp = p;
-          rot(sp.yz, float(i));
-          sp += 0.75*III_BOXSIZE*sin(a2/3.0 + float(i)*a3/20.0);
-          float d1 = sdSphere(sp, III_BOXSIZE*0.25);
-          d = softMin(d, d1, 20.0);
-        }
-
-        m = 1;
-
-        return d;
-      }
-
-      float iii_nerdCube(in vec3 p, out int m)
-      {
-        vec3 bp = p;
-
-        float hbd = iii_sdHoleyBox(bp);
-
-        float d = hbd;
-
-        m = 1;
-
-        return d;
-      }
-
-      float iii_impulseCube(in float gtime, in vec3 p, in float celld, in float celll, out int m)
-      {
-        vec3 bp = p;
-
-        float cs = III_BOXSIZE*0.8;
-
-        float cd = max(length(p.xy) - cs*0.3, sdSphere(bp, 1.2*III_BOXSIZE));
-        float hbd = min(max(sdSoftBox(bp, III_BOXSIZE), -sdCross(bp/cs)*cs), cd);
-        float bbd = sdBox(bp, vec3(cs));
-
-        vec3 rbp = toSpherical(bp);
-        rbp.y += III_TIME_IN_PERIOD*0.5;
-        bp = toRectangular(rbp);
-
-        vec3 cell = mod3(bp, vec3(cs*celld));
-
-        float id = sdSoftBox(bp, cs*celll);
-
-        float mbd = max(bbd, id);
-
-        float d = unionRound(hbd, mbd, III_BOXSIZE*0.15);
-
-        if (abs(hbd - d) < 0.01)
-        {
-          m = 2;
-        }
-        else
-        {
-          m = 1;
-        }
-
-
-        return d;
-      }
-
-
-      float iii_map(in float gtime, in vec3 p, out int m)
-      {
-        const float scale = III_BOXSIZE;
         p *= scale;
 
-        float d = III_MAX_RAY_LENGTH;
-        int period = III_CURRENT_PERIOD%5;
+        float angle = 0.0;
 
-      //  period = 3;
+        for (int i = 0; i < 4; ++i)
+        {
+          mat2 fr = mrot(angle);
+          mat2 rr = transpose(fr);
+          vec2 pp = fr*p;
+          y += gravityWave(pp.y + float(i), a, k, h).y;
+          vec2 dw = gravityWaveD(pp.y + float(i), a, k, h);
 
-        iii_nerdRotate(p);
+          vec2 d2 = vec2(0.0, dw.x);
+          vec2 rd2 = rr*d2;
 
-        switch(period)
+          d += vec3(rd2.x, dw.y, rd2.y);
+
+          angle += float(i);
+          k *= kk;
+          a *= aa;
+        }
+
+        for (int i = 4; i < 8; ++i)
+        {
+          mat2 fr = mrot(angle);
+          mat2 rr = transpose(fr);
+          vec2 pp = fr*p;
+          y += capillaryWave(pp.y + float(i), a, k, h).y;
+          vec2 dw = capillaryWaveD(pp.y + float(i), a, k, h);
+
+          vec2 d2 = vec2(0.0, dw.x);
+          vec2 rd2 = rr*d2;
+
+          d += vec3(rd2.x, dw.y, rd2.y);
+
+          angle += float(i);
+          k *= kk;
+          a *= aa;
+        }
+
+        vec3 t = normalize(d);
+        vec3 nxz = normalize(vec3(t.z, 0.0, -t.x));
+        vec3 nor = cross(t, nxz);
+
+        return vec4(y/scale, nor);
+      }
+
+      float heightFactor(in vec2 p)
+      {
+        switch(PERIOD)
         {
         case 0:
-          d = iii_theCube(p, m);
-          break;
         case 1:
-          d = iii_nerdCube(p, m);
-          break;
+        case 5:
+          return 0.3;
         case 2:
-          d = iii_nerdBalls(p, m);
-          break;
+        case 7:
+          return (0.75 + 0.25*cos(0.025*(65.0 + 35.0*cos(0.025*p.y))*p.x + 10.0*cos(0.025*2.0*p.y)));
         case 3:
-          d = iii_impulseCube(gtime, p, 0.1, 0.048, m);
-          break;
+        case 6:
+        case 8:
+          return 1.0/(1.0 - 0.2 + length(0.3*(p - vec2(8.0 + 0.3, 8.0 + 407.0)).xy));
         case 4:
-          d = iii_impulseCube(gtime, p, 0.1, 0.01, m);
-          break;
+        case 9:
+          float hd = (p.y - 100.0)*0.02;
+          return 1.05*(0.75 + 0.25*cos(0.025*(65.0 + 35.0*cos(0.025*p.y))*p.x + 10.0*cos(0.025*2.0*p.y)))*(exp(-hd*hd));
+        default:
+          return 1.0;
+        }
+      }
+
+      const float terrainScale = 0.025;
+
+      float hiTerrain(in vec2 p)
+      {
+        vec2 pp = p;
+        p *= terrainScale;
+        vec4 t = vec4(0);
+        float s=.5;
+
+        t = texture(iChannel0,p*s)/(s += s);
+
+        for (int j = 1; j < 10; ++j)
+        {
+          t += texture(iChannel0,p*s)/(s += GLOBAL_SCALE*s);
         }
 
-        return d/scale;
+        return t.x*heightFactor(pp);
       }
 
-
-      float iii_rayMarch(in float gtime, in vec3 ro, in vec3 rd, out int mat, out int iter)
+      float loTerrain(in vec2 p)
       {
-        float t = 0.0;
-        float distance;
-        int i;
-        for (i = 0; i < III_MAX_RAY_MARCHES; ++i)
+        vec2 pp = p;
+        p *= terrainScale;
+        vec4 t = vec4(0);
+        float s=.5;
+
+        t = texture(iChannel0,p*s)/(s += s);
+
+        for (int j = 1; j < 6; ++j)
         {
-          distance = iii_map(gtime, ro + rd*t, mat);
-          if (distance < III_TOLERANCE || t > III_MAX_RAY_LENGTH) break;
-          t += distance;
+          t += texture(iChannel0,p*s)/(s += GLOBAL_SCALE*s);
         }
-        iter = i;
 
-        if (abs(distance) > 100.0*III_TOLERANCE) return III_MAX_RAY_LENGTH;
-
-        return t;
+        return t.x*heightFactor(pp);
       }
 
-      vec3 iii_normal(in float gtime, in vec3 pos)
+      float superLoTerrain(in vec2 p)
       {
-        vec3  eps = vec3(III_NORM_OFF,0.0,0.0);
-        vec3 nor;
-        int mat;
-        nor.x = iii_map(gtime, pos+eps.xyy, mat) - iii_map(gtime, pos-eps.xyy, mat);
-        nor.y = iii_map(gtime, pos+eps.yxy, mat) - iii_map(gtime, pos-eps.yxy, mat);
-        nor.z = iii_map(gtime, pos+eps.yyx, mat) - iii_map(gtime, pos-eps.yyx, mat);
-        return normalize(nor);
-      }
+        vec2 pp = p;
+        p *= terrainScale;
+        vec4 t = vec4(0);
+        float s=.5;
 
-      const vec3 iii_lightPos1 = 100.0*vec3(-0.3, 0.15, 1.0);
-      const vec3 iii_lightPos2 = 100.0*vec3(-0.33,  -0.2, -1.0);
-      const vec3 iii_lightCol1 = vec3(8.0/8.0,7.0/8.0,6.0/8.0);
-      const vec3 iii_lightCol2 = vec3(8.0/8.0,6.0/8.0,7.0/8.0);
+        // A bug that superLo precision is computed differently than
+        // hi & lo ended up looking nice
+        t = texture(iChannel0,p*s)/(s += GLOBAL_SCALE*s);
 
-      vec3 iii_skyColor(vec3 rayDir)
-      {
-        vec3 lightDir1 = normalize(iii_lightPos1);
-        vec3 lightDir2 = normalize(iii_lightPos2);
-        float ld1      = max(dot(lightDir1, rayDir), 0.0);
-        float ld2      = max(dot(lightDir2, rayDir), 0.0);
-        vec3 final     = vec3(0.125);
-
-        if ((rayDir.y > abs(rayDir.x)*1.0) && (rayDir.y > abs(rayDir.z*0.25))) final = vec3(2.0)*rayDir.y;
-        float roundBox = length(max(abs(rayDir.xz/max(0.0,rayDir.y))-vec2(0.9, 4.0),0.0))-0.1;
-        final += vec3(0.8)* pow(saturate(1.0 - roundBox*0.5), 6.0);
-
-        final += 1.0*pow(iii_lightCol1, vec3(2.0, 1.5, 1.5)) * pow(ld1, 8.0);
-        final += 1.0*iii_lightCol1 * pow(ld1, 200.0);
-        final += 1.0*pow(iii_lightCol2, vec3(2.0, 1.5, 1.5)) * pow(ld2, 8.0);
-        final += 1.0*iii_lightCol2 * pow(ld2, 200.0);
-        return final;
-      }
-
-
-      vec3 iii_render(in float gtime, in vec3 ro, in vec3 rd)
-      {
-        // background color
-        vec3 color  = vec3(0.5, 0.8, 1.0);
-
-        int mat = 0;
-        int iter = 0;
-        float t = iii_rayMarch(gtime, ro,rd, mat, iter);
-
-        vec3 pos = ro + t*rd;
-        vec3 nor = vec3(0.0, 1.0, 0.0);
-
-        float ndif = 1.0;
-        float nref = 0.8;
-
-        if (t < III_MAX_RAY_LENGTH)
+        for (int j = 1; j < 3; ++j)
         {
-          // Ray intersected object
-          nor = iii_normal(gtime, pos);
-          float d2 = abs(dot(-rd, nor));
+          t += texture(iChannel0,p*s)/(s += s);
+        }
 
-          switch(mat)
+        return t.x*heightFactor(pp);
+      }
+
+      vec3 getHiNormal(in vec2 p, in float d)
+      {
+        vec2 eps = vec2(mix(0.0008, 0.001*d, smoothstep(3.0, 9.0, d)), 0);
+        float dx = hiTerrain(p - eps) - hiTerrain(p + eps);
+        float dy = 2.0f*eps.x;
+        float dz = hiTerrain(p - eps.yx) - hiTerrain(p + eps.yx);
+        return normalize(vec3(dx, dy, dz));
+      }
+
+      vec3 getLoNormal(in vec2 p, in float d)
+      {
+        vec2 eps = vec2(0.004*d, 0);
+        float dx = loTerrain(p - eps) - loTerrain(p + eps);
+        float dy = 2.0f*eps.x;
+        float dz = loTerrain(p - eps.yx) - loTerrain(p + eps.yx);
+        return normalize(vec3(dx, dy, dz));
+      }
+
+
+      const float step_factors[END_STEP_FACTOR] = float[END_STEP_FACTOR](0.75, 0.25, 0.25/4.0);
+
+      float march(in vec3 ro, in vec3 rd, out int max_iter)
+      {
+        float dt = 0.1;
+        float d = mix(MIN_DISTANCE, 2.0*MIN_DISTANCE, rand(ro.xy + rd.xy));
+
+        int sfi = 0;
+        float lh = 0.0;
+        float ly = 0.0;
+
+        for (int i = 0; i < MAX_ITER; ++i)
+        {
+          vec3 p = ro + d*rd;
+          float h = loTerrain(p.xz);
+
+          if (d > MAX_DISTANCE)
           {
-          case 0:
-            color = mix(vec3(1.0), nor*nor, 0.5);
-            ndif = 0.75;
-            nref = 0.7;
-            break;
-          case 1:
-            color = vec3(0.9) + abs(nor.zxy)*0.1;
-            ndif = 0.75;
-            nref = 0.7;
-            break;
-          case 2:
-            color = vec3(0.25) + abs(nor.zxy)*0.05;
-            ndif = 0.5;
-            nref = 0.9;
-            break;
-          default:
-            color = nor*nor;
-            break;
+            max_iter = i;
+            return MAX_DISTANCE;
           }
 
+          float hd = p.y - h;
+
+          if (hd < TOLERANCE)
+          {
+            ++sfi;
+            if (sfi == END_STEP_FACTOR || hd > -TOLERANCE)
+            {
+              max_iter = i;
+              return d - dt + dt*(lh-ly)/(p.y-ly-h+lh);
+            }
+            else
+            {
+              d -= 1.5*dt;
+            }
+          }
+
+          lh = h;
+          ly = p.y;
+          dt = max(step_factors[sfi]*hd, TOLERANCE) + d*0.001;
+          d += dt;
         }
-        else
+
+        max_iter = MAX_ITER;
+        return MAX_DISTANCE;
+      }
+
+      float shadow(in vec3 ro, in vec3 rd, in float ll, in float mint, in float k)
+      {
+        float t = mint;
+        for (int i=0; i<24; ++i)
         {
-          // Ray intersected sky
-          return iii_skyColor(rd);
+          vec3 p = ro + t*rd;
+          float h = loTerrain(p.xz);
+          float d = (p.y - h);
+          if (d < TOLERANCE) return 0.0;
+          if (t > ll) return 1.0;
+          t += max(0.1, 0.25*h);
         }
-
-        vec3 ref  = reflect(rd, nor);
-        vec3 rcol = iii_skyColor(ref);
-
-        vec3 ld0  = vec3(0.0, 1.0, 0.0);
-
-        vec3 lv1  = iii_lightPos1 - pos;
-        float ll1 = length(lv1);
-        vec3 ld1  = lv1 / ll1;
-
-        vec3 lv2  = iii_lightPos2 - pos;
-        float ll2 = length(lv2);
-        vec3 ld2  = lv2 / ll2;
-
-        int rmat = 0;
-        int riter = 0;
-        float st  = iii_rayMarch(gtime, pos + ref*10.0*III_TOLERANCE, ref, rmat, riter);
-        float sha1 = pow(st/III_MAX_RAY_LENGTH, 0.2);
-        float sha2 = st < III_MAX_RAY_LENGTH ? 0.0 : 1.0;
-
-        float dif0 = pow(max(dot(nor,ld0),0.0), ndif);
-        float dif1 = pow(max(dot(nor,ld1),0.0), ndif);
-        float dif2 = pow(max(dot(nor,ld2),0.0), ndif);
-        float occ  = float(III_MAX_RAY_MARCHES + III_MAX_RAY_MARCHES - iter) / 2.0*float(III_MAX_RAY_MARCHES);
-
-        float bac  = 0.2;
-
-        vec3 col0 = mix(vec3(1.0), dif0*vec3(1.0), 0.8);
-        vec3 col1 = mix(vec3(1.0), dif1*iii_lightCol1, 0.8);
-        vec3 col2 = mix(vec3(1.0), dif2*iii_lightCol2, 0.8);
-
-      //  nref = 1.0;
-
-        vec3 col = mix(rcol*sha2, color*(col0 + col1 + col2)/2.0, nref);
-
-        return col;
+        return 1.0;
       }
 
-      void iii_main(in vec2 fragCoord, inout vec3 col)
+      const vec3 skyColLo = vec3(0.6, 0.35, 0.3);
+      const vec3 skyColHi = vec3(0., 0.6, 1.0);
+      const vec3 sunCol1  = vec3(1.0,0.5,0.4);
+      const vec3 sunCol2  = vec3(1.0,0.8,0.7);
+      const vec3 skyCol3  = pow(sunCol2, vec3(0.25));
+      const vec3 sunDir   = normalize(vec3(-1.0, 0., -1.0));
+      const vec3 seaCol1  = 0.8*vec3(0.1,0.2,0.2);
+
+      vec3 sunDirection(in float timeOfDay)
       {
-        if (!(III_START < iTime && iTime <= III_DONE)) return;
-        float gtime = (iTime - III_START);
-
-        vec2 q=fragCoord.xy/iResolution.xy;
-        vec2 p = -1.0 + 2.0*q;
-        p.x *= iResolution.x/iResolution.y;
-
-        vec3 ro = 1.5*vec3(2.0, 1.0, 0.2);
-        vec3 la = vec3(0.0, 0.0, 0.0);
-        vec3 up = vec3(0.0, 1.0, 0.0);
-
-        rot(ro.xz, TAU*iTime/30.0);
-
-        vec3 ww = normalize(la - ro);
-        vec3 uu = normalize(cross(up, ww ));
-        vec3 vv = normalize(cross(ww,uu));
-        vec3 rd = normalize(p.x*uu + p.y*vv + 2.5*ww);
-
-        vec3 c = iii_render(gtime, ro, rd);
-
-        float fadeIn = 1.0 - smoothstep(0.0, 0.75, III_TIME_IN_PERIOD);
-        float fadeOut = smoothstep(III_PERIOD - 0.25, III_PERIOD, III_TIME_IN_PERIOD);
-
-        col = mix(c, vec3(1.0), fadeOut + fadeIn);
+        vec3 sunDir = sunDir;
+        float angle = timeOfDay*TAU;
+        rot(sunDir.xy, sin(angle));
+        rot(sunDir.xz, angle-0.5);
+        return sunDir;
       }
 
-
-      // -----------------------------------------------------------------------------
-      // Introducing Impulse Box - END
-      // -----------------------------------------------------------------------------
-
-      // -----------------------------------------------------------------------------
-      // Mandelbrot Dream - BEGIN
-      // -----------------------------------------------------------------------------
-
-      #define MBD_START       III_DONE
-      #define MBD_DONE        (MBD_START + 62.0)
-
-      #define MBD_START_ZOOM  7.0
-
-      vec3 mbd_mandelbrot(in float gtime, in vec2 p)
+      vec3 skyCol(in float sunf)
       {
-        vec3 col = vec3(0.0);
-
-        if(-p.y + 1.5 > gtime*0.5)
-        {
-          return col;
-        }
-
-        float ztime = (gtime - MBD_START_ZOOM)*step(MBD_START_ZOOM, gtime);
-
-        float zoo = 0.64 + 0.36*cos(.07*ztime);
-        float coa = cos(0.15*(1.0-zoo)*ztime);
-        float sia = sin(0.15*(1.0-zoo)*ztime);
-        zoo = pow(zoo,8.0);
-        vec2 xy = vec2( p.x*coa-p.y*sia, p.x*sia+p.y*coa);
-        vec2 c = vec2(-.745,.186) + xy*zoo;
-
-        const float B = 10.0;
-        float l = 0.0;
-        vec2 z  = vec2(0.0);
-
-        vec2 zn = vec2(2.1, 0.0);
-        float zo = 2.99;
-        vec2 zc = vec2(1.0);
-
-        rot(zc, ztime);
-
-        float dcc = 1e20;
-        float dll = 1e20;
-
-        for(int i = 0; i < 256; ++i)
-        {
-          float re2 = z.x*z.x;
-          float im2 = z.y*z.y;
-          float reim= z.x*z.y;
-
-          if(re2 + im2 > (B*B)) break;
-
-          z = vec2(re2 - im2, 2.0*reim) + c;
-
-          vec2 zm = z;
-          mod2(zm, vec2(5));
-
-          float l2c = dot(zm - zc, zm - zc);
-          float l2l = dot(zm, zn) + zo;
-
-          dcc = min(dcc, l2c);
-          dll = min(dll, abs(l2l));
-
-          l += 1.0;
-        }
-
-        if (l == 256.0) return vec3(0.0);
-
-        float sl = l - log2(log2(dot(z,z))) + 4.0;
-
-        vec3 dc = vec3(pow(abs(1.0 - dcc), 20.0));
-        vec3 dl = 0.5*vec3(pow(abs(1.0 - dll), 10.0));
-        vec3 gc = 0.5 + 0.5*cos(3.0 + sl*0.15 + vec3(0.1,0.5,0.9));
-        return saturate(gc + dl*smoothstep(35.4, 35.6, ztime) + dc*smoothstep(28.8, 29.0, ztime));
+        return mix(skyColLo, skyColHi, clamp(sunf, 0.0, 1.0));
       }
 
-      void mbd_main(in vec2 fragCoord, inout vec3 col)
+      vec3 ambient(in float sunf, in vec3 sunDir, vec3 rd)
       {
-        if (!(MBD_START < iTime && iTime <= MBD_DONE)) return;
-        float gtime = (iTime - MBD_START);
-
-        vec2 p = (-iResolution.xy + 2.0*fragCoord.xy)/iResolution.y;
-
-        col = fadeOut(fadeIn(0.5*(mbd_mandelbrot(gtime, p) + mbd_mandelbrot(gtime - 1.0/120.0, p)),vec3(1.0), MBD_START, MBD_START + 0.75, iTime),vec3(0.0), MBD_DONE - 2.0 , MBD_DONE, iTime);
+        return skyCol(sunf)*mix(0.5, 0.2, pow(max(dot(sunDir, rd), 0.0), 2.0));
       }
 
-
-      // -----------------------------------------------------------------------------
-      // Mandelbrot Dream - END
-      // -----------------------------------------------------------------------------
-
-
-      // -----------------------------------------------------------------------------
-      // A New Dawn - BEGIN
-      // -----------------------------------------------------------------------------
-
-      #define AND_START       MBD_DONE
-      #define AND_DONE        (AND_START + 13.0)
-
-      #define AND_TOLERANCE       0.001
-      #define AND_MAX_RAY_MARCHES 150
-
-      const float and_fadeInTime  = 2.0;
-      const float and_fadeOutTime = 28.0;
-      const float and_apexTime    = 30.0;
-
-      float and_noise(in vec3 x)
+      vec3 skyColor(in float sunf, in vec3 sunDir, in vec3 rd)
       {
-        vec3 p = floor(x);
-        vec3 f = fract(x);
-        f = f*f*(3.0-2.0*f);
-        vec2 uv = (p.xy+vec2(37.0,17.0)*p.z) + f.xy;
-        vec2 rg = textureLod(iChannel1, (uv+ 0.5)/256.0, 0.0).yx;
-        return mix(rg.x, rg.y, f.z);
-      }
+        float skyf = atan(rd.y, length(rd.xz))*2.0/PI;
 
-      vec3 and_heightShade(in float gtime)
-      {
-        float time = gtime/and_apexTime;
-        return mix(vec3(1.0, 0.5, 0.5), vec3(1.0), min(1.0, time));
-      }
+        vec3 skyCol1 = skyCol(sunf);
+        vec3 skyCol2 = skyCol(sunf);
 
-      vec3 and_getSkyColor(in float gtime, vec3 rayDir)
-      {
-        vec3 lightPos1 = 100.0*vec3(0.0, -0.15, 1.0);
-        vec3 lightPos2 = 100.0*vec3(0.4, -0.25, 1.0);
+        vec3 starDir = sunDir;
+        rot(starDir.xz, 0.2);
+        rot(starDir.xy, 0.2);
 
-        float time = gtime/and_apexTime;
-        float a    = 0.5*time;
-        float sky  = atan(rayDir.y/rayDir.z)*2.0/PI;
-
-        rot(lightPos1.yz, a);
-        rot(lightPos2.yz, a);
-
-        vec3 lightDir1 = normalize(lightPos1);
-        vec3 lightDir2 = normalize(lightPos2);
-
-        vec3 heightmod = and_heightShade(gtime);
-        vec3 lightCol1 = heightmod*vec3(8.0,7.0,6.0)/8.0;
-        vec3 lightCol2 = heightmod*vec3(8.0,6.0,7.0)/8.0;
-
-        float lf1 = max(dot(rayDir, lightDir1), 0.0);
-        float lf2 = max(dot(rayDir, lightDir2), 0.0);
+        float sunDot = max(dot(rd, sunDir), 0.0);
+        float starDot = max(dot(rd, starDir), 0.0);
 
         vec3 final = vec3(0.0);
 
-        final += mix(0.5*heightmod, heightmod*vec3(0.0, 0.4, 1.5), pow(min(1.0, abs(1.5*sky)), 1.0));
+        final += mix(mix(skyCol1, skyCol2, max(0.0, skyf)), skyCol3, clamp(-skyf*2.0, 0.0, 1.0));
 
-        final += lightCol1*pow(lf1, mix(4.0, 75.0, time));
-        final += lightCol2*pow(lf2, 75.0)/4.0;
+        final += 1.0*sunCol1*pow(sunDot, mix(30.0, 300.0, sunf));
+        final += 80.0*sunCol2*pow(sunDot, mix(400.0, 4000.0, sunf));
 
-        final += 4.0*lightCol1 * pow(lf1, 100.0);
-        final += 4.0*lightCol2 * pow(lf2, 3200.0);
+        final += 2.5*(abs(starDot) > 0.999999 ? 1.0 : 0.0) ;
 
         return final;
       }
 
-
-      float and_noise2(in vec3 p)
+      vec4 voronoi(in vec2 x)
       {
-        p /=3.0;
-        vec3 q = p;
-        float f;
-        f  = 0.50000*and_noise(q);
-        q = q*2.02;
-        f += 0.25000*and_noise(q);
-        q = q*2.03;
-        f += 0.12500*and_noise(q);
-        return clamp(1.0 - p.y - 2.1 + 2.0*f, 0.0, 1.0);
-      }
+        vec2 n = floor(x);
+        vec2 f = fract(x);
 
-
-      vec4 and_cloudMarch(in float gtime, in vec3 ro, in vec3 rd)
-      {
-        float t = 1.0;
-        vec4 sum = vec4(0.0);
-        vec3 heightmod = sqrt(and_heightShade(gtime));
-        for (int i = 0; i < AND_MAX_RAY_MARCHES; ++i)
+        vec4 m = vec4(8.0);
+        for(int j=-1; j<=1; j++)
+        for(int i=-1; i<=1; i++)
         {
-          vec3 p = ro + rd*t;
-          float den = and_noise2(p);
-          vec4 col  = vec4(heightmod*mix(vec3(1.0,0.9,0.8), vec3(0.4,0.15,0.1), den) + 0.05*sin(p), den);
-          col.a *= 0.6;
-          col.rgb *= col.a;
-
-          sum = sum + col*(1.0 - sum.a);
-
-          t += 0.3;
+          vec2  g = vec2(float(i), float(j));
+          vec2  o = hash(n + g);
+          vec2  r = g - f + o;
+          float d = dot(r, r);
+          if(d<m.x)
+          {
+            m = vec4(d, o.x + o.y, r);
+          }
         }
 
-        return sum;
+        return vec4(sqrt(m.x), m.yzw);
       }
 
-
-      vec3 and_render(in float gtime, in vec3 ro, in vec3 rd)
+      vec3 getColor(in float timeOfDay, in float seaHeight, in float fogHeight_, in vec3 ro, in vec3 rd)
       {
-        vec3 skyCol = saturate(and_getSkyColor(gtime, rd));
-        vec4 col = and_cloudMarch(gtime, ro, rd);
-        return skyCol*(pow(1.0 - col.a, 0.2)) + col.xyz;
-      }
+        const vec3  mountainColor   = vec3(0.68, 0.4, 0.3);
+        const vec3  sandColor       = sqrt(mountainColor);
+        const float snowHeight      = 0.9;
+        const float treeHeight      = 0.8;
 
-      void and_main(in vec2 fragCoord, inout vec3 col)
-      {
-        if (!(AND_START < iTime && iTime <= AND_DONE)) return;
-        float gtime = (iTime - AND_START)*1.5;
+        int max_iter = 0;
+        float d = march(ro, rd, max_iter);
+        vec3 p = ro + d*rd;
 
-        vec2 q =fragCoord.xy/iResolution.xy;
-        vec2 p = -1.0 + 2.0*q;
-        p.x *= iResolution.x/iResolution.y;
+        vec3 sunDir = sunDirection(timeOfDay);
+        float sunf = atan(sunDir.y, length(sunDir.xz))*2.0/PI;
+        float sunf2 = sunf*sunf;
 
-        float ctime = gtime*11.0;
+        float fogHeight = mix(fogHeight_, 0.5*fogHeight_, sunf2);
 
-        vec3 ro = vec3(0.0, 0.0, ctime);
-        vec3 ww = normalize(ro + vec3(0.0, 0.0, 1.0));
-        vec3 uu = normalize(cross(vec3(0.0,1.0,0.0), ww));
-        vec3 vv = normalize(cross(ww,uu));
-        vec3 rd = normalize(p.x*uu + p.y*vv + 2.5*ww);
-
-        vec3 c = and_render(gtime, ro, rd);
-        c = clamp(c, 0., 1.);
-        c = pow(c, vec3(0.416667))*1.055 - 0.055; //sRGB
-
-        col = fadeOut(fadeIn(c, vec3(0.0), AND_START, AND_START + 2.0, iTime), vec3(1.0), AND_DONE - 2.0, AND_DONE, iTime);
-      }
-
-      // -----------------------------------------------------------------------------
-      // A New Dawn - END
-      // -----------------------------------------------------------------------------
-
-      // -----------------------------------------------------------------------------
-      // Mobius scroll text - BEGIN
-      // -----------------------------------------------------------------------------
-
-      #define MST_START       AND_DONE
-      #define MST_DONE        (MST_START + 52.0)
-
-      #define MST_BOUNCESTART 0.0
-      #define MST_BOUNCEDONE  30.0
-
-      #define MST_DISTSTART   5.0
-      #define MST_DISTDONE    20.0
-
-      #define MST_LAYERSTART  12.0
-      #define MST_LAYERDONE   40.0
-      #define MST_LAYERCOUNT  6
-
-      #define MST_ROTSTART    9.0
-      #define MST_ROTDONE     20.0
-
-      #define MST_TRANSSTART  0.0
-      #define MST_TRANSDONE   30.0
-
-      float mst_linex(in vec2 p, in float b)
-      {
-        float d = abs(p.y) - b;
-        return min(d,0.0) + max(d,0.0);
-      }
-
-      float mst_liney(in vec2 p, in float b)
-      {
-        float d = abs(p.x) - b;
-        return min(d,0.0) + max(d,0.0);
-      }
-
-      float mst_circle(in vec2 p, in float r)
-      {
-        return length(p) - r;
-      }
+        vec3 skyCol = skyColor(sunf, sunDir, rd);
+        float ired = float(max_iter)/float(MAX_ITER);
+        vec3 col = vec3(0);
 
 
-      const vec3 mst_color = vec3(1.125, 1.25, 1.5);
-      const vec3 mst_fontColor = vec3(1.15, 1.1, 1.1);
-      const vec3 mst_glowColor = vec3(1.5, 1.25, 1.125);
+        float dsea = (seaHeight - ro.y)/rd.y;
 
-      vec3 mst_layer(in vec2 p, in int layer, in float time)
-      {
-        layer += 3;
-        float s = 0.2/float(layer + 1);
-        const float timeFactor = 0.3;
-        float tm = time*timeFactor;
-        rot(p, mix(0.0, tm + 100.0*s*float(layer) - timeFactor*MST_ROTSTART, smoothstep(MST_ROTSTART, MST_ROTDONE, time)));
-        p += mix(vec2(0.0), -s*200.0*vec2(cos(sqrt(2.0)*tm), sin(tm)) + s*vec2(1.0), smoothstep(MST_TRANSSTART, MST_TRANSDONE, time));
+        vec3 amb = ambient(sunf, sunDir, rd);
 
-        vec2 sp = toSmith(p);
-        sp += mix(vec2(0.0), -0.5*(2.0+ sin(tm))*mix(p, vec2(1.0), sin(tm*0.1)*sin(tm*0.1)), smoothstep(MST_DISTSTART, MST_DISTDONE, time));
-        p = fromSmith(sp);
-
-        vec2 scp = p;
-        float row = mod1(scp.y, 4.0*s);
-        scp *= 1.0/s;
-        scp += vec2(-row*4.0, -0.5);
-
-        mod2(p, vec2(4.0*s));
-
-        float d = 1E20;
-
-        d = min(d, mst_liney(p, s*0.1));
-        d = min(d, mst_linex(p, s*0.1));
-
-        d = min(d, mst_circle(p, s*0.6));
-        d = max(d, -mst_circle(p, s*0.4));
-
-        vec3 col = vec3(0.0);
-
-        if (d < 0.0)
+        if (d > dsea && dsea > 0.0)
         {
-          col = pow(mst_color, vec3(-layer));
-        }
+          // SEA
 
-        col = scrollText(scp, time, pow(mst_fontColor, vec3(-layer)), pow(mst_glowColor, vec3(-layer)), col);
+          vec3 psea = ro + dsea*rd;
+
+          float height = loTerrain(psea.xz);
+          float depth = max(0.0, seaHeight - height);
+
+          vec3 loNormal = getLoNormal(psea.xz, dsea);
+          float flatness = dot(loNormal, vec3(0.0, 1.0, 0.0));
+          float ff = abs(dot(rd, vec3(0.0, 1.0, 0.0)));
+
+          float dseaf = dsea/MAX_DISTANCE;
+          float dseafs = sqrt(dseaf);
+          vec4 s = sea(psea.xz, seaScale*depth, exp(-10.0*dseaf*dseaf));
+          float h = s.x;
+      //    vec3 nor = mix(s.yzw, vec3(0.0, 1.0, 0.0), mix(0.0, 1.0, dseafs));
+          vec3 nor = s.yzw;
+
+          float mint = mix(0.05, 0.1, rand(psea.xy));
+          float shade = shadow(psea + vec3(0.0, h, 0.0), sunDir, 4.0, mint, 1.0);
+          vec3 shd = mix(mix(amb, vec3(1.0), shade), vec3(1.0), dseafs);
+
+          float fogHeight = (1.0 - shade*sunf2)*(fogHeight + 0.15*flatness - ff*(3.0*depth*flatness - 0.5*depth));
+          float dfog = (fogHeight - ro.y)/rd.y;
+          float fogf = dsea > dfog && dfog > 0.0 ? 1.0 - exp(-1.0*(dsea - dfog)) : 0.0;
+
+          float fre = clamp(1.0 - dot(-nor,rd), 0.0, 1.0);
+          fre = pow(fre, 3.0);
+          float dif = max(dot(nor,sunDir), 0.0);
+
+          vec3 refl = skyColor(sunf, sunDir, reflect(rd, nor));
+          vec3 mat = skyCol*seaCol1 + sunCol1*dif*seaCol1;
+
+          vec3 seaColor = mix(mat, mix(refl, mat, 0.75), fre*shade);
+          vec3 bottomCol = max(0.5, dif)*skyCol*sandColor;
+          seaColor = mix(bottomCol, seaColor, 1.0 - exp(-25.0*(d - dsea)));
+          seaColor += mix(0.4*bottomCol, vec3(0.0), clamp(pow(depth*11.0, 2.0), 0.0, 1.0));
+
+          col = mix(mix(shd*seaColor, skyCol, fogf), skyCol, dseaf*dseafs);
+        }
+        else if (d < MAX_DISTANCE)
+        {
+          // GROUND
+
+          float bandings = mix(50.0, 100.0, 0.5 + 0.5*sin(length(p.y)*10.0));
+          float bandingo = sin(length(p.xz)*3.0);
+          float bandingf = pow(0.5 + 0.5*sin(p.y*bandings + bandingo), .25);
+          float banding = mix(0.75, 1.0, bandingf);
+          vec3 mountainColor = mountainColor*banding;
+
+          vec3 hiNormal = getHiNormal(p.xz, d);
+          vec3 loNormal = getLoNormal(p.xz, d);
+          vec3 normal   = hiNormal;
+
+          float flatness = dot(loNormal, vec3(0.0, 1.0, 0.0));
+          float sflatness = sqrt(flatness);
+
+          float shade = shadow(p, sunDir, 4.0, 0.05, 1.0);
+
+          float fogHeight = (1.0 - shade*sunf2)*(fogHeight + 0.15*flatness);
+          float dfog = (fogHeight - ro.y)/rd.y;
+          float fogf = d > dfog && dfog > 0.0 ? 1.0 - exp(-1.0*(d - dfog)) : 0.0;
+
+          float height1 = hiTerrain(p.xz);
+          float height2 = superLoTerrain(p.xz);
+
+          float heightRatioPower = 7.0;
+
+          vec3 surfaceColor = mountainColor;
+
+          vec3 spec = vec3(0.0);
+
+          if (p.y > (snowHeight + 0.10*sin(0.1*length(p.xz)))/sflatness)
+          {
+            spec = vec3(0.5);
+            normal = loNormal;
+            heightRatioPower = 4.0;
+            surfaceColor = vec3(1.1);
+          }
+          else if (p.y < seaHeight + 0.015*treeHeight*sflatness)
+          {
+            normal = loNormal;
+            heightRatioPower = 7.0;
+            surfaceColor = sandColor;
+          }
+          else if (p.y < treeHeight*sflatness)
+          {
+            vec4 t  = voronoi(p.xz*100.0);
+            vec3 no = vec3(t.z, 0.0, t.w)*3.0*(1.0 - smoothstep(0.0, 9.0, d));
+            normal = normalize(loNormal + -no);
+            heightRatioPower = 5.0;
+            surfaceColor = vec3(pow(1.0 - t.x, 0.5))*vec3(0.25, 0.3, 0.15)*vec3(max(1.0, 1.5*t.y), 1.0, 1.0);
+          }
+          else
+          {
+            heightRatioPower = 7.0;
+            surfaceColor = mountainColor;
+          }
+
+          heightRatioPower *= clamp(0.6 + 0.4*abs(timeOfDay - 0.25), 0.0, 1.0);
+
+          float heightRatio = pow(height1/height2, heightRatioPower);
+
+          float dif = shade*max(0.0, dot(sunDir, normal));
+          vec3 shd = mix(amb, vec3(1.0), heightRatio*dif); // sunCol1?
+
+          vec3 reflectedSky = spec*skyColor(sunf, sunDir, reflect(rd, normal));
+
+          col = mix(mix(shd*surfaceColor + reflectedSky, skyCol, fogf), skyCol, pow(d/MAX_DISTANCE, 1.5));
+        }
+        else
+        {
+          // SKY
+          col = skyCol;
+        }
 
         return col;
       }
 
-      vec3 mst_mobiusScrollText(in vec2 p, float time)
+      const vec3 PosOrigin = vec3(8,0,8);
+
+      const float xOffset = 5.0*PI;
+
+      float sech(in float t)
       {
+        return 1.0/cosh(t);
+      }
 
-        p *= mix(0.1, 5.0*(2.0 + sin(time*0.1)), smoothstep(MST_BOUNCESTART, MST_BOUNCEDONE, time));
+      vec3 getIslandHopperPos(in float timeInPeriod)
+      {
+        const float C = xOffset;
+        float t = timeInPeriod;
+        float x = (C - 10.0*cos(0.025*2.0*t))/(0.025*(65.0 + 35.0*cos(0.025*t)));
+        float y = 1.0;
+        float z = t;
+        return vec3(x, y, z);
+      }
 
-        float lp = float(MST_LAYERDONE - MST_LAYERSTART) / float(MST_LAYERCOUNT);
+      vec3 getIslandHopperPosD(in float timeInPeriod)
+      {
+        const float C = xOffset;
+        float t = timeInPeriod;
+        float dx = (sin(0.025*t)*(1.4*C - 14.*cos(0.05*t)) + sin(0.05*t)*(28.0*cos(0.025*t) + 52.0))/pow(7.0*cos(0.025*t) + 13.0, 2.0);
+        float dy = 0.0;
+        float dz = 1.0;
+        return vec3(dx, dy, dz);
+      }
 
-        vec3 col = mst_layer(p, 0, time);
+      vec3 getIslandHopperPosDD(in float timeInPeriod)
+      {
+        const float C = xOffset;
+        float t = timeInPeriod;
+        float ddx = (0.025*cos(0.025*t)*(1.4*C - 14.0*cos(0.05*t)) + 0.05*(28.0*cos(0.025*t) + 52.0)*cos(0.05*t))/pow(7.0*cos(0.025*t) + 13.0, 2.0) + (0.35*sin(0.025*t)*(sin(0.025*t)*(1.4*C - 14.0*cos(0.05*t)) + sin(0.05*t)*(28.0*cos(0.025*t) + 52.0)))/pow(7.0*cos(0.025*t) + 13.0, 3.0);
+        float ddy = 0.0;
+        float ddz = 0.0;
+        return 12.0*vec3(ddx, ddy, ddz);
+      }
 
-        for (int i = 1; i < MST_LAYERCOUNT; ++i)
+      const vec3 centerOfLonelyMountain = vec3(0.0, 1.0 , 407.0);
+
+      vec3 getLonelyMountainPos(in float timeInPeriod)
+      {
+        float t = (timeInPeriod - 4.0)*0.05;
+        const float w = 4.0*log(2.0);
+        float x = -2.6 + -4.0*(exp(-w*(t - 1.5)*(t - 1.5)) - 1.0);
+        float y = 1.1*exp(-w*(t - 1.5)*(t - 1.5)) + 0.1;
+        float z = 8.0 - ((13.0/3.0)*t*t*t + (-39.0/2.0)*t*t + (145.0/6.0)*t);
+
+        return PosOrigin + centerOfLonelyMountain + vec3(x, y, z);
+      }
+
+      vec3 getLonelyMountainPosD(in float timeInPeriod)
+      {
+        return PosOrigin + centerOfLonelyMountain - getLonelyMountainPos(timeInPeriod);
+      }
+
+      vec3 getLonelyMountainPosDD(in float timeInPeriod)
+      {
+        return vec3(0.0);
+      }
+
+      vec3 getCirclingLonelyMountainPos(in float timeInPeriod)
+      {
+        float t = -(timeInPeriod - 4.0)*0.05 + 2.0;
+        const float d = 12.0;
+        float x = d*cos(t);
+        float y = 3.5;
+        float z = d*sin(t);
+
+        return PosOrigin + centerOfLonelyMountain + vec3(x, y, z);
+      }
+
+      vec3 getCirclingLonelyMountainPosD(in float timeInPeriod)
+      {
+        return PosOrigin + centerOfLonelyMountain - getCirclingLonelyMountainPos(timeInPeriod);
+      }
+
+      vec3 getCirclingLonelyMountainPosDD(in float timeInPeriod)
+      {
+        return vec3(0.0);
+      }
+
+      vec3 getMistyMountainsPos(in float timeInPeriod)
+      {
+        return PosOrigin + vec3(0.0, 1.4, timeInPeriod - 4.0);
+      }
+
+      vec3 getMistyMountainsPosD(in float timeInPeriod)
+      {
+        return vec3(0.0, -0.1, 1.0);
+      }
+
+      vec3 getMistyMountainsPosDD(in float timeInPeriod)
+      {
+        return vec3(0.0);
+      }
+
+
+      vec3 getSample(in vec2 p)
+      {
+        vec3 pos   = vec3(0.0, 2.0, 0.0);
+        vec3 posd  = vec3(0.0, 0.0, 1.0);
+        vec3 posdd = vec3(0.0, 0.0, 0.0);
+
+        float timeInPeriod = TIMEINPERIOD;
+        float timeOfDay    = 0.25;
+        float seaHeight    = 0.0;
+        float fogHeight    = 0.5;
+        float posTimeM     = 1.0;
+        float posTimeO     = 0.0;
+        vec3  posT         = vec3(0.0);
+        vec3  posDT        = vec3(0.0);
+
+        switch(PERIOD)
         {
-          float lf = smoothstep(float(MST_LAYERSTART) + lp*float(i - 1), float(MST_LAYERSTART) + lp*(float(i - 1) + 0.5), time);
-          col += lf*mst_layer(p, i, time);
+        case 0:
+          timeOfDay = 0.01*timeInPeriod/INTERVAL + 0.467;
+          seaHeight = 0.55;
+          posTimeM  = 3.0;
+          posT      = vec3(0.0, -0.3, 0.0);
+          break;
+        case 1:
+          seaHeight = 0.0;
+          timeOfDay = 0.01*timeInPeriod/INTERVAL + 0.467;
+          posDT     = vec3(0.0, -0.2, 0.0);
+          break;
+        case 2:
+          seaHeight = 0.5;
+          timeOfDay = 0.025*timeInPeriod/INTERVAL + 0.39;
+          posT      = vec3(0.0, 0.0, 20.0);
+          posDT     = vec3(0.0, -0.1, 0.0);
+          break;
+        case 3:
+          timeOfDay = 0.23*timeInPeriod/INTERVAL + 0.02;
+          seaHeight = 0.5;
+          break;
+        case 4:
+          timeOfDay = 0.025*timeInPeriod/INTERVAL + 0.425;
+          seaHeight = 0.5;
+          posTimeM  = 2.0;
+          posTimeO  = 30.0;
+          posDT     = vec3(0.0, -0.1, 0.0);
+          break;
+        case 5:
+          seaHeight = 0.24;
+          timeOfDay = 0.01*timeInPeriod/INTERVAL + 0.467;
+          posDT     = vec3(0.0, -0.2, 0.0);
+          break;
+        case 6:
+          timeOfDay = 0.025*timeInPeriod/INTERVAL + 0.07;
+          seaHeight = 0.5;
+          fogHeight = 0.75;
+          break;
+        case 7:
+          seaHeight = 0.5;
+          timeOfDay = 0.025*timeInPeriod/INTERVAL + 0.45;
+          posT      = vec3(0.0, 0.0, 90.0);
+          posDT     = vec3(0.0, -0.1, 0.0);
+          break;
+        case 8:
+          timeOfDay = 0.23*(INTERVAL + timeInPeriod)/INTERVAL + 0.02;
+          seaHeight = 0.5;
+          posTimeO  = INTERVAL;
+          break;
+        case 9:
+          timeOfDay = 0.025*(INTERVAL + timeInPeriod)/INTERVAL + 0.425;
+          seaHeight = 0.5;
+          posTimeM  = 2.0;
+          posTimeO  = 30.0 + INTERVAL;
+          posDT     = vec3(0.0, -0.1, 0.0);
+          break;
+        default:
+          break;
         }
 
+        float posTime = timeInPeriod*posTimeM + posTimeO;
+
+        switch(PERIOD)
+        {
+        case 0:
+        case 1:
+        case 2:
+        case 5:
+        case 7:
+          pos   = getMistyMountainsPos(posTime);
+          posd  = getMistyMountainsPosD(posTime);
+          posdd = getMistyMountainsPosDD(posTime);
+          break;
+        case 3:
+          pos   = getLonelyMountainPos(posTime);
+          posd  = getLonelyMountainPosD(posTime);
+          posdd = getLonelyMountainPosDD(posTime);
+          break;
+        case 6:
+          pos   = getCirclingLonelyMountainPos(posTime);
+          posd  = getCirclingLonelyMountainPosD(posTime);
+          posdd = getCirclingLonelyMountainPosDD(posTime);
+          break;
+        case 4:
+        case 9:
+          pos   = getIslandHopperPos(posTime);
+          posd  = getIslandHopperPosD(posTime);
+          posdd = getIslandHopperPosDD(posTime);
+          break;
+        case 8:
+          pos   = getLonelyMountainPos(posTime);
+          posd  = getLonelyMountainPosD(posTime);
+          posdd = getLonelyMountainPosDD(posTime);
+          break;
+        default:
+          break;
+        }
+
+        vec3 up = vec3(0.0,1.0,0.0) + posdd ;
+        vec3 ro = pos + posT;
+        vec3 ww = normalize(posd + posDT);
+        vec3 uu = normalize(cross(up, ww));
+        vec3 vv = normalize(cross(ww, uu));
+        vec3 rd = normalize(p.x*uu + p.y*vv + 2.0*ww);
+
+        vec3 col = getColor(timeOfDay, seaHeight, fogHeight, ro, rd);
 
         return col;
+
       }
 
-      vec3 mst_fadeOut(vec3 col, vec2 p, float time)
+      vec3 saturate(in vec3 col)
       {
-        p *= 0.5;
-        time *= 2.0;
-        float f = smoothstep(0.25, 1.0, time);
-        float s = (2.5 - 2.35*f);
-        float d = pow(abs(p.x)*abs(p.y), s);
-        float c = 1.0 - smoothstep(0.1, 0.2, abs(d));
-        vec3 sf = (1.0 - pow(f, 16.0))*vec3(c, c, sqrt(c));
-        return mix(col, sf, smoothstep(0.0, 0.25, time));
+        return clamp(col, vec3(0.0), vec3(1.0));
       }
-
-      void mst_main(in vec2 fragCoord, inout vec3 col)
-      {
-        if (!(MST_START <= iTime && iTime < MST_DONE)) return;
-        float gtime = iTime - 3.0 - MST_START;
-
-        vec3 c = vec3(0.0);
-
-        for(int m=0; m<AA; ++m)
-        for(int n=0; n<AA; ++n)
-        {
-          vec2 p = (-iResolution.xy + 2.0*(fragCoord.xy+vec2(float(m),float(n))/float(AA)))/iResolution.y;
-          c += mst_mobiusScrollText(p, gtime);
-        }
-
-        vec2 q =fragCoord.xy/iResolution.xy;
-        vec2 p = -1.0 + 2.0*q;
-        p.x *= iResolution.x/iResolution.y;
-
-        col = mst_fadeOut(fadeIn(c/float(AA*AA), vec3(1.0), MST_START, MST_START + 4.0, iTime), p, iTime - (MST_DONE - 1.0));
-      }
-
-      // -----------------------------------------------------------------------------
-      // Mobius scroll text - END
-      // -----------------------------------------------------------------------------
-
 
       void mainImage(out vec4 fragColor, in vec2 fragCoord)
       {
-        vec3 col = vec3(0.0);
+        vec2 q = fragCoord.xy/iResolution.xy;
+        vec2 p = -1.0 + 2.0*q;
+        p.x *= iResolution.x/iResolution.y;
 
-        rii_main(fragCoord, col);
-        iii_main(fragCoord, col);
-        mbd_main(fragCoord, col);
-        and_main(fragCoord, col);
-        mst_main(fragCoord, col);
+        vec3 col = getSample(p);
 
-        fragColor = vec4(col,1.0);
+        col = saturate(col);
+
+        float timeInPeriod = TIMEINPERIOD;
+
+        float fade = clamp(timeInPeriod*0.25, 0.0, 1.0)*clamp((INTERVAL - timeInPeriod)*0.25, 0.0, 1.0);
+        col = mix(vec3(0.0), col, fade*fade);
+
+        fragColor = vec4(col, 1.0);
       }
 
     </script>
 
     <script id="shader-vs" type="x-shader/x-vertex">#version 300 es
-      in vec4 aVertexPosition;
-      in vec3 aVertexNormal;
-      in vec2 aTextureCoord;
+      in highp vec3 aVertexPosition;
+      in highp vec3 aVertexNormal;
+      in highp vec2 aTextureCoord;
 
-      out vec2 vTextureCoord;
-      out vec3 vNormal;
+      out highp vec2 vTextureCoord;
+      out highp vec3 vNormal;
 
       void main(void) {
-        gl_Position = aVertexPosition;
-        vNormal = aVertexNormal;
+        gl_Position   = vec4(aVertexPosition, 1.0);
+        vNormal       = aVertexNormal;
         vTextureCoord = aTextureCoord;
       }
     </script>
   </head>
 
   <body onload="start()">
-    <img id="image1" crossorigin="" src="noise.png" style="visibility: collapse"/>
-    <img id="image2" crossorigin="" src="font.png" style="visibility: collapse"/>
-    <canvas id="glcanvas" class="gl">
-      Your browser doesn't appear to support the HTML5 <code>&lt;canvas&gt;</code> element.
-    </canvas>
-    <audio id="music" onplay="go()" controls src="AdhesiveWombat_8_bit_adventure.mp3"/>
+    <div style="display:flex;justify-content:center;align-items:center;">
+      <div>
+        <h1>impulse-0002: from dusk till dawn</h1>
+        <canvas id="glcanvas" width="1280" height="720">
+          Your browser doesn't appear to support the HTML5 <code>&lt;canvas&gt;</code> element.
+        </canvas>
+        <img id="image0" src="value_noise.png" style="visibility: collapse"/>
+      </div>
+    </div>
   </body>
 </html>

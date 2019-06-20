@@ -21,9 +21,8 @@ var verticesTextureCoordBuffer;
 var verticesNormalBuffer;
 var verticesIndexBuffer;
 var image;
-var texture1;
-var texture2;
-var audio;
+var texture0;
+
 var width;
 var height;
 
@@ -32,8 +31,7 @@ var vertexPositionAttribute;
 var vertexNormalAttribute;
 var textureCoordAttribute;
 
-const maxWidth = 1280;
-const msPerFrame = 1000.0/60.0;
+const msPerFrame = 1000.0/30.0;
 
 function now() {
   return (new Date).getTime();
@@ -42,19 +40,9 @@ function now() {
 let startTime = now();
 
 function start() {
-  const innerWidth    = window.innerWidth;
-  const innerHeight   = window.innerHeight;
-  const actualWidth   = Math.round(Math.min(maxWidth, innerWidth));
-  const actualHeight  = Math.round(innerHeight*actualWidth/innerWidth);
-
   canvas = document.getElementById("glcanvas");
-  width  = actualWidth;
-  height = actualHeight;
-
-  canvas.width  = actualWidth;
-  canvas.height = actualHeight;
-
-  audio = document.getElementById("music");
+  width  = canvas.width;
+  height = canvas.height;
 
   initWebGL(canvas);      // Initialize the GL context
 
@@ -78,21 +66,14 @@ function start() {
 
     // Next, load and set up the textures we'll be using.
 
-    texture1 = createTexture("image1");
-    texture2 = createTexture("image2");
+    texture0 = createTexture("image0");
 
+    startTime = now();
+
+    // Set up to draw the scene periodically.
+
+    setTimeout(drawScene, msPerFrame);
   }
-}
-
-function go() {
-  audio.controls = false;
-  audio.style = "visibility: collapse";
-
-  startTime = now();
-
-  // Set up to draw the scene periodically.
-
-  setTimeout(drawScene, msPerFrame);
 }
 
 function initWebGL() {
@@ -190,9 +171,9 @@ function createTexture(id) {
   // create new texture
   const texture = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR_MIPMAP_NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
 
   handleTextureLoaded(image, texture)
 
@@ -202,10 +183,10 @@ function createTexture(id) {
 function handleTextureLoaded(image, texture) {
   gl.bindTexture(gl.TEXTURE_2D, texture);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR_MIPMAP_NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
   gl.generateMipmap(gl.TEXTURE_2D);
   gl.bindTexture(gl.TEXTURE_2D, null);
 }
@@ -231,15 +212,7 @@ function drawScene() {
   gl.bindBuffer(gl.ARRAY_BUFFER, verticesNormalBuffer);
   gl.vertexAttribPointer(vertexNormalAttribute, 3, gl.FLOAT, false, 0, 0);
 
-  // TODO: Bind to FFT/Amplitude to iChannel0
-  bindTexture("iChannel0", texture1, 0);
-  bindTexture("iChannel1", texture1, 1);
-  bindTexture("iChannel2", texture2, 2);
-
-
-  gl.activeTexture(gl.TEXTURE2);
-  gl.bindTexture(gl.TEXTURE_2D, texture2);
-  gl.uniform1i(gl.getUniformLocation(shaderProgram, "uSampler"), 2);
+  bindTexture("iChannel0", texture0, 0);
 
   gl.uniform2f(gl.getUniformLocation(shaderProgram, "iResolution"), width, height);
   gl.uniform1f(gl.getUniformLocation(shaderProgram, "iTime"), iTime);
