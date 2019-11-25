@@ -76,6 +76,7 @@ function start() {
     // Next, load and set up the textures we'll be using.
 
     texture0 = createTexture("image0");
+    texture1 = createTexture("image1");
 
     startTime = now();
 
@@ -222,6 +223,7 @@ function drawScene() {
   gl.vertexAttribPointer(vertexNormalAttribute, 3, gl.FLOAT, false, 0, 0);
 
   bindTexture("iChannel0", texture0, 0);
+  bindTexture("iChannel1", texture1, 1);
 
   gl.uniform2f(gl.getUniformLocation(shaderProgram, "iResolution"), width, height);
   gl.uniform1f(gl.getUniformLocation(shaderProgram, "iTime"), iTime);
