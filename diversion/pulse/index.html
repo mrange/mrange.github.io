@@ -64,6 +64,7 @@
         //  ivec2 ivec = textureSize(iChannel0, 0);
         //  p.x *= float(ivec.y)/ivec.x;
           p.x *= 234.0/287.0;
+
           p.y = -p.y;
           p*=1.0;
           p+=vec2(1.00, 1.00);
@@ -96,7 +97,7 @@
           p*=0.5;
           vec4 t = texture2D(iChannel2, p);
           float d = t.x + (1.0/256.0)*t.y + (1.0/(256.0*256.0))*t.z;
-          return -2.0*d + 1.0;
+          return (-2.0*d + 1.0);
         }
 
         vec2 hash (in vec2 p) {
@@ -104,6 +105,15 @@
                     dot (p, vec2 (269.5, 183.3)));
 
           return -1. + 2.*fract (sin (p)*43758.5453123);
+        }
+
+        float box(vec2 p, vec2 b) {
+          vec2 d = abs(p)-b;
+          return length(max(d,vec2(0))) + min(max(d.x,d.y),0.0);
+        }
+
+        float circle(vec2 p, float r) {
+          return length(p) - r;
         }
 
         float noise (in vec2 p) {
@@ -138,6 +148,8 @@
         }
 
         #define INTENSIFY(c) ((c) / max((c).x, max((c).y, (c).z)))
+        #define PI  3.141592654
+        #define TAU (2.0*PI)
 
         const vec3 pulseCol1 = vec3(0xAF, 0x7D, 0x9F)/255.0;
         const vec3 pulseCol2 = vec3(0x77, 0x3A, 0x5F)/255.0;
@@ -163,7 +175,7 @@
             float time = iTime + fi;
             float fe1 = (pow(fi + 1.0, 0.2))*e1;
             float fe2 = fe1;
-            vec2 o1 = 1.5*time*vec2(0.0, -1);
+            vec2 o1 = time*vec2(-1, 0.0);
             vec2 o2 = o1;
 
             vec2 fp1 = p + o1;
@@ -179,16 +191,32 @@
           return col;
         }
 
+        float smoothSubtraction(float d1, float d2, float k) {
+          float h = clamp( 0.5 - 0.5*(d2+d1)/k, 0.0, 1.0);
+          return mix(d2, -d1, h) + k*h*(1.0-h);
+        }
+
         float df(vec2 p, out int mat) {
-          float c = length(1.0*p) - 2.25;
+          vec2 op = p;
+          float pcb = box(p - vec2(0.0, 0.0), vec2(4.0, 0.1));
+          float pcc = circle(p, 2.125);
+          float pc  = smoothSubtraction(pcc, -pcb, 1.);
+
           p -= vec2(0.0, 0.5);
           mat = 0;
-          float pt = pulsetop(p - vec2(-0.005, 0.43));
-          float pb = pulsebottom(p - vec2(0, 0.0));
-          float pl = pulselogo(p - vec2(0.0, -1.25));
+          float ani = pow(0.5+0.5*sin(TAU*0.85*iTime + p.y*1.25), 8.0);
+          vec2 z = 1.0 - 0.1*vec2(0.8,0.5)*ani;
+          vec2 off = vec2(0.0, -0.05)*ani;
 
+          float pt = pulsetop(z*(p - vec2(-0.005, 0.43)) + off);
+          float pb = pulsebottom(z*(p - vec2(0, 0.0)) + off);
+          vec2 zz1 = vec2(1.0 + 0.25*sin(sqrt(0.5)*iTime - 5.0*op.x), 1.0 + 0.125*sin(iTime - 5.0*op.y));
+          vec2 zz2 = pow((zz1.yx), vec2(1.5, 1.75));
+          vec2 zz = mix(zz1, zz2, 0.5 + 0.5*sin(iTime + op.x + op.y));
+          zz = mix(vec2(1.0), zz, smoothstep(10.0, 20.0, iTime));
+          float pl = pulselogo(zz*(p - vec2(0.0, - 1.1)));
 
-          float d = min(-c, min(min(pt, pb), pl));
+          float d = min(pc, min(min(pt, pb), pl));
 
           if (d == pt) {
             mat = 1;
@@ -196,7 +224,7 @@
             mat = 0;
           } else if (d == pl) {
             mat = 2;
-          } else if (d == -c) {
+          } else if (d == pc) {
             mat = 0;
           }
 
@@ -213,7 +241,7 @@
         }
 
         void mainImage(out vec4 fragColor, in vec2 fragCoord) {
-          vec2 q = fragCoord/iResolution.xy;
+          vec2 q = fragCoord / iResolution.xy;
           vec2 p = -1.0 + 2.0*q;
           p.x *= iResolution.x/iResolution.y;
           p*=1.75;
@@ -234,22 +262,24 @@
             col += vec3(0.55)*smoothstep(0.0, -80.0, d);
             col += lineCol*smoothstep(-3.0, -1.0, d)*smoothstep(3.0, 1.0, d);
           } else if (mat == 2) {
-            col += lineCol*lineCol*smoothstep(-3.0, -1.0, d - 15.0)*smoothstep(3.0, 1.0, d - 15.0);
+            col += lineCol*smoothstep(-2.0, -1.0, d - 15.0)*smoothstep(2.0, 1.0, d - 15.0);
+            col += smoothstep(-1.0, 0.0, p.y)*pulseCol1.zyx*smoothstep(3.0, 1.0, d - 15.0);
+            col += smoothstep(-1.5, 0.0, p.y)*pulseCol2.zyx*smoothstep(3.0, 1.0, d - 15.0);
           }
 
           vec3 l = lightning(p, 1.65*(dd + 0.25));
 
           col += l;
 
-          col = postProcess(col, q);
+          col = clamp(col, vec3(0.0), vec3(1.0));
 
-          col *= smoothstep(0.0, 5.0, iTime);
+          col = mix(pulseCol1.zyx, col, clamp(pow(iTime/5.0, 2.0), 0.0, 1.0));
+
+          col = postProcess(col, q);
 
           fragColor = vec4(col, 1.0);
 
-
         }
-
     </script>
 
     <script id="shader-vs" type="x-shader/x-vertex">
