@@ -1,0 +1,310 @@
+<!--
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+-->
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>The live coders conference - April 9, 2020</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <script src="webgl-driver.js" type="text/javascript"></script>
+    <link href='https://fonts.googleapis.com/css?family=Josefin Slab' rel='stylesheet'>
+    <style>
+        body {
+            background-color: black;
+            color: white;
+            font-family: 'Josefin Slab';font-size: 32px;
+        }
+    </style>
+    <script id="shader-fs" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------
+      // BEGIN - Common prelude
+      // -----------------------------------------------------------------------
+      precision mediump float;
+
+      uniform vec2 iResolution;
+      uniform float iTime;
+
+      varying highp vec2 vTextureCoord;
+      uniform sampler2D uSampler;
+
+      void mainImage(out vec4 fragColor, in vec2 fragCoord);
+
+      void main(void) {
+        mainImage(gl_FragColor, vTextureCoord*iResolution);
+      }
+
+      // -----------------------------------------------------------------------
+      // END - Common prelude
+      // -----------------------------------------------------------------------
+
+      ////////////////////////////////////////////////////////////////////////////////
+      // This program is free software: you can redistribute it and/or modify it
+      // under the terms of the GNU General Public License version 3, as published
+      // by the Free Software Foundation.
+      //
+      // This program is distributed in the hope that it will be useful, but
+      // WITHOUT ANY WARRANTY; without even the implied warranties of
+      // MERCHANTABILITY, SATISFACTORY QUALITY, or FITNESS FOR A PARTICULAR
+      // PURPOSE.  See the GNU General Public License for more details.
+      //
+      // You should have received a copy of the GNU General Public License along
+      // with this program.  If not, see <http://www.gnu.org/licenses/>.
+      //
+      ////////////////////////////////////////////////////////////////////////////////
+
+      // A shader created for The Live Coders Conference April 9
+      //  https://www.twitch.tv/thelivecoders
+      //  The shader repeats itself efter 600 seconds
+
+      // 2D shapes created by combining 2D primitives from IQ's blog:
+      //  http://www.iquilezles.org/www/articles/distfunctions2d/distfunctions2d.htm
+      // pmin from IQ's blog on smooth minimum functions:
+      //  http://www.iquilezles.org/www/articles/smin/smin.htm
+      // Lightning based and expanded from "Sparkle sparkle little lightning":
+      //  https://www.shadertoy.com/view/3sXSD2
+      //  ("Sparkle sparkle little lightning" is GPL3 and this is a derivate from so this license is therefore GPL3 as well)
+
+      #define PI     3.141592654
+      #define TAU    (2.0*PI)
+      #define SCA(a) vec2(sin(a), cos(a))
+      #define TTIME  (iTime*TAU)
+      #define PERIOD 600.0
+
+      const float a1 = PI/2.0;
+      const float a2 = PI*4.5/6.0;
+
+      const vec2 sca1 = SCA(a1);
+      const vec2 sca2 = SCA(a2);
+
+      float tanh2(float x) {
+        float ex = exp(x);
+        float nex = 1./ex;
+        return (ex - nex)/(ex + nex);
+      }
+
+      vec2 hash(vec2 p) {
+        p = vec2(dot (p, vec2 (127.1, 311.7)), dot (p, vec2 (269.5, 183.3)));
+        return -1. + 2.*fract (sin (p)*43758.5453123);
+      }
+
+      float noise(vec2 p) {
+        const float K1 = .366025404;
+        const float K2 = .211324865;
+
+        vec2 i = floor (p + (p.x + p.y)*K1);
+
+        vec2 a = p - i + (i.x + i.y)*K2;
+        vec2 o = step (a.yx, a.xy);
+        vec2 b = a - o + K2;
+        vec2 c = a - 1. + 2.*K2;
+
+        vec3 h = max (.5 - vec3 (dot (a, a), dot (b, b), dot (c, c) ), .0);
+
+        vec3 n = h*h*h*h*vec3 (dot (a, hash (i + .0)),dot (b, hash (i + o)), dot (c, hash (i + 1.)));
+
+        return dot (n, vec3 (70.));
+      }
+
+      float fbm(vec2 pos, float tm) {
+        vec2 offset = vec2(cos(tm), sin(tm*sqrt(0.5)));
+        float aggr = 0.0;
+
+        aggr += noise(pos);
+        aggr += noise(pos + offset) * 0.5;
+        aggr += noise(pos + offset.yx) * 0.25;
+        aggr += noise(pos - offset) * 0.125;
+        aggr += noise(pos - offset.yx) * 0.0625;
+
+        aggr /= 1.0 + 0.5 + 0.25 + 0.125 + 0.0625;
+
+        return (aggr * 0.5) + 0.5;
+      }
+
+      vec3 lightning(vec2 pos, float offset) {
+        vec3 col = vec3(0.0);
+        vec2 f = 10.0*SCA(PI/2.0 + TTIME/PERIOD);
+
+        for (int i = 0; i < 3; i++) {
+          float btime = TTIME*85.0/PERIOD + float(i);
+          float rtime = TTIME*75.0/PERIOD + float(i) + 10.0;
+          float d1 = abs(offset * 0.03 / (0.0 + offset - fbm((pos + f) * 3.0, rtime)));
+          float d2 = abs(offset * 0.03 / (0.0 + offset - fbm((pos + f) * 2.0, btime)));
+          col += vec3(d1 * vec3(0.1, 0.3, 0.8));
+          col += vec3(d2 * vec3(0.7, 0.3, 0.5));
+        }
+
+        return col;
+      }
+
+      float mod1(inout float p, float size) {
+        float halfsize = size*0.5;
+        float c = floor((p + halfsize)/size);
+        p = mod(p + halfsize, size) - halfsize;
+        return c;
+      }
+
+      vec2 toPolar(vec2 p) {
+        return vec2(length(p), atan(p.y, p.x));
+      }
+
+      vec2 toRect(vec2 p) {
+        return vec2(p.x*cos(p.y), p.x*sin(p.y));
+      }
+
+      float pmin(float a, float b, float k) {
+        float h = max(k-abs(a-b), 0.0)/k;
+        return min(a, b) - h*h*k*(1.0/4.0);
+      }
+
+      float circle(vec2 p, float r) {
+        return length(p) - r;
+      }
+
+      float box(vec2 p, vec2 b, vec4 r) {
+        r.xy = (p.x>0.0)?r.xy : r.zw;
+        r.x  = (p.y>0.0)?r.x  : r.y;
+        vec2 q = abs(p)-b+r.x;
+        return min(max(q.x,q.y),0.0) + length(max(q,0.0)) - r.x;
+      }
+
+      float arc(vec2 p, vec2 sca, vec2 scb, float ra, float rb) {
+        p *= mat2(sca.x,sca.y,-sca.y,sca.x);
+        p.x = abs(p.x);
+        float k = (scb.y*p.x>scb.x*p.y) ? dot(p.xy,scb) : length(p.xy);
+        return sqrt(dot(p,p) + ra*ra - 2.0*ra*k) - rb;
+      }
+
+      float spokes(vec2 p, float s) {
+        vec2 pp = toPolar(p);
+        pp.y += TTIME*40.0/PERIOD;
+        mod1(pp.y, TAU/10.0);
+        pp.y += PI/2.0;
+        p = toRect(pp);
+        float ds = box(p, s*vec2(0.075, 0.5), s*vec4(0.04));
+        return ds;
+      }
+
+      float arcs(vec2 p, float s) {
+
+        float d1 = arc(p, sca1, sca2, s*0.275, s*0.025);
+        float d2 = arc(p, sca1, sca2, s*0.18, s*0.025);
+
+        return min(d1, d2);
+      }
+
+      float meeple(vec2 p, float s) {
+        float dh = box(p - s*vec2(0.0, -0.035), s*vec2(0.07, 0.1), s*vec4(0.065));
+        float dc = box(p - s*vec2(0.0, -0.22), s*vec2(0.15, 0.04), s*vec4(0.05, 0.02, 0.05, 0.02));
+
+        return pmin(dh, dc, s*0.115);
+      }
+
+      float theLiveCoders(vec2 p, float s) {
+        float ds = spokes(p, s);
+        float dc = circle(p, 0.375*s);
+        float da = arcs(p, s);
+        float dm = meeple(p, s);
+
+        float d = ds;
+        d = min(d, dc);
+        d = max(d, -da);
+        d = max(d, -dm);
+
+        return d;
+      }
+
+      float df(vec2 p) {
+        float d = theLiveCoders(p, 1.0 - 0.5*cos(TTIME*7.0/PERIOD));
+        return d;
+      }
+
+      vec3 postProcess(vec3 col, vec2 q, vec2 p)  {
+        col=pow(clamp(col,0.0,1.0),vec3(0.75));
+        col=col*0.6+0.4*col*col*(3.0-2.0*col);
+        col=mix(col, vec3(dot(col, vec3(0.33))), -0.4);
+        float l = length(p);
+        if (length(p) > 1.0) {
+          col = vec3(0.0);
+        } else {
+          col*=vec3(1.0 - pow(length(p), 15.0));
+        }
+        return col;
+      }
+
+      void mainImage(out vec4 fragColor, in vec2 fragCoord) {
+        vec2 q = fragCoord/iResolution.xy;
+        vec2 p = -1. + 2. * q;
+        p.x *= iResolution.x/iResolution.y;
+        vec2 op = p;
+
+        float scale = 1.2;
+        p*= scale;
+
+        float d = df(p) / scale;
+
+        const vec3  background   = vec3(0.0)/vec3(255.0);
+
+        vec3 col = background;
+
+        float borderStep = 0.0075;
+
+        vec3 baseCol = vec3(1.0);
+        vec4 logoCol = vec4(baseCol, 1.0)*smoothstep(-borderStep, 0.0, -d);
+
+        if (d >= 0.0) {
+          vec2 pp = toPolar(p);
+          float funky = 0.7*pow((0.5 - 0.5*cos(TTIME/PERIOD)), 4.0);
+          pp.x *= 1./(pow(length(p) + funky, 15.0) + 1.0);
+          p = toRect(pp);
+          col += lightning(p, (pow(abs(d), 0.25 + 0.125*sin(0.5*iTime + p.x + p.y))));
+        }
+        col = clamp(col, 0.0, 1.0);
+
+        col *= 1.0 - logoCol.xyz;
+
+        col = postProcess(col, q, op);
+        col *= smoothstep(0.0, 16.0, iTime*iTime);
+        fragColor = vec4(col, 1.0);
+      }
+
+    </script>
+
+    <script id="shader-vs" type="x-shader/x-vertex">
+      attribute highp vec3 aVertexPosition;
+      attribute highp vec3 aVertexNormal;
+      attribute highp vec2 aTextureCoord;
+
+      varying highp vec2 vTextureCoord;
+      varying highp vec3 vNormal;
+
+      void main(void) {
+        gl_Position   = vec4(aVertexPosition, 1.0);
+        vNormal = aVertexNormal;
+        vTextureCoord = aTextureCoord;
+      }
+    </script>
+  </head>
+
+  <body onload="start()">
+    <div style="display:flex;justify-content:center;align-items:center;">
+      <div>
+        <h1>The live coders conference - April 9, 2020</h1>
+        <canvas id="glcanvas" width="1200" height="1200">
+          Your browser doesn't appear to support the HTML5 <code>&lt;canvas&gt;</code> element.
+        </canvas>
+        <br/>
+      </div>
+    </div>
+  </body>
+</html>
