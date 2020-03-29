@@ -31,8 +31,6 @@ var vertexPositionAttribute;
 var vertexNormalAttribute;
 var textureCoordAttribute;
 
-const msPerFrame = 1000.0/60.0;
-
 function now() {
   return (new Date).getTime();
 }
@@ -70,9 +68,7 @@ function start() {
 
     startTime = now();
 
-    // Set up to draw the scene periodically.
-
-    setTimeout(drawScene, msPerFrame);
+    requestAnimationFrame(drawScene);
   }
 }
 
@@ -235,12 +231,7 @@ function drawScene() {
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, verticesIndexBuffer);
   gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
 
-  const after = now();
-
-  const diff = after - before;
-  const wait = diff > msPerFrame - 1.0 ? 1.0 : msPerFrame - diff;
-
-  setTimeout(drawScene, wait);
+  requestAnimationFrame(drawScene);
 }
 
 function initShaders() {
