@@ -20,8 +20,6 @@ var verticesBuffer;
 var verticesTextureCoordBuffer;
 var verticesNormalBuffer;
 var verticesIndexBuffer;
-var image;
-var texture;
 
 var width;
 var height;
@@ -61,10 +59,6 @@ function start() {
     // we'll be drawing.
 
     initBuffers();
-
-    // Next, load and set up the textures we'll be using.
-
-    texture = createTexture("Hello World!");
 
     startTime = now();
 
@@ -161,51 +155,6 @@ function initBuffers() {
       new Uint16Array(vertexIndices), gl.STATIC_DRAW);
 }
 
-function createTexture(text) {
-
-  // create a hidden canvas to draw the texture
-  const canvas  = document.createElement('canvas');
-  canvas.id     = "hiddenCanvas";
-  canvas.width  = 512;
-  canvas.height = 512;
-  canvas.style.display   = "none";
-
-  const body = document.getElementsByTagName("body")[0];
-  body.appendChild(canvas);
-
-  // draw texture
-  const image = document.getElementById('hiddenCanvas');
-  const ctx   = image.getContext('2d');
-  ctx.beginPath();
-  ctx.rect(0, 0, ctx.canvas.width, ctx.canvas.height);
-  ctx.fillStyle = 'white';
-  ctx.fill();
-  ctx.fillStyle = 'black';
-  ctx.font = "65px Arial";
-  ctx.textAlign = 'center';
-  ctx.fillText(text, ctx.canvas.width / 2, ctx.canvas.height / 2);
-  ctx.restore();
-
-  // create new texture
-  const texture = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-  handleTextureLoaded(image, texture)
-
-  return texture;
-}
-
-function handleTextureLoaded(image, texture) {
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
-  gl.generateMipmap(gl.TEXTURE_2D);
-  gl.bindTexture(gl.TEXTURE_2D, null);
-}
-
 function drawScene() {
   const before = now();
   const iTime = (before - startTime) / 1000.0;
@@ -220,10 +169,6 @@ function drawScene() {
 
   gl.bindBuffer(gl.ARRAY_BUFFER, verticesNormalBuffer);
   gl.vertexAttribPointer(vertexNormalAttribute, 3, gl.FLOAT, false, 0, 0);
-
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.uniform1i(gl.getUniformLocation(shaderProgram, "uSampler"), 0);
 
   gl.uniform2f(gl.getUniformLocation(shaderProgram, "iResolution"), width, height);
   gl.uniform1f(gl.getUniformLocation(shaderProgram, "iTime"), iTime);
