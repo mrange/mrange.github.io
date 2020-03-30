@@ -429,9 +429,11 @@
 
         float db = box2(p, vec2(0.90), 0.3);
 
+        const vec3 bgCol = vec3(0.1, 0.1, 0.25);
+
         if (db > 0.0) {
           float m = smoothstep(0.1, 0.105, db);
-          fragColor = mix(vec4(1.0, 1.0, 1.0, 1.0), vec4(0.1, 0.1, 0.25, 1.0), m);
+          fragColor = mix(vec4(1.0, 1.0, 1.0, 1.0), vec4(bgCol, 1.0), m);
           return;
         }
 
@@ -451,6 +453,7 @@
         col /= 4.0;
       #endif
         col = postProcess(col, p);
+        col = mix(bgCol, col, smoothstep(0.0, 16.0, iTime*iTime));
         fragColor = vec4(col, 1.0);
       }
 
