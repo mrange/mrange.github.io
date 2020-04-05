@@ -22,12 +22,12 @@
     <style>
         a:link {
           text-decoration: none;
-          color: #6666FF;
+          color: #FFF;
         }
 
         a:visited {
           text-decoration: none;
-          color: #6666FF;
+          color: #FFF;
         }
 
         a:hover {
@@ -47,11 +47,10 @@
         canvas.gl {
           position:fixed;
           z-index:-1;
+          top:0;
+          left: 0;
           height: 100%;
-          width: auto;
-          top:50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
+          width: 100%;
         }
         h1 {
           position:fixed;
@@ -327,10 +326,9 @@
     <div style="display:flex;justify-content:center;align-items:center;">
       <div>
         <h1><a target="_blank" href="https://captcalli.github.io/LiveCodersConf/">The live coders conference - April 9, 2020</a></h1>
-        <canvas id="glcanvas" width="1200" height="1200" class="gl">
+        <canvas id="glcanvas" class="gl">
           Your browser doesn't appear to support the HTML5 <code>&lt;canvas&gt;</code> element.
         </canvas>
-        <br/>
       </div>
     </div>
   </body>

@@ -21,9 +21,6 @@ var verticesTextureCoordBuffer;
 var verticesNormalBuffer;
 var verticesIndexBuffer;
 
-var width;
-var height;
-
 var shaderProgram;
 var vertexPositionAttribute;
 var vertexNormalAttribute;
@@ -37,8 +34,9 @@ let startTime = now();
 
 function start() {
   canvas = document.getElementById("glcanvas");
-  width  = canvas.width;
-  height = canvas.height;
+
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
 
   initWebGL(canvas);      // Initialize the GL context
 
@@ -157,7 +155,11 @@ function initBuffers() {
 
 function drawScene() {
   const before = now();
-  const iTime = (before - startTime) / 1000.0;
+  const iTime  = (before - startTime) / 1000.0;
+
+  const bcr    = canvas.getBoundingClientRect();
+  const width  = bcr.width;
+  const height = bcr.height;
 
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
