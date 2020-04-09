@@ -200,7 +200,6 @@
         p *= mat2(sca.x,sca.y,-sca.y,sca.x);
         p.x = abs(p.x);
         float k = (scb.y*p.x>scb.x*p.y) ? dot(p.xy,scb) : length(p.xy);
-        // Subtracting with 0.000001 to remove some irritating dots in the center of the arcs
         return sqrt(dot(p,p) + ra*ra - (2.0 - 0.000001)*ra*k) - rb;
       }
 
