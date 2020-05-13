@@ -13,7 +13,10 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+var audio;
 var canvas;
+var information;
+var ready;
 var gl;
 
 var verticesBuffer;
@@ -30,9 +33,20 @@ function now() {
   return (new Date).getTime();
 }
 
+let initialized = false;
+let playing = false;
+
 let startTime = now();
 
-function start() {
+function init() {
+  information = document.getElementById("information");
+  ready = document.getElementById("ready");
+
+  audio = document.getElementById("music");
+  audio.onplay = () => play();
+  audio.onseeked = () => update();
+  audio.onpause = () => stop();
+
   canvas = document.getElementById("glcanvas");
 
   canvas.width  = window.innerWidth;
@@ -57,10 +71,31 @@ function start() {
     // we'll be drawing.
 
     initBuffers();
+  }
 
-    startTime = now();
+  ready.innerText = "Shader has loaded, hit play (top left on page)";
 
+  initialized = true;
+}
+
+function play() {
+  if (initialized&&!playing) {
+    information.style.display = "none";
+    startTime = now() - audio.currentTime*1000;
     requestAnimationFrame(drawScene);
+    playing = true;
+  }
+}
+
+function update() {
+  if (initialized&&playing) {
+    startTime = now() - audio.currentTime*1000;
+  }
+}
+
+function stop() {
+  if (initialized&&playing) {
+    playing = false;
   }
 }
 
@@ -154,6 +189,8 @@ function initBuffers() {
 }
 
 function drawScene() {
+  if (!playing) return;
+
   const before = now();
   const iTime  = (before - startTime) / 1000.0;
 
