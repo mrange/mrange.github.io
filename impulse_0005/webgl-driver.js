@@ -44,13 +44,22 @@ function init() {
 
   audio = document.getElementById("music");
   audio.onplay = () => play();
+  audio.onplaying = () => update();
   audio.onseeked = () => update();
   audio.onpause = () => stop();
+  audio.onended = () => stop();
 
   canvas = document.getElementById("glcanvas");
 
-  canvas.width  = window.innerWidth;
-  canvas.height = window.innerHeight;
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+
+  // Shader is a bit hungry for FLOPs so limit ot 1080
+  const finalHeight = height < 1080 ? height : 1080;
+  const finalWidth = (width/height)*finalHeight;
+
+  canvas.width  = finalWidth;
+  canvas.height = finalHeight;
 
   initWebGL(canvas);      // Initialize the GL context
 
@@ -71,11 +80,13 @@ function init() {
     // we'll be drawing.
 
     initBuffers();
+
+    ready.innerText = "Shader has loaded, hit play (top left on page)";
+
+    initialized = true;
+  } else {
+    ready.innerText = "Shader couldn't load, requires webgl 2";
   }
-
-  ready.innerText = "Shader has loaded, hit play (top left on page)";
-
-  initialized = true;
 }
 
 function play() {
