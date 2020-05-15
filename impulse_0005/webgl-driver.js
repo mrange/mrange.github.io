@@ -81,11 +81,12 @@ function init() {
 
     initBuffers();
 
-    ready.innerText = "Shader has loaded, hit play (top left on page)";
+    music.style.visibility = "visible";
+    ready.innerText = "Shader has compiled, hit play (top left on page)";
 
     initialized = true;
   } else {
-    ready.innerText = "Shader couldn't load, requires webgl 2";
+    ready.innerText = "Shader couldn't compile, requires webgl 2";
   }
 }
 

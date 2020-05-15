@@ -23,26 +23,27 @@
         body {
             font-family: 'Josefin Slab';
             font-size: 40px;
-            background: white;
+            color: white;
+            background-color: black;
         }
         a:link {
           text-decoration: none;
-          color: #AAAAFF;
+          color: #FF8240;
         }
 
         a:visited {
           text-decoration: none;
-          color: #AAAAFF;
+          color: #FF8240;
         }
 
         a:hover {
           text-decoration: underline;
-          color: #FFF;
+          color: #DFF180;
         }
 
         a:active {
           text-decoration: underline;
-          color: FFF;
+          color: #DFF180;
         }
         canvas.gl {
           position:fixed;
@@ -1660,15 +1661,15 @@
   </head>
 
   <body onload="init()">
-    <audio id="music" controls src="https://sampleswap.org/mp3/artist/5216/Astroboy_Sprung-160.mp3"></audio>
-    <div id="information" style="color: white;">
+    <audio id="music" style="visibility: hidden;" controls src="https://sampleswap.org/mp3/artist/5216/Astroboy_Sprung-160.mp3"></audio>
+    <div id="information" style="margin-left: 16px;">
       <h1>impulse-0005: psychedelic dreams in 2d</h1>
 
-      <p>Best viewed in Firefox</p>
+      <p>Best viewed in <a target="_blank" href="https://www.mozilla.org/">Firefox</a></p>
 
-      <p><a href="https://sampleswap.org/mp3/artist/5216/Astroboy_Sprung-160.mp3">Music 'Sprung' by 'Astroboy' (CC BY-NC-ND 3.0) from sampleswap.org</a></p>
+      <p>Music <a target="_blank" href="https://sampleswap.org/mp3/artist/5216/Astroboy_Sprung-160.mp3">'Sprung' by 'Astroboy' (CC BY-NC-ND 3.0)</a> from <a target="_blank" href="https://sampleswap.org/">sampleswap.org</a></p>
 
-      <p id="ready">Please wait... loading the shader takes time (about 25 sec)</p>
+      <p id="ready">Please wait... compiling the shader takes time (about 25 sec)</p>
     </div>
     <div style="display:flex;justify-content:center;align-items:center;">
       <div>
