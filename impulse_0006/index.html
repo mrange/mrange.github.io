@@ -140,14 +140,14 @@
       //#define EXPERIMENTING
 
       #ifdef EXPERIMENTING
-      #define ENABLE_IMPULSE
+      #define ENABLE_GALAXY
 
       const Effect effects[] = Effect[](
           Effect(MAJOR_IMPULSE     , MINOR_INTRO          , 0.0, false , 0.0       , 0.0) // This is special in that it's 7 seconds long, all other about ~5.1 long
-        , Effect(MAJOR_IMPULSE     , MINOR_OUTRO          , 0.0, true  , 0.0       , 0.0)
-        , Effect(MAJOR_IMPULSE     , MINOR_OUTRO          , 1.0, true  , 0.0       , 0.0)
-        , Effect(MAJOR_IMPULSE     , MINOR_OUTRO          , 2.0, true  , 0.0       , 0.0)
-        , Effect(MAJOR_IMPULSE     , MINOR_OUTRO          , 3.0, true  , 0.0       , 0.0)
+        , Effect(MAJOR_GALAXY      , MINOR_NONE           , 0.0, true  , 0.4       , 0.5)
+        , Effect(MAJOR_GALAXY      , MINOR_NONE           , 1.0, true  , 0.4       , 0.5)
+        , Effect(MAJOR_GALAXY      , MINOR_NONE           , 0.0, true  , 2.0       , 2.5)
+        , Effect(MAJOR_GALAXY      , MINOR_NONE           , 1.0, true  , 2.0       , 2.5)
         );
 
       #else
@@ -187,13 +187,13 @@
         , Effect(MAJOR_SPACESHIP   , MINOR_FROM_FRONT     , 0.0, true  , PI+0.5    , 550000.0)
         , Effect(MAJOR_SPACESHIP   , MINOR_FROM_FRONT     , 1.0, true  , PI+0.5    , 550000.0)
         , Effect(MAJOR_SPACESHIP   , MINOR_FROM_FRONT     , 2.0, true  , PI+0.5    , 550000.0)
-        , Effect(MAJOR_GALAXY      , MINOR_NONE           , 0.0, true  , 0.0       , 0.0)
-        , Effect(MAJOR_GALAXY      , MINOR_NONE           , 1.0, true  , 0.0       , 0.0)
-        , Effect(MAJOR_GALAXY      , MINOR_NONE           , 2.0, true  , 0.0       , 0.0)
+        , Effect(MAJOR_GALAXY      , MINOR_NONE           , 0.0, true  , 0.4       , 0.5)
+        , Effect(MAJOR_GALAXY      , MINOR_NONE           , 1.0, true  , 0.4       , 0.5)
+        , Effect(MAJOR_GALAXY      , MINOR_NONE           , 0.0, true  , 2.0       , 2.5)
+        , Effect(MAJOR_GALAXY      , MINOR_NONE           , 1.0, true  , 2.0       , 2.5)
         , Effect(MAJOR_IMPULSE     , MINOR_OUTRO          , 0.0, true  , 0.0       , 0.0)
         , Effect(MAJOR_IMPULSE     , MINOR_OUTRO          , 1.0, true  , 0.0       , 0.0)
         , Effect(MAJOR_IMPULSE     , MINOR_OUTRO          , 2.0, true  , 0.0       , 0.0)
-        , Effect(MAJOR_IMPULSE     , MINOR_OUTRO          , 3.0, true  , 0.0       , 0.0)
         );
       #endif
 
@@ -797,9 +797,8 @@
 
       vec3 impulse_outro(float ltime, vec2 p, vec2 q) {
         float pixel = 5.0/RESOLUTION.y;
-      //  float s = 0.2;
-        float s = 10.0/(10.0 - 0.5*ltime*(3.0/DURATION));
-        s *= 0.25;
+        float s = 10.0/(10.0 + 0.5*ltime*(3.0/DURATION));
+        s *= 0.2;
         float d = impulse_df(p, s, ltime);
 
         vec3 col = vec3(0.0);
@@ -1774,8 +1773,10 @@
         float sr = hash(s.yz);
         float si = pow(th*sr, 0.25)*0.001;
         vec3 scol = sr*5.0*exp(-2.5*l*l)*tanh(pow(si/(s.x), 2.5))*mix(vec3(0.5, 0.75, 1.0), vec3(1.0, 0.75, 0.5), sr*0.6);
+        float sd = length(ro);
         scol = clamp(scol, 0.0, 1.0);
-        col += scol*smoothstep(0.0, 0.35, 1.0-n.y);
+        // TODO: Smooth out stars, but it works for the purpose of this shader
+        col += step(sd, 1.5)*scol*smoothstep(0.0, 0.35, 1.0-n.y);
 
         float ddust = (h - ro.y)/rd.y;
         if (ddust < d) {
@@ -1817,7 +1818,7 @@
       }
 
       vec3 galaxy_effect(int minor, float input0, float input1, float ltime, vec2 p, vec2 q) {
-        vec3 ro = vec3(0.0, 0.7, 2.0)*mix(0.5, 0.75, ltime/(3.0*DURATION));
+        vec3 ro = vec3(0.0, 0.7, 2.0)*mix(input0, input1, ltime/(2.0*DURATION));
         vec3 la = vec3(0.0, 0.0, 0.0);
         vec3 up = vec3(-0.5, 1.0, 0.0);
         vec3 ww = normalize(la - ro);
@@ -2494,7 +2495,7 @@
 
         float fadeIn  = smoothstep(0.0, FADEIN, timeInEffect);
         float fadeOut = smoothstep(DURATION - FADEOUT, DURATION, timeInEffect);
-        float tfadeout = smoothstep(DURATIONT - 3.0*DURATION, DURATIONT, TIME);
+        float tfadeout = smoothstep(DURATIONT - 2.0*DURATION, DURATIONT, TIME);
 
         if (effect.fade && effect.seq == 0.0) {
           col = mix(vec3(0.0), col, fadeIn*fadeIn);
