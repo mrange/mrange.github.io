@@ -674,7 +674,7 @@
         return ds;
       }
 
-      float impulse_df(vec2 p, float s, float ltime) {
+      float impulse_df(vec2 p, float s, float ltime, bool stars) {
         p /= s;
 
         float di = impulse(p);
@@ -685,7 +685,7 @@
         float d = di;
         d = min(d, dp);
         d = min(d, dm);
-        d = min(d, ds);
+        if (stars) d = min(d, ds);
         return d*s;
       }
 
@@ -760,7 +760,7 @@
         // Hard coded to 7 fadein and fadeout
         float pixel = 5.0/RESOLUTION.y;
         float s = 30.0/(10.0 + ltime*(100.0/DURATION1));
-        float d = impulse_df(p, s, ltime);
+        float d = impulse_df(p, s, ltime, true);
         vec2 op = p;
         vec3 col = vec3(0.0);
         p *= 0.5;
@@ -799,7 +799,7 @@
         float pixel = 5.0/RESOLUTION.y;
         float s = 10.0/(10.0 + 0.5*ltime*(3.0/DURATION));
         s *= 0.2;
-        float d = impulse_df(p, s, ltime);
+        float d = impulse_df(p, s, ltime, false);
 
         vec3 col = vec3(0.0);
         col = mix(col, vec3(1.0), smoothstep(0.0, pixel, -d));
