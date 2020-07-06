@@ -22,7 +22,7 @@
     <style>
         body {
             font-family: 'Josefin Slab';
-            font-size: 6vmin;
+            font-size: 2.5vw;
             color: white;
             background-color: black;
         }
@@ -58,6 +58,11 @@
           position: fixed;
           bottom: 0;
           width: 100%;
+        }
+        div.center-flex {
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
     </style>
     <script id="shader-fs" type="x-shader/x-fragment"># version 300 es
@@ -413,19 +418,41 @@
   </head>
 
   <body onload="init()">
-    <div id="information" class="footer" style="display:flex;justify-content:center;align-items:center;">
+    <div id="information" class="center-flex footer">
       <div>
-        <p style="font-size: 6vmin;">
-          impulse-0001: <a href="https://mrange.github.io/impulse_0001/" target="_bland">a study of glass</a></br>
-          impulse-0005: <a href="https://mrange.github.io/impulse_0005/" target="_bland">psychedelic dreams in 2d</a></br>
-          impulse-0006: <a href="https://mrange.github.io/impulse_0006/" target="_bland">once upon a time... space</a></br>
-        </p>
-        <p style="font-size: 2vmin;">
-          Suspicously missing 0002-0004 hasn't been successfully ported to WebGL yet.
+        <p>
+          <table>
+            <tr>
+              <td rowspan="3" style="transform: rotate(-90deg);">atari</td>
+              <td>demo</td>
+              <td>&nbsp;</td>
+              <td><a href="https://impulse.reine.se/demos/impulse-demos/" target="_bland">collection (1992-1996)</a></td>
+              <td rowspan="3" style="transform: rotate(-90deg);" >webgl</td>
+              <td>demo</td>
+              <td>&nbsp;</td>
+              <td><a href="https://mrange.github.io/impulse_0001/" target="_bland">a study of glass</a></td>
+            </tr>
+            <tr>
+              <td>game</td>
+              <td>&nbsp;</td>
+              <td><a href="https://impulse.reine.se/games/corsair/" target="_blank">corsair (1997)</a></td>
+              <td>demo</td>
+              <td>&nbsp;</td>
+              <td><a href="https://mrange.github.io/impulse_0005/" target="_blank">psychedelic dreams in 2d</a></td>
+            </tr>
+            <tr>
+              <td>game</td>
+              <td>&nbsp;</td>
+              <td><a href="https://impulse.reine.se/games/sokoban/" target="_blank">sokoban (1996)</a></td>
+              <td>demo</td>
+              <td>&nbsp;</td>
+              <td><a href="https://mrange.github.io/impulse_0006/" target="_blank">once upon a time... space</a></td>
+            </tr>
+          </table>
         </p>
       </div>
     </div>
-    <div style="display:flex;justify-content:center;align-items:center;">
+    <div class="center-flex">
       <div>
         <canvas id="glcanvas" class="gl">
           Your browser doesn't appear to support the HTML5 <code>&lt;canvas&gt;</code> element.
