@@ -59,7 +59,7 @@
       // -----------------------------------------------------------------------
       // BEGIN - Common prelude
       // -----------------------------------------------------------------------
-      precision mediump float;
+      precision highp float;
 
       in highp vec2 vTextureCoord;
       out vec4 fragColor;
@@ -391,7 +391,7 @@
         float d = circle(pp, (sqrt(0.5)*fadeRep)*ff);
 
         col = mix(col, fcol, step(4.0, TIME)*step(TIME, 210.0)*step(0.0001, ff)*smoothstep(bw, -bw, d));
-        col *= smoothstep(0.0, 4.0, TIME)*smoothstep(220.0, 210.0, TIME);
+        col *= smoothstep(1.0*1.0, 4.0*4.0, TIME*TIME)*smoothstep(220.0, 210.0, TIME);
 
         return col;
       }
@@ -1243,8 +1243,8 @@
   </head>
 
   <body onload="init()">
-    <img id="image0" src="impulsedf.png" style="visibility: collapse"/>
     <audio id="music" style="visibility: hidden;" controls src="https://sampleswap.org/mp3/artist/2590/steve_counting-sheep-01-160.mp3"></audio>
+    <img id="image0" src="impulsedf.png" style="visibility: collapse"/>
     <div id="information" style="margin-left: 16pt;">
       <h1>impulse-0004: demoday</h1>
 
