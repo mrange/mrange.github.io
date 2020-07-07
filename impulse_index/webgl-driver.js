@@ -83,7 +83,7 @@ function initWebGL() {
   gl = null;
 
   try {
-    gl = canvas.getContext("webgl2");
+    gl = canvas.getContext("webgl");
   }
   catch(e) {
   }

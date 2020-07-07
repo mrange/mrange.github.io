@@ -65,30 +65,26 @@
           justify-content: center;
         }
     </style>
-    <script id="shader-fs" type="x-shader/x-fragment"># version 300 es
+    <script id="shader-fs" type="x-shader/x-fragment"># version 100
       // -----------------------------------------------------------------------
       // BEGIN - Common prelude
       // -----------------------------------------------------------------------
-      precision mediump float;
-
-      in highp vec2 vTextureCoord;
-      out vec4 fragColor;
+      precision highp float;
 
       uniform vec2 iResolution;
       uniform float iTime;
 
+      varying highp vec2 vTextureCoord;
       uniform sampler2D uSampler;
 
       void mainImage(out vec4 fragColor, in vec2 fragCoord);
 
       void main(void) {
-        mainImage(fragColor, vTextureCoord*iResolution);
+        mainImage(gl_FragColor, vTextureCoord*iResolution);
       }
-
       // -----------------------------------------------------------------------
       // END - Common prelude
       // -----------------------------------------------------------------------
-
       #define PI               3.141592654
       #define TAU             (2.0*PI)
       #define TIME            iTime
@@ -405,11 +401,11 @@
       }
     </script>
 
-    <script id="shader-vs" type="x-shader/x-vertex"># version 300 es
-      in vec2 pos;
-      in vec2 texPos;
+    <script id="shader-vs" type="x-shader/x-vertex"># version 100
+      attribute highp vec2 pos;
+      attribute highp vec2 texPos;
 
-      out highp vec2 vTextureCoord;
+      varying highp vec2 vTextureCoord;
 
       void main(void) {
         gl_Position=vec4(pos,0.0,1.0);
