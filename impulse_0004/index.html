@@ -87,7 +87,7 @@
       #define RESOLUTION  iResolution
       #define TIME        iTime
       #define PERIOD      (int(TIME/FADEPERIOD))
-      #define PTIME       (mod(TIME,FADEPERIOD))
+      #define PTIME       (mod(TIME, FADEPERIOD))
 
       #define SCA(a)          vec2(sin(a), cos(a))
 
@@ -169,7 +169,8 @@
       }
 
       float parabola(vec2 pos, float k) {
-        pos.x = abs(pos.x);
+        // Making the DF discontinuity around x=0 less prominent
+        pos.x = SABS(pos.x, (k*0.25));
 
         float p = (1.0-2.0*k*pos.y)/(6.0*k*k);
         float q = -abs(pos.x)/(4.0*k*k);
@@ -424,9 +425,11 @@
         const float size = .075;
         const int count = 3;
 
+        float ltime = TIME*0.5;
+
         vec3 col = vec3(0.0);
 
-        float e1 = 1.6 + 0.4*sin(TIME*sqrt(2.0));
+        float e1 = 1.6 + 0.4*sin(ltime*sqrt(2.0));
         float e2 = e1;
 
       //  float o = pow(d, 1.0);
@@ -435,7 +438,7 @@
         for (int i = 0; i < count; ++i)
         {
           float fi = float(i);
-          float localTime = TIME + fi;
+          float localTime = (ltime + fi);
           float fe1 = (pow(fi + 1.0, 0.2))*e1;
           float fe2 = fe1;
           vec2 o1 = 1.5*localTime*vec2(0.0, -1);
@@ -764,13 +767,13 @@
         switch(PERIOD) {
         default:
         case 1:
-          to = 32.0;
+          to = 36.0;
           break;
         case 7:
           to = 104.0;
           break;
         }
-        float localTime = 0.8 * PTIME + to;
+        float localTime = 0.5 * PTIME + to;
         vec3 col  = vec3(0.0);
         vec2 unit = 1.0/RESOLUTION.xy;
         const int aa = 2;
