@@ -22,7 +22,7 @@
     <style>
         body {
             font-family: 'Josefin Slab';
-            font-size: 2.25vw;
+            font-size: 3vw;
             color: white;
             background-color: black;
         }
@@ -73,6 +73,7 @@
 
       uniform vec2 iResolution;
       uniform float iTime;
+      uniform float iOffset;
 
       varying highp vec2 vTextureCoord;
       uniform sampler2D uSampler;
@@ -85,7 +86,7 @@
       // -----------------------------------------------------------------------
       // END - Common prelude
       // -----------------------------------------------------------------------
-      #define PI               3.141592654
+      #define PI              3.141592654
       #define TAU             (2.0*PI)
       #define TIME            iTime
       #define RESOLUTION      iResolution
@@ -367,7 +368,14 @@
         vec3 ld1 = normalize(lp1 - pp);
         vec3 ld2 = normalize(lp2 - pp);
 
-        vec3 n = normal(p);
+        float off = iOffset;
+
+        vec2 bp = p;
+        vec2 lp = p;
+        bp.y += 0.5*off;
+        lp.y += off;
+
+        vec3 n = normal(bp);
         float diff1 = max(dot(ld1, n), 0.0);
         float diff2 = max(dot(ld2, n), 0.0);
 
@@ -382,20 +390,21 @@
         col = clamp(col, 0.0, 1.0);
         col = mix(0.05*baseCol1, col, 1.0 - (1.0 - 0.5*diff1)*exp(- 2.0*smoothstep(-.1, 0.05, (h))));
 
-        float d = df(p);
+        float d = df(lp);
         float bd = abs(d - 0.03) - 0.015;
 
-        float shd = pow(psin(-0.25*TIME+(p.x-p.y)*1.5), 4.0);
+        float shd = pow(psin(-0.25*TIME+(lp.x-lp.y)*1.5), 4.0);
         col += 1.0*baseCol1*(exp(-20.0*bd))*shd;
         col += 0.5*baseCol1*(exp(-1.0*bd))*shd;
         col -= 0.125*vec3(1.0)*(exp(-5.0*d));
         col = clamp(col, 0.0, 1.0);
-        col = mix(col, vec3(1.0), smoothstep(0.0, aa, -d));
-
-        col = postProcess(col, q);
 
         const float fadeIn = 6.0;
         col *= smoothstep(0.0, fadeIn*fadeIn, TIME*TIME);
+
+        col = mix(col, vec3(1.0), smoothstep(0.0, aa, -d));
+
+        col = postProcess(col, q);
 
         fragColor = vec4(col, 1.0);
       }
@@ -415,51 +424,61 @@
   </head>
 
   <body onload="init()">
-    <div id="information" class="center-flex footer">
+    <div style="height: 65vh">&nbsp;</div>
+    <div class="center-flex">
       <div>
         <p>
           <table>
             <tr>
-              <td rowspan="5" style="transform: rotate(-90deg);">atari</td>
-              <td>demo</td>
-              <td>&nbsp;</td>
-              <td><a href="https://impulse.reine.se/demos/impulse-demos/" target="_blank">collection</a></td>
-              <td rowspan="5" style="transform: rotate(-90deg);" >webgl</td>
-              <td>demo</td>
+              <td rowspan="6" style="transform: rotate(-90deg);" >webgl</td>
+              <td>impulse-0006</td>
               <td>&nbsp;</td>
               <td><a href="https://mrange.github.io/impulse_0006/" target="_blank">once upon a time... space</a></td>
             </tr>
             <tr>
-              <td>game</td>
-              <td>&nbsp;</td>
-              <td><a href="https://impulse.reine.se/games/corsair/" target="_blank">corsair</a></td>
-              <td>demo</td>
+              <td>impulse-0005</td>
               <td>&nbsp;</td>
               <td><a href="https://mrange.github.io/impulse_0005/" target="_blank">psychedelic dreams in 2d</a></td>
             </tr>
             <tr>
-              <td>game</td>
-              <td>&nbsp;</td>
-              <td><a href="https://impulse.reine.se/games/sokoban/" target="_blank">sokoban</a></td>
-              <td>demo</td>
+              <td>impulse-0004</td>
               <td>&nbsp;</td>
               <td><a href="https://mrange.github.io/impulse_0004/" target="_blank">demoday</a></td>
             </tr>
             <tr>
+              <td>impulse-0003</td>
               <td>&nbsp;</td>
-              <td>&nbsp;</td>
-              <td>&nbsp;</td>
-              <td>demo</td>
+              <td>from dusk till dawn</td>
+            </tr>
+            <tr>
+              <td>impulse-0002</td>
               <td>&nbsp;</td>
               <td><a href="https://www.shadertoy.com/view/WdjXDG" target="_blank">impulse 2019 invite</a></td>
             </tr>
             <tr>
-              <td>&nbsp;</td>
-              <td>&nbsp;</td>
-              <td>&nbsp;</td>
-              <td>demo</td>
+              <td>impulse-0001</td>
               <td>&nbsp;</td>
               <td><a href="https://mrange.github.io/impulse_0001/" target="_blank">a study of glass</a></td>
+            </tr>
+            <tr>
+              <td>&nbsp;</td>
+            </tr>
+
+            <tr>
+              <td rowspan="3" style="transform: rotate(-90deg);">atari</td>
+              <td>1992-1996</td>
+              <td>&nbsp;</td>
+              <td><a href="https://impulse.reine.se/demos/impulse-demos/" target="_blank">collection</a></td>
+            </tr>
+            <tr>
+              <td>1997</td>
+              <td>&nbsp;</td>
+              <td><a href="https://impulse.reine.se/games/corsair/" target="_blank">corsair</a></td>
+            </tr>
+            <tr>
+              <td>1996</td>
+              <td>&nbsp;</td>
+              <td><a href="https://impulse.reine.se/games/sokoban/" target="_blank">sokoban</a></td>
             </tr>
           </table>
         </p>

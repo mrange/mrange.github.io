@@ -18,7 +18,6 @@ var gl;
 
 var verticesBuffer;
 var verticesTextureCoordBuffer;
-var verticesNormalBuffer;
 var verticesIndexBuffer;
 
 var shaderProgram;
@@ -35,8 +34,10 @@ let playing = false;
 
 let startTime = now();
 
+let sceneOffset = 0.0;
+
 function init() {
-  information = document.getElementById("information");
+  window.addEventListener("scroll", e => scrollWindow(e));
 
   canvas = document.getElementById("glcanvas");
 
@@ -79,6 +80,11 @@ function init() {
   }
 }
 
+function scrollWindow(e) {
+  const wheight = window.innerHeight;
+  sceneOffset = -2.0*window.scrollY/wheight
+}
+
 function initWebGL() {
   gl = null;
 
@@ -86,6 +92,7 @@ function initWebGL() {
     gl = canvas.getContext("webgl");
   }
   catch(e) {
+    alert("Unable to initialize WebGL. Your browser may not support it.");
   }
 
   // If we don't have a GL context, give up now
@@ -117,22 +124,6 @@ function initBuffers() {
   // then use it to fill the current vertex buffer.
 
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
-
-  // Set up the normals for the vertices, so that we can compute lighting.
-
-  verticesNormalBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, verticesNormalBuffer);
-
-  const vertexNormals = [
-    // Front
-     0.0,  0.0,  1.0,
-     0.0,  0.0,  1.0,
-     0.0,  0.0,  1.0,
-     0.0,  0.0,  1.0,
-  ];
-
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexNormals),
-                gl.STATIC_DRAW);
 
   verticesTextureCoordBuffer = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, verticesTextureCoordBuffer);
@@ -188,6 +179,7 @@ function drawScene() {
 
   gl.uniform2f(gl.getUniformLocation(shaderProgram, "iResolution"), width, height);
   gl.uniform1f(gl.getUniformLocation(shaderProgram, "iTime"), iTime);
+  gl.uniform1f(gl.getUniformLocation(shaderProgram, "iOffset"), sceneOffset);
 
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, verticesIndexBuffer);
   gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
