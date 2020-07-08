@@ -219,7 +219,9 @@
       float cell1(vec2 p) {
         float d1 = abs(p.x);
         float d2 = abs(p.y);
+        float d3 = length(p) - 0.25;
         float d = min(d1, d2);
+        d = min(d, d3);
         return d;
       }
 
