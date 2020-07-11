@@ -180,10 +180,9 @@
       }
 
       float inoise(vec2 p) {
-        p += 100.0;
-      //  p = abs(p);
         p *= 0.125;
         vec2 n = hextile(p);
+        n = floor(n + 0.5);
         float r = hash(n);
         const float s = 0.25 / 280.0;
         p /= s;
