@@ -227,6 +227,13 @@
         p *= mix(0.125, 0.375, psin(b));
         float h = 0.5*inoise(p);
         float rs = 2.5;
+        const float dsz = 0.00125;
+        vec2 pd = p/dsz;
+        rot(pd, 1.0);
+        float hd = psin(pd.x)*psin(pd.y);
+        hd *= hd;
+        hd *= 2.0*dsz;
+        h = mix(h-hd, h, clamp(h*4.0, 0.0, 1.0));
         return 0.5*tanh(rs*h)/rs;
       }
 
