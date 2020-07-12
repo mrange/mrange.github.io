@@ -271,6 +271,7 @@
 
         const vec3 lp1 = vec3(0.8, -0.75, 0.8);
         const vec3 lp2 = vec3(-0., -1.5, -1.0);
+        const vec3 eye = vec3(0.0, -2.0, 0.0);
 
         float aa = 10.0/RESOLUTION.y;
 
@@ -279,6 +280,7 @@
         vec3 pp = vec3(p.x, h, p.y);
         vec3 ld1 = normalize(lp1 - pp);
         vec3 ld2 = normalize(lp2 - pp);
+        vec3 ed = normalize(eye - pp);
 
         float off = iOffset;
 
@@ -290,9 +292,14 @@
         vec3 n = normal(bp);
         float diff1 = max(dot(ld1, n), 0.0);
         float diff2 = max(dot(ld2, n), 0.0);
+        float spe1 = max(dot(reflect(-ld1, n), ed), 0.0);
+        float spe2 = max(dot(reflect(-ld2, n), ed), 0.0);
 
         const vec3 baseCol1 = vec3(0.6, 0.8, 1.0);
         const vec3 baseCol2 = sqrt(baseCol1.zyx);
+
+        col += pow(spe1, 20.0)*sqrt(baseCol1)*0.25;
+        col += pow(spe2, 10.0)*sqrt(baseCol2)*0.125;
 
         col += baseCol1*pow(diff1, 16.0);
         col += 0.1*baseCol1*pow(diff1, 4.0);
@@ -304,6 +311,7 @@
 
         float d = df(lp);
         float bd = abs(d - 0.03) - 0.015;
+
 
         float shd = pow(psin(-0.25*TIME+(lp.x-lp.y)*1.5), 4.0);
         col += 1.0*baseCol1*(exp(-20.0*bd))*shd;
