@@ -44,8 +44,8 @@ function init() {
   const width = window.innerWidth;
   const height = window.innerHeight;
 
-  // Shader is a bit hungry for FLOPs so limit ot 1080
-  const finalHeight = height < 1080 ? height : 1080;
+  // Shader is a bit hungry for FLOPs so limit to 1200 in y res
+  const finalHeight = height < 1200 ? height : 1200;
   const finalWidth = (width/height)*finalHeight;
 
   canvas.width  = finalWidth;

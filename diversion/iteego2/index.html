@@ -82,6 +82,15 @@
       void main(void) {
         mainImage(gl_FragColor, vTextureCoord*iResolution);
       }
+
+      #define round(x) floor(x + 0.5)
+
+      float tanh(float x) {
+        float ex = exp(x);
+        float nex = 1.0/ex;
+        return (ex - nex) / (ex + nex);
+      }
+
       // -----------------------------------------------------------------------
       // END - Common prelude
       // -----------------------------------------------------------------------
@@ -162,7 +171,7 @@
         return n;
       }
 
-      float falloff(float d, float w, float f, float a) {
+      float falloff(float d, float w, float f) {
         float dd = abs(d) - w;
         float b = 1.0/(f*f);
         float x = dd - f;
@@ -180,117 +189,45 @@
       }
 
       float inoise(vec2 p) {
-        p *= 0.125;
         vec2 n = hextile(p);
-        n = floor(n + 0.5);
+        n = round(n);
         float r = hash(n);
         const float s = 0.25 / 280.0;
         p /= s;
         p -= vec2(0.0, 60.0);
-        rot(p, TAU*r);
+        rot(p, 0.01*TAU*(n.x + n.y));
 
-        float d0 = box(p, vec2(238.0, 238.0), 00.0);
+        float d0 = box(p, vec2(238.0, 238.0), 0.0);
         float d1 = circle(p, 88.0);
         float d2 = box(p - vec2(0.0, -280.0), vec2(66.0, 138.0), 0.0);
-        const float fo = 75.0+25.0;
-        float h0 = falloff(d0, 21.0, fo, 1.0)*step(0.0, d2);
-        float h1 = falloff(d1, 11.0, fo, 1.0);
-        float h2 = falloff(d2, 11.0, fo, 1.0);
+        const float fo = 75.0;
+        float h0 = falloff(d0, 22.0, 1.0*fo)*step(0.0, d2);
+        float h1 = falloff(d1, 11.0, 1.0*fo);
+        float h2 = falloff(d2, 11.0, 0.5*fo);
 
         float h = h0;
       #ifdef SOFTMAX
         const float sm = 0.5;
-        h = pmax(h, h1, sm);
         h = pmax(h, h2, sm);
+        h = min(h, 1.0);
+        h = pmax(h, h1, sm);
       #else
         h = max(h, h1);
         h = max(h, h2);
       #endif
 
-      //  return max(h0, max(h1, h2));
-        return 0.75*h;
-      }
-
-
-      float vnoise(vec2 x) {
-        vec2 i = floor(x);
-        vec2 w = fract(x);
-
-      #if 1
-        // quintic interpolation
-        vec2 u = w*w*w*(w*(w*6.0-15.0)+10.0);
-      #else
-        // cubic interpolation
-        vec2 u = w*w*(3.0-2.0*w);
-      #endif
-
-        float a = hash(i+vec2(0.0,0.0));
-        float b = hash(i+vec2(1.0,0.0));
-        float c = hash(i+vec2(0.0,1.0));
-        float d = hash(i+vec2(1.0,1.0));
-
-        float k0 =   a;
-        float k1 =   b - a;
-        float k2 =   c - a;
-        float k3 =   d - c + a - b;
-
-        float aa = mix(a, b, u.x);
-        float bb = mix(c, d, u.x);
-        float cc = mix(aa, bb, u.y);
-
-        return k0 + k1*u.x + k2*u.y + k3*u.x*u.y;
-      }
-
-      float fbm(vec2 p) {
-        const int mid = 3;
-        const int mx = 7;
-        const float aa = 0.42;
-        const float pp = 2.25;
-        const vec2 oo = -vec2(1.23, 1.5);
-        const float rr = 1.2;
-
-        vec2 op = p;
-
-        float h = 0.0;
-        float d = 0.0;
-        float a = 1.0;
-
-        for (int i = 0; i < mid; ++i) {
-          h += a*onoise(p);
-          d += (a);
-          a *= aa;
-          p += oo;
-          p *= pp;
-          rot(p, rr);
-        }
-
-        for (int i = mid; i < mx; ++i) {
-          h += a*inoise(p);
-          d += (a);
-          a *= aa;
-          p += oo;
-          p *= pp;
-          rot(p, rr);
-        }
-
-        return 0.5*mix(-1.0, 1.0, smoothstep(0.0, 1.2, (vnoise(0.50*op))))*(h/d);
-      }
-
-      float warp(vec2 p) {
-        vec2 v = vec2(fbm(p), fbm(p+10.7*vec2(1.0, 1.0)));
-        rot(v, 1.0+TIME*0.125);
-        return mix(0., 1.0, v.x - v.y);
+        return h;
       }
 
       float height(vec2 p) {
-        float a = 0.005*TIME;
+        float ttm = TAU*TIME;
+        float a = ttm/(15.0*60.0);
+        float b = ttm/(7.5*60.0);
         p += 5.0*vec2(cos(a), sin(sqrt(0.5)*a));
-        p *= 2.0;
-        p += 13.0;
-        float h = warp(p);
-        float rs = 3.0;
-      //  return 0.5*tanh(rs*h)/rs;
-        return 0.75*h;
+        p *= mix(0.125, 0.375, psin(b));
+        float h = 0.5*inoise(p);
+        float rs = 2.5;
+        return 0.5*tanh(rs*h)/rs;
       }
 
       vec3 normal(vec2 p) {
@@ -302,7 +239,6 @@
         n.x = height(p + eps.xy) - height(p - eps.xy);
         n.y = 2.0*eps.x;
         n.z = height(p + eps.yx) - height(p - eps.yx);
-
 
         return normalize(n);
       }
