@@ -13,6 +13,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+var audio;
 var canvas;
 var gl;
 
@@ -30,6 +31,13 @@ let playing = false;
 let startTime = now();
 
 function runDemo() {
+  audio = document.getElementById("music");
+  audio.onplay = () => play();
+  audio.onplaying = () => update();
+  audio.onseeked = () => update();
+  audio.onpause = () => stop();
+  audio.onended = () => stop();
+
   canvas = document.getElementById("glcanvas");
 
   const width = window.innerWidth;
@@ -64,13 +72,34 @@ function runDemo() {
     initBuffers();
 
     initialized = true;
-    playing = true;
 
     onInitComplete();
+
+    audio.style.visibility = "visible";
 
     requestAnimationFrame(drawScene);
   } else {
     // Shader couldn't compile
+  }
+}
+
+function play() {
+  if (initialized&&!playing) {
+    startTime = now() - audio.currentTime*1000;
+    requestAnimationFrame(drawScene);
+    playing = true;
+  }
+}
+
+function update() {
+  if (initialized&&playing) {
+    startTime = now() - audio.currentTime*1000;
+  }
+}
+
+function stop() {
+  if (initialized&&playing) {
+    playing = false;
   }
 }
 
