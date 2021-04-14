@@ -217,7 +217,6 @@ async function initShaders() {
   for (const key in allScenes) {
     await onLoadingScene(key);
 
-    console.log("Compiling scene: " + key);
     const scene = allScenes[key];
     if (!scene) continue;
 
@@ -255,8 +254,6 @@ async function initShaders() {
       }
     }
     scene.uniformLocations = uniformLocations;
-
-    console.log(scene)
   }
 }
 
