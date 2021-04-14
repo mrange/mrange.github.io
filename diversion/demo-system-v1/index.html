@@ -1803,10 +1803,9 @@
         information.style.display = "none";
       }
 
-      async function onLoadingScene(key) {
+      function onLoadingScene(key) {
         const label = document.getElementById("info-label");
         label.textContent = "Compiling: " + key;
-        await sleep(50);
       }
 
       function onSelectScene(gl, time) {

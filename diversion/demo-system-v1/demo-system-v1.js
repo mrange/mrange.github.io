@@ -82,7 +82,7 @@ async function runDemo() {
 
     requestAnimationFrame(drawScene);
   } else {
-    // Shader couldn't compile
+    alert("Failed to initialize. Maybewebgl 2 is not supported on your browser");
   }
 }
 
@@ -215,7 +215,10 @@ function drawScene() {
 
 async function initShaders() {
   for (const key in allScenes) {
-    await onLoadingScene(key);
+    onLoadingScene(key);
+
+    // To let the UI refresh
+    await sleep(20);
 
     const scene = allScenes[key];
     if (!scene) continue;
