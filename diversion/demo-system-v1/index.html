@@ -42,32 +42,721 @@
         }
     </style>
     <script id="shader-fs" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
 
       precision highp float;
 
+      uniform float time;
+      uniform vec2 resolution;
+
       in vec2 v_texcoord;
+
       out vec4 fragColor;
 
-      uniform vec2 iResolution;
-      uniform float iTime;
-      uniform float iSine;
+      // -----------------------------------------------------------------------------
+      // COMMON
+      // -----------------------------------------------------------------------------
 
-      void mainImage(out vec4, in vec2);
-      void main(void) { mainImage(fragColor, v_texcoord * iResolution.xy); }
+      #define PI              3.141592654
+      #define TAU             (2.0*PI)
+      #define TIME            time
+      #define RESOLUTION      resolution
+      #define ROT(a)          mat2(cos(a), sin(a), -sin(a), cos(a))
+      #define PCOS(a)         (0.5+0.5*cos(a))
+      #define SCA(a)          vec2(sin(a), cos(a))
+      #define MISS            1E6
+      #define INTIME(a, b)    (TIME >= a && TIME < b)
+      #define BTIME(n)        (n*beat+start)
+      #define INBEAT(a, b)    (TIME >= BTIME(a) && TIME < BTIME(b))
 
-      // --
+      const float beat            = 0.48;
+      const float start           = 41.1;
+      const float bounce_freq     = 0.5/beat;
 
-      void mainImage(out vec4 fragColor, in vec2 fragCoord) {
-          vec2 uv = fragCoord.xy / iResolution.xy;
-          vec3 col = vec3(uv.xy, 0.5+0.5*iSine);
-#ifdef FIRST
-          col = vec3(1.0, 0.0, 0.5+0.5*iSine);
-#endif
-#ifdef SECOND
-          col = vec3(0.5+0.5*sin(iTime), 1.0, 0.5+0.5*iSine);
-#endif
-          col = pow(col, vec3(1.0/2.2));
-          fragColor = vec4(col,1.0);
+      const vec2 sca0             = SCA(0.0);
+      const mat2 rotSome          = ROT(1.0);
+      const vec3 std_gamma        = vec3(2.2, 2.2, 2.2);
+
+      // IQ's smooth min
+      float pmin(float a, float b, float k) {
+        float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0 );
+        return mix( b, a, h ) - k*h*(1.0-h);
+      }
+
+      float pmax(float a, float b, float k) {
+        return -pmin(-a, -b, k);
+      }
+
+      float hash(float co) {
+        return fract(sin(co*12.9898) * 13758.5453);
+      }
+
+      vec4 alphaBlend(vec4 back, vec4 front) {
+        float w = front.w + back.w*(1.0-front.w);
+        vec3 xyz = (front.xyz*front.w + back.xyz*back.w*(1.0-front.w))/w;
+        return w > 0.0 ? vec4(xyz, w) : vec4(0.0);
+      }
+
+      vec3 alphaBlend(vec3 back, vec4 front) {
+        return mix(back, front.xyz, front.w);
+      }
+
+      float tanh_approx(float x) {
+      //  return tanh(x);
+        float x2 = x*x;
+        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
+      }
+
+      // IQ's box
+      float box(vec2 p, vec2 b) {
+        vec2 d = abs(p)-b;
+        return length(max(d,0.0)) + min(max(d.x,d.y),0.0);
+      }
+
+      float circle(vec2 p, float r) {
+        return length(p) - r;
+      }
+
+      float segmentx(vec2 p, float l) {
+        p = abs(p);
+        float d0 = max(p.x-l, p.y);
+        float d1 = length(p - vec2(l, 0.0));
+        return p.x > l ? d1 : d0;
+      }
+
+      float segment(vec2 p, vec2 a, vec2 b ) {
+          vec2 pa = p-a, ba = b-a;
+          float h = clamp( dot(pa,ba)/dot(ba,ba), 0.0, 1.0 );
+          return length( pa - ba*h );
+      }
+
+      float roundedX(vec2 p, float w, float r) {
+          p = abs(p);
+          return length(p-min(p.x+p.y,w)*0.5) - r;
+      }
+
+      // IQ's horseshoe
+      float horseshoe(vec2 p, vec2 c, float r, vec2 w) {
+        p.x = abs(p.x);
+        float l = length(p);
+        p = mat2(-c.x, c.y,
+                  c.y, c.x)*p;
+        p = vec2((p.y>0.0)?p.x:l*sign(-c.x),
+                 (p.x>0.0)?p.y:l );
+        p = vec2(p.x,abs(p.y-r))-w;
+        return length(max(p,0.0)) + min(0.0,max(p.x,p.y));
+      }
+
+      vec2 mod2_1(inout vec2 p) {
+        vec2 c = floor(p + 0.5);
+        p = fract(p + 0.5) - 0.5;
+        return c;
+      }
+
+      vec2 mod2(inout vec2 p, vec2 size) {
+        vec2 c = floor((p + size*0.5)/size);
+        p = mod(p + size*0.5,size) - size*0.5;
+        return c;
+      }
+
+      vec3 hsv2rgb(vec3 c) {
+        const vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+        vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+        return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+      }
+
+      float hash(in vec2 co) {
+        co += 123.4;
+        return fract(sin(dot(co, vec2(12.9898,58.233))) * 13758.5453);
+      }
+
+      vec2 nhash2(vec2 p) {
+        p = vec2 (dot (p, vec2 (127.1, 311.7)),
+                  dot (p, vec2 (269.5, 183.3)));
+
+        return -1. + 2.*fract (sin (p)*43758.5453123);
+      }
+
+      float vnoise(vec2 x) {
+        vec2 i = floor(x);
+        vec2 w = fract(x);
+
+      #if 1
+        // quintic interpolation
+        vec2 u = w*w*w*(w*(w*6.0-15.0)+10.0);
+      #else
+        // cubic interpolation
+        vec2 u = w*w*(3.0-2.0*w);
+      #endif
+
+        float a = hash(i+vec2(0.0,0.0));
+        float b = hash(i+vec2(1.0,0.0));
+        float c = hash(i+vec2(0.0,1.0));
+        float d = hash(i+vec2(1.0,1.0));
+
+        float k0 =   a;
+        float k1 =   b - a;
+        float k2 =   c - a;
+        float k3 =   d - c + a - b;
+
+        float aa = mix(a, b, u.x);
+        float bb = mix(c, d, u.x);
+        float cc = mix(aa, bb, u.y);
+
+        return k0 + k1*u.x + k2*u.y + k3*u.x*u.y;
+      }
+
+      float lettere(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 1.05+off;
+        p -= vec2(0.5, 0.5);
+        return min(box(p, vec2(0.4, 0.1)), max(circle(p, 0.5), -circle(p, 0.3)));
+      }
+
+      float letterI(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 0.25+off;
+        p -= vec2(0.125, 0.75);
+        return box(p, vec2(0.125, 0.75));
+      }
+
+      float letterl(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 0.2+off;
+        p -= vec2(0.10, 0.5);
+        return box(p, vec2(0.1, 0.666));
+      }
+
+      float letterm(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 2.2+off;
+        p -= vec2(1.1, 0.5);
+        p.y = -p.y;
+        p.x = abs(p.x);
+        p -= vec2(0.5, 0.0);
+        float d = horseshoe(p, sca0, 0.5, vec2(0.5, 0.1));
+        return d;
+      }
+
+      float lettern(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 1.15+off;
+        p -= vec2(0.55, 0.5);
+        p.y = -p.y;
+        float l = horseshoe(p, sca0, 0.5, vec2(0.5, 0.1));
+        return l;
+      }
+
+      float letterp(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 1.05+off;
+        p -= vec2(0.55, 0.5);
+        float b = box(p - vec2(-0.45, -0.25), vec2(0.1, 0.75));
+        float c = abs(circle(p, 0.4)) - 0.1;
+        return min(b, c);
+      }
+
+      float letterr(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 0.6+off;
+        p -= vec2(0.1, 0.5);
+        float d0 = box(p-vec2(0.20, 0.4), vec2(0.3, 0.1));
+        float d1 = box(p, vec2(0.1, 0.5));
+        return min(d0, d1);
+      }
+
+      float letters(inout vec2 pp, float off) {
+        const mat2 rots1 = ROT(-PI/6.0-PI/2.0);
+        const mat2 rots2 = ROT(PI);
+        vec2 p = pp;
+        pp.x -= 0.875+off;
+        p -= vec2(0.435, 0.5);
+        p *= rots1;
+        float u = horseshoe(p - vec2(-0.25*3.0/4.0, -0.125/2.0), sca0, 0.375, vec2(0.2, 0.1));
+        p *= rots2;
+        float l = horseshoe(p - vec2(-0.25*3.0/4.0, -0.125/2.0), sca0, 0.375, vec2(0.2, 0.1));
+        return min(u,l);
+      }
+
+      float letteru(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 1.2+off;
+        p -= vec2(0.6, 0.475);
+        return horseshoe(p - vec2(0.0, 0.125), sca0, 0.5, vec2(0.4, 0.1));
+      }
+
+      float lettert(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 0.6+off;
+        p -= vec2(0.3, 0.6);
+        float d0 = box(p-vec2(0.0, 0.3), vec2(0.3, 0.1));
+        float d1 = box(p, vec2(0.1, 0.6));
+        return min(d0, d1);
+      }
+
+      float impulse(vec2 p, float off) {
+        p += vec2(3.385+3.0*off, 0.5);
+
+        float d = 1E6;
+        d = min(d, letterI(p, off));
+        d = min(d, letterm(p, off));
+        d = min(d, letterp(p, off));
+        d = min(d, letteru(p, off));
+        d = min(d, letterl(p, off));
+        d = min(d, letters(p, off));
+        d = min(d, lettere(p, off));
+
+        return d;
+      }
+
+      float presents(vec2 p, float off) {
+        p += vec2(3.65+3.5*off, 0.5);
+
+        float d = 1E6;
+        d = min(d, letterp(p, off));
+        d = min(d, letterr(p, off));
+        d = min(d, lettere(p, off));
+        d = min(d, letters(p, off));
+        d = min(d, lettere(p, off));
+        d = min(d, lettern(p, off));
+        d = min(d, lettert(p, off));
+        d = min(d, letters(p, off));
+
+        return d;
+      }
+
+      const float galaxy_lw       = 0.025;
+
+      float galaxy_g(vec2 p) {
+        const float s = 0.5;
+        float d0 = segment(p, s*vec2(0.0, 0.0), s*vec2(1.0, 1.0))-galaxy_lw;
+        float d1 = segmentx(p-s*vec2(0.5, 0.0), s*0.5)-galaxy_lw;
+        float d2 = segmentx((p - s*vec2(1.0, 0.125)).yx, s*0.125)-galaxy_lw;
+        float d3 = segmentx(p - s*vec2(1.0-0.125, 0.25), s*0.125)-galaxy_lw;
+
+        float d = 1E6;
+        d = min(d, d0);
+        d = min(d, d1);
+        d = min(d, d2);
+        d = min(d, d3);
+        return d;
+      }
+
+      float galaxy_a(vec2 p) {
+        const float s = 0.375;
+        const vec2 n = normalize(vec2(1.0, 1.0));
+
+        p += vec2(-0.5, 0.125);
+        p -= n*max(0.0, dot(p, n))*2.0;
+        p -= vec2(-0.5, 0.125);
+
+        float dx = circle(p, 0.1);
+        float d0 = segment(p, s*vec2(0.0, 0.0), s*vec2(1.0, 1.0))-galaxy_lw;
+        float d1 = segmentx(p-s*vec2(0.5, 0.0), s*0.5)-galaxy_lw;
+
+        float d = 1E6;
+        d = min(d, d0);
+        d = min(d, d1);
+        return d;
+      }
+
+      float galaxy_l(vec2 p) {
+        const float s = 0.5;
+        float d0 = segment(p, s*vec2(0.0, 0.0), s*vec2(0.0, 1.0))-galaxy_lw;
+
+        float d = 1E6;
+        d = min(d, d0);
+        return d;
+      }
+
+      float galaxy_x(vec2 p) {
+        const float s = 1.0;
+        float d0 = roundedX(p-vec2(0.0, 0.5*s), s, galaxy_lw*1.5);
+
+        float d = 1E6;
+        d = min(d, d0);
+        return d;
+      }
+
+      float galaxy_y(vec2 p) {
+        const float s = 0.5;
+        float d0 = segment(p, s*vec2(0.0, 0.0), s*vec2(1.0, 1.0))-galaxy_lw;
+        float d1 = segment(p, s*vec2(1.0/3.0, 1.0), s*2.0/3.0*vec2(1.0, 1.0))-galaxy_lw;
+
+        float d = 1E6;
+        d = min(d, d0);
+        d = min(d, d1);
+        return d;
+      }
+
+
+      float galaxy(vec2 p) {
+        p -= vec2(-0.89, -0.25);
+        float d = 1E6;
+        float dg = galaxy_g(p-vec2(0.1, 0.0));
+        vec2 pa = p;
+        pa -= vec2(0.8, 0.0);
+        pa.x = abs(pa.x);
+        pa.x = -pa.x;
+        pa -= -vec2(0.465, 0.0);
+        float da = galaxy_a(pa);
+        float dl = galaxy_l(p-vec2(0.8, 0.0));
+        float dx = galaxy_x(p-vec2(1.14, -0.25));
+        float dy = galaxy_y(p-vec2(1.0125, -0.125));
+
+        const float sm = 0.0125;
+
+        d = min(d, da);
+        d = pmax(d, -(dg-galaxy_lw*0.5), sm);
+        d = min(d, dg);
+        d = min(d, dl);
+        d = pmax(d, -(dy-galaxy_lw*0.5), sm);
+        d = min(d, dy);
+        d = pmax(d, -(dx-galaxy_lw*0.5), sm);
+        d = min(d, dx);
+
+        return d;
+      }
+
+      float star5(in vec2 p, in float r, in float rf) {
+          const vec2 k1 = vec2(0.809016994375, -0.587785252292);
+          const vec2 k2 = vec2(-k1.x,k1.y);
+          p.x = abs(p.x);
+          p -= 2.0*max(dot(k1,p),0.0)*k1;
+          p -= 2.0*max(dot(k2,p),0.0)*k2;
+          p.x = abs(p.x);
+          p.y -= r;
+          vec2 ba = rf*vec2(-k1.y,k1.x) - vec2(0,1);
+          float h = clamp( dot(p,ba)/dot(ba,ba), 0.0, r );
+          return length(p-ba*h) * sign(p.y*ba.x-p.x*ba.y);
+      }
+
+      float stars(vec2 p) {
+        const float s = 0.25;
+        vec2 ps = p;
+        vec2 ns = mod2(ps, vec2(s));
+        vec2 rr = nhash2(ns);
+        float d1 = length(ps);
+        ps -= -s*0.2*rr;
+        ps *= ROT(TAU*rr.x+TIME*0.2*(fract(rr.x) > 0.5 ? 1.0 : -1.0));
+        float d0 = star5(ps, s*0.25, 0.35);
+        vec2 nps = ns*vec2(s);
+        float dl = galaxy(nps);
+        d0 = dl < 0.075 && fract(rr.x) < length(nps) ? d0 : d1;
+        float d = d0;
+
+      //  d = abs(d) - 0.005;
+
+        return d;
+      }
+
+      vec2 starryGalaxy(vec2 p) {
+        float d1 = galaxy(p);
+        float d2 = stars(p);
+
+        float d = d1;
+        d = max(d, -(d2-0.0075));
+        d = min(d, d2);
+
+        return vec2(d1, d);
+      }
+
+      // Classic post processing
+      vec3 postProcess(vec3 col, vec2 q) {
+        col = clamp(col, 0.0, 1.0);
+        col = pow(col, 1.0/std_gamma);
+        col = col*0.6+0.4*col*col*(3.0-2.0*col);
+        col = mix(col, vec3(dot(col, vec3(0.33))), -0.4);
+        col *=0.5+0.5*pow(19.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.7);
+        return col;
+      }
+
+      // -----------------------------------------------------------------------------
+      // GALAXY
+      // -----------------------------------------------------------------------------
+
+      const float galaxy_begin    = 0.0;
+      const float galaxy_end      = BTIME(48.0);
+
+      const float galaxy_logo     = 41.1;
+      const float galaxy_disappear= 52.6;
+
+      // The path function
+      vec3 galaxy_offset(float z) {
+        float a = z*0.05;
+        vec2 p = -5.0*step(galaxy_logo, TIME)*step(TIME, galaxy_disappear)*(vec2(cos(a), sin(a*sqrt(2.0))) + vec2(cos(a*sqrt(0.75)), sin(a*sqrt(0.5))));
+        return vec3(p, z);
+      }
+
+      // The derivate of the path function
+      //  Used to generate where we are looking
+      vec3 galaxy_doffset(float z) {
+        float eps = 0.05;
+        return (galaxy_offset(z + eps) - galaxy_offset(z - eps))/(2.0*eps);
+      }
+
+      // The second derivate of the path function
+      //  Used to generate tilt
+      vec3 galaxy_ddoffset(float z) {
+        float eps = 0.5;
+        return (galaxy_doffset(z + eps) - galaxy_doffset(z - eps))/(2.0*eps);
+      }
+
+      float galaxy_globalCloudDensity(vec2 p, float n) {
+        p*=0.1;
+        float gcd = vnoise(p+10.0*hash(n)+100.0);
+        return gcd;
+      }
+
+      float galaxy_localCloudDensity(vec2 p, float n) {
+        const float aa = -0.45;
+        const mat2 pp = 2.03*rotSome;
+        float a = 0.5;
+        float s = 0.0;
+        p += 10.0*hash(n)+100.0;
+
+        s += a*vnoise(p); a *= aa; p *= pp;
+        s += a*vnoise(p); a *= aa; p *= pp;
+        s += a*vnoise(p); a *= aa; p *= pp;
+        s += a*vnoise(p); a *= aa; p *= pp;
+        s += a*vnoise(p); a *= aa; p *= pp;
+
+        return s*2.75-0.0;
+      }
+
+      vec4 galaxy_plane(vec3 ro, vec3 rd, vec3 pp, vec3 off, float aa, float n) {
+        vec2 p = pp.xy;
+        float z = pp.z;
+        float nz = pp.z-ro.z;
+
+        float ds = 1E6;
+        float r = 0.0;
+
+        float gcd = galaxy_globalCloudDensity(p, n);
+
+        float s = mix(1.0, 2.0, gcd);
+        vec2 ps = p;
+        ps *= s;
+        float sf = 1.0-tanh_approx(0.5*nz);
+      //  sf = 0;
+        for (int i = 0; i < 5; ++i) {
+          ps *= rotSome;
+          vec2 ips = ps;
+          vec2 ipn = mod2_1(ips);
+          float ir = hash(ipn+n*100.0+float(i)*10.0);
+          ips = ips -0.3*vec2(ir, fract(-23.0*ir));
+          float sf = mix(1.0, sqrt(100000.0*abs(ips.x*ips.y)), sf);
+          float ids = length(ips)*sf-0.0025;
+          if (ids < ds) {
+            r = ir;
+            ds = min(ds, ids);
+          }
+        }
+
+        float hues = mix(0.6, 0.8, r*r);
+        float sats = mix(0.6, 0.0, sqrt(r));
+        float bris = mix(0.5, 1.0, r);
+        float ts = pow(max(1.0-ds, 0.0), mix(200.0, 100.0, gcd)/sqrt(s));
+        vec3 cols = 2.0*hsv2rgb(vec3(hues, sats, bris));
+        vec4 cs = vec4(cols, ts);
+
+        float cd = gcd*galaxy_localCloudDensity(p, n);
+        float cdo = gcd*galaxy_localCloudDensity(p+vec2(0.125, 0.25), n);
+        const float level0 = 0.0;
+        const float level1 = 0.05;
+        // Some serious fake shadow & lighting of clouds
+        float cli = mix(-0.1, 1.0, 0.5 + 0.5*tanh_approx(10.0*(cd-cdo)));
+
+        float huec = (mix(-0.2, 0.05, (cd))+0.05)-0.1*PCOS(2.0*pp.z);
+        float tc = clamp(cd, 0.0, 1.0);
+        tc *= tc;
+        float satc = 0.5;
+        float bric = 1.0;
+        vec3 colc = hsv2rgb(vec3(huec, satc, bric))+cli*vec3(0.9, 0.7, 0.9);
+        vec4 cc = vec4(colc*0.66, tc);
+        cc = clamp(cc, 0.0, 1.0);
+      //  cc.xyz= sqrt(cc.xyz);
+
+        cc.w*=tanh_approx(max(0.125*0.25*n-1.0, 0.0));
+        vec4 ct = alphaBlend(cs, cc);
+        return ct;
+      }
+
+      vec3 galaxy_skyColor(vec3 ro, vec3 rd) {
+        const vec3 l = normalize(vec3(0.0, 0.0, 1));
+        const vec3 baseCol = vec3(0.5, 0.66, 1.0);
+        return 1.25*baseCol*pow(max(dot(l, normalize(rd*vec3(1.0, 0.33, 1.0))), 0.0), 50.0);
+      }
+
+      vec3 galaxy_overlay(vec3 col, vec2 p) {
+        float aa = 2.0/RESOLUTION.y;
+        const float sm = 0.02;
+        const float appear = 19.0;
+        const float period = 7.6;
+
+        if (TIME > appear && TIME <= appear + period*2.0) {
+          float tm  =TIME - appear;
+          float pf = fract(tm/period);
+          float zg = mix(1.0, 1.5, pf);
+          float off = (0.275*5.0)*zg;
+          float zi = 0.145*zg;
+          float zp = zg;
+
+          vec2 pi = p;
+          pi /= zi;
+          vec2 pp = p;
+          pp /= zp;
+
+          vec2 na = vec2(0.0, -1.0);
+          na *= ROT(mix(-0.5, 0.5, pf));
+          float da = dot(na, p) + +1.5*cos(pf*TAU);
+          da = circle(p + vec2(0.5, -1.0)*-4.0*mix(-1.0, 1.0, pf), 2.5);
+
+          float di = 1E6;
+          if (TIME > appear && TIME < appear + period*1.0) {
+            di = impulse(pi, off);
+          } else {
+            di = presents(pi, off);
+          }
+
+          float dy = pi.y;
+          dy = abs(dy);
+          dy -=0.1;
+          dy = abs(dy) - 0.02;
+
+          di = pmax(di, -dy, sm);
+          di *= zi;
+          di = pmax(di, da, sm*10.0);
+          float d = 1E6;
+          d = pmax(d, -(di-0.01), sm);
+          d = min(d, di);
+
+
+          float dg = pmin(di, -da, sm*10.0);
+          col *= mix(0.125, 1.0, exp(-4.0*(max(dg, 0.0))));
+          col = mix(col, vec3(1.0), smoothstep(-aa, aa, -d));
+        } else if (TIME > galaxy_logo && TIME <= galaxy_disappear) {
+          float st = smoothstep(galaxy_logo, galaxy_disappear, TIME);
+          float zg = mix(1.75, 2.5, st);
+          vec2 dg = starryGalaxy(p/zg)*zg;
+          float dgg = dg.x;
+          float dogg = dg.x;
+          dogg -= 0.03;
+          dogg = abs(dogg) - 0.0125;
+          dogg = abs(dogg);
+          float fo = 1.0-smoothstep(galaxy_logo+1.0, galaxy_logo+4.0, TIME);
+          col -= 0.25*exp(-5.0*max(dgg, 0.0));
+          col += (2.0*vec3(1.0, 0.75, 0.5))*exp(-mix(8.0, 1.0, fo)*max(dgg, 0.0))*mix(0.3, 1.0,fo);
+          col += (1.0*vec3(1.0, 0.75, 0.5))*exp(-max(300.0*max(dogg, 0.0), 0.0));
+          col = mix(col, vec3(1.0), smoothstep(-aa, aa, -dg.y));
+        } else if (TIME > galaxy_disappear) {
+          float fi = smoothstep(galaxy_disappear+1.0, galaxy_disappear+2.0, TIME);
+          float fo = 1.0-smoothstep(galaxy_end-2.0, galaxy_end, TIME);
+          col = mix(vec3(1.0), col, fi*fo);
+        }
+
+        return col;
+      }
+
+      vec3 galaxy_color(vec3 ww, vec3 uu, vec3 vv, vec3 ro, vec2 p) {
+        float lp = length(p);
+        vec2 np = p + 1.0/RESOLUTION.xy;
+        float warpf = smoothstep(galaxy_disappear+4.0, galaxy_end, TIME);
+        float rdd0 = 2.0+1.0*tanh_approx(lp);
+        float rdd1 = 2.0+mix(1.0, 15.0, warpf)*tanh_approx(lp);
+        float rdd  = rdd1;
+        vec3 rd = normalize(p.x*uu + p.y*vv + rdd*ww);
+        vec3 nrd = normalize(np.x*uu + np.y*vv + rdd*ww);
+
+        float planeDist = mix(3.0, 2.75, warpf);
+      //  float planeDist = mix(3.0, 2.0, fo*fo);
+        const int furthest = 8;
+        const int fadeFrom = max(furthest-4, 0);
+        float fadeDist = planeDist*float(furthest - fadeFrom);
+        float nz = floor(ro.z / planeDist);
+
+        vec3 skyCol = galaxy_skyColor(ro, rd);
+
+        // Steps from nearest to furthest plane and accumulates the color
+
+        vec4 acol = vec4(0.0);
+        const float cutOff = 0.95;
+        bool cutOut = false;
+
+        for (int i = 1; i <= furthest; ++i) {
+          float pz = planeDist*nz + planeDist*float(i);
+
+          float pd = (pz - ro.z)/rd.z;
+
+          if (pd > 0.0 && acol.w < cutOff) {
+            vec3 pp = ro + rd*pd;
+            vec3 npp = ro + nrd*pd;
+
+            float aa = 3.0*length(pp - npp);
+
+            vec3 off = galaxy_offset(pp.z);
+
+            vec4 pcol = galaxy_plane(ro, rd, pp, off, aa, nz+float(i));
+
+            float nz = pp.z-ro.z;
+            float fadeIn = exp(-2.5*max((nz - planeDist*float(fadeFrom))/fadeDist, 0.0));
+            float fadeOut = smoothstep(0.0, planeDist*0.1, nz);
+            pcol.xyz = mix(skyCol, pcol.xyz, (fadeIn));
+            pcol.w *= fadeOut;
+
+            pcol = clamp(pcol, 0.0, 1.0);
+
+            acol = alphaBlend(pcol, acol);
+          } else {
+            cutOut = true;
+            break;
+          }
+
+        }
+
+        vec3 col = alphaBlend(skyCol, acol);
+      // To debug cutouts due to transparency
+      //  col += cutOut ? vec3(1.0, -1.0, 0.0) : vec3(0.0);
+
+        col = galaxy_overlay(col, p);
+
+        float fi = smoothstep(0.0, 10.0, TIME);
+
+        col = mix(vec3(0.0), col, fi);
+
+        return col;
+      }
+
+      vec3 galaxy_effect(vec2 p, vec2 q) {
+        const float v0 = 3.0;
+        const float v1 = 6.0;
+        float v = mix(v0, v1, step(galaxy_logo, TIME));
+        float z = v*TIME;
+        vec3 ro   = galaxy_offset(z);
+        vec3 dro  = galaxy_doffset(z);
+        vec3 ddro = galaxy_ddoffset(z)*1.0;
+        vec3 up = normalize(vec3(0.0,1.0,0.0)+10.0*ddro);
+        vec3 ww = normalize(dro);
+        vec3 uu = normalize(cross(up, ww));
+        vec3 vv = normalize(cross(ww, uu));
+
+        vec3 col = galaxy_color(ww, uu, vv, ro, p);
+
+        return col;
+      }
+
+      void main(void) {
+        vec2 q = v_texcoord;
+        vec2 p = -1. + 2. * q;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+
+        vec3 col = galaxy_effect(p, q);
+
+        col = postProcess(col, q);
+
+        fragColor = vec4(col, 1.0);
       }
     </script>
 
@@ -80,46 +769,41 @@
       out vec2 v_texcoord;
 
       void main(void) {
-          // Some drivers don't like position being written here
-          // with the tessellation stages enabled also.
-          // Comment next line when Tess.Eval shader is enabled.
-          gl_Position = a_position;
+        // Some drivers don't like position being written here
+        // with the tessellation stages enabled also.
+        // Comment next line when Tess.Eval shader is enabled.
+        gl_Position = a_position;
 
-          v_texcoord = a_texcoord;
+        v_texcoord = a_texcoord;
       }
     </script>
     <script type = "text/javascript">
       const allScenes = {
-        firstScene  : {
+        intro_scene : {
           vs: "shader-vs",
           fs: "shader-fs"
-        },
-        secondScene : {
-          vs: "shader-vs",
-          fs: "shader-fs",
-          defines:["SECOND"],
-          uniforms:["iSine"],
         },
       };
 
       function onInitComplete() {
       }
 
-      function onSelectScene(gl, iTime) {
-        const tm = iTime % 1.0;
-        const scene = tm > 0.5 ? allScenes.firstScene : allScenes.secondScene;
-
-        return scene;
+      function onLoadingScene(key) {
+        const label = document.getElementById("info-label");
+        label.textContent = "Compiling: " + key;
       }
 
-      function onSetUniforms(gl, iTime, scene) {
-        gl.uniform1f(scene.uniformLocations.iSine, Math.sin(iTime));
+      function onSelectScene(gl, time) {
+        return allScenes.intro_scene;
+      }
+
+      function onSetUniforms(gl, time, scene) {
       }
     </script>
   </head>
 
   <body onload="runDemo()">
-    <h1>Demo system 1</h1>
+    <h1 id="info-label">Demo system 1</h1>
     <div class="center-flex">
       <div>
         <canvas id="glcanvas" class="gl">

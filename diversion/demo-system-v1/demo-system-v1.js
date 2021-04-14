@@ -36,8 +36,8 @@ function runDemo() {
   const height = window.innerHeight;
 
   // TODO:  Make configurable
-  // Shader is a bit hungry for FLOPs so limit to 1200 in y res
-  const finalHeight = height < 1200 ? height : 1200;
+  // Shader is a bit hungry for FLOPs so limit to 1080 in y res
+  const finalHeight = height < 1080 ? height : 1080;
   const finalWidth = (width/height)*finalHeight;
 
   canvas.width  = finalWidth;
@@ -152,9 +152,9 @@ function drawScene() {
   if (!playing) return;
 
   const before = now();
-  const iTime  = (before - startTime) / 1000.0;
+  const time  = (before - startTime) / 1000.0;
 
-  const scene = onSelectScene(gl, iTime);
+  const scene = onSelectScene(gl, time);
 
   const bcr    = canvas.getBoundingClientRect();
   const width  = bcr.width;
@@ -170,10 +170,10 @@ function drawScene() {
   gl.bindBuffer(gl.ARRAY_BUFFER, verticesTextureCoordBuffer);
   gl.vertexAttribPointer(scene.textureCoordAttribute, 2, gl.FLOAT, false, 0, 0);
 
-  gl.uniform2f(scene.uniformLocations.iResolution, width, height);
-  gl.uniform1f(scene.uniformLocations.iTime, iTime);
+  gl.uniform2f(scene.uniformLocations.resolution, width, height);
+  gl.uniform1f(scene.uniformLocations.time, time);
 
-  onSetUniforms(gl, iTime, scene);
+  onSetUniforms(gl, time, scene);
 
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, verticesIndexBuffer);
   gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
@@ -183,6 +183,8 @@ function drawScene() {
 
 function initShaders() {
   for (const key in allScenes) {
+    onLoadingScene(key);
+
     console.log("Compiling scene: " + key);
     const scene = allScenes[key];
     if (!scene) continue;
@@ -213,7 +215,7 @@ function initShaders() {
     gl.enableVertexAttribArray(scene.textureCoordAttribute);
 
     const uniformLocations = {};
-    const uniforms = ["iTime", "iResolution"].concat(scene.uniforms ? scene.uniforms : []);
+    const uniforms = ["time", "resolution"].concat(scene.uniforms ? scene.uniforms : []);
     for (const idx in uniforms) {
       const uniform = uniforms[idx];
       if (uniform) {
