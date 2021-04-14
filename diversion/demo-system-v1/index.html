@@ -60,6 +60,23 @@
       }
     </script>
 
+    <script id="fs-no-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+      uniform float time;
+      uniform vec2 resolution;
+      in vec2 v_texcoord;
+      out vec4 fragColor;
+
+      void main(void) {
+        vec3 col = vec3(1.0, 0.0, 0.0);
+
+        fragColor = vec4(col, 1.0);
+      }
+    </script>
+
     <script id="fs-intro-scene" type="x-shader/x-fragment">
       // -----------------------------------------------------------------------------
       // PRELUDE
@@ -82,9 +99,7 @@
       #define PCOS(a)         (0.5+0.5*cos(a))
       #define SCA(a)          vec2(sin(a), cos(a))
       #define MISS            1E6
-      #define INTIME(a, b)    (TIME >= a && TIME < b)
       #define BTIME(n)        (n*beat+start)
-      #define INBEAT(a, b)    (TIME >= BTIME(a) && TIME < BTIME(b))
 
       const float beat            = 0.48;
       const float start           = 41.1;
@@ -92,9 +107,8 @@
 
       const vec2 sca0             = SCA(0.0);
       const mat2 rotSome          = ROT(1.0);
-      const vec3 std_gamma        = vec3(2.2, 2.2, 2.2);
+      const vec3 std_gamma        = vec3(2.2);
 
-      // IQ's smooth min
       float pmin(float a, float b, float k) {
         float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0 );
         return mix( b, a, h ) - k*h*(1.0-h);
@@ -124,7 +138,6 @@
         return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
       }
 
-      // IQ's box
       float box(vec2 p, vec2 b) {
         vec2 d = abs(p)-b;
         return length(max(d,0.0)) + min(max(d.x,d.y),0.0);
@@ -152,7 +165,6 @@
           return length(p-min(p.x+p.y,w)*0.5) - r;
       }
 
-      // IQ's horseshoe
       float horseshoe(vec2 p, vec2 c, float r, vec2 w) {
         p.x = abs(p.x);
         float l = length(p);
@@ -775,6 +787,597 @@
       }
     </script>
 
+    <script id="fs-bb-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+      uniform float time;
+      uniform vec2 resolution;
+      in vec2 v_texcoord;
+      out vec4 fragColor;
+
+      // -----------------------------------------------------------------------------
+      // CONSTANTS
+      // -----------------------------------------------------------------------------
+      #define PI              3.141592654
+      #define TAU             (2.0*PI)
+      #define TIME            time
+      #define RESOLUTION      resolution
+      #define ROT(a)          mat2(cos(a), sin(a), -sin(a), cos(a))
+      #define PCOS(a)         (0.5+0.5*cos(a))
+      #define PSIN(a)         (0.5+0.5*sin(a))
+      #define L2(x)           dot(x, x)
+      #define SCA(a)          vec2(sin(a), cos(a))
+      #define MISS            1E6
+      #define BTIME(n)        (n*beat+start)
+
+      const float beat            = 0.48;
+      const float start           = 41.1;
+      const float bounce_freq     = 0.5/beat;
+
+      const vec2 sca0             = SCA(0.0);
+      const mat2 rot0             = ROT(0.00);
+      const mat2 rotSome          = ROT(1.0);
+      const vec3 std_gamma        = vec3(2.2);
+
+      const float galaxy_lw       = 0.025;
+
+      // -----------------------------------------------------------------------------
+      // COMMON
+      // -----------------------------------------------------------------------------
+
+      float saturate(float a) { return clamp(a, 0.0, 1.0); }
+
+      float pmin(float a, float b, float k) {
+        float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0 );
+        return mix( b, a, h ) - k*h*(1.0-h);
+      }
+
+      float pmax(float a, float b, float k) {
+        return -pmin(-a, -b, k);
+      }
+
+      float pabs(float a, float k) {
+        return pmax(a, -a, k);
+      }
+
+      float tanh_approx(float x) {
+      //  return tanh(x);
+        float x2 = x*x;
+        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
+      }
+
+      float box(vec3 p, vec3 b) {
+        vec3 q = abs(p) - b;
+        return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
+      }
+
+      float torus(vec3 p, vec2 t) {
+        vec2 q = vec2(length(p.xz)-t.x,p.y);
+        return length(q)-t.y;
+      }
+
+      float verticalCapsule(vec3 p, float h, float r) {
+        p.y -= clamp( p.y, 0.0, h );
+        return length( p ) - r;
+      }
+
+      float verticalCylinder(vec3 p) {
+        return length(p.xz);
+      }
+
+      float sphere(vec3 p, float r) {
+        return length(p) - r;
+      }
+
+      float mod1(inout float p, float size) {
+        float halfsize = size*0.5;
+        float c = floor((p + halfsize)/size);
+        p = mod(p + halfsize, size) - halfsize;
+        return c;
+      }
+
+      vec2 mod2_1(inout vec2 p) {
+        vec2 c = floor(p + 0.5);
+        p = fract(p + 0.5) - 0.5;
+        return c;
+      }
+
+      vec2 mod2(inout vec2 p, vec2 size) {
+        vec2 c = floor((p + size*0.5)/size);
+        p = mod(p + size*0.5,size) - size*0.5;
+        return c;
+      }
+
+      vec3 mod3(inout vec3 p, vec3 size) {
+        vec3 c = floor((p + size*0.5)/size);
+        p = mod(p + size*0.5, size) - size*0.5;
+        return c;
+      }
+      vec3 sphereColor(vec3 p) {
+        float lxz = length(p.xz);
+        const float d0 = 4.0;
+        const float d1 = 4.0;
+        const float m0 = PI/2.0/d0;
+        const float m1 = PI/2.0/d1;
+        float a0 = atan(p.y, lxz)+PI/4.0/d0;
+        float n0 = mod1(a0, m0);
+        float x0 = fract(n0*0.5)*2.0;
+        float a1 = atan(p.x, p.z)+PI/4.0/d1;
+        float n1 = mod1(a1, m1);
+        float x1 = fract(n1*0.5)*2.0;
+        int m = int(round(x0))^int(round(x1));
+        return m > 0 ? vec3(1.0, 1.0, 1.0) : vec3(1.0, 0.0, 0.0);
+      }
+
+      // Classic post processing
+      vec3 postProcess(vec3 col, vec2 q) {
+        col = clamp(col, 0.0, 1.0);
+        col = pow(col, 1.0/std_gamma);
+        col = col*0.6+0.4*col*col*(3.0-2.0*col);
+        col = mix(col, vec3(dot(col, vec3(0.33))), -0.4);
+        col *=0.5+0.5*pow(19.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.7);
+        return col;
+      }
+
+      // -----------------------------------------------------------------------------
+      // BB (The bouncing ball)
+      // -----------------------------------------------------------------------------
+
+      const float bb_begin        = BTIME(48.0);  // ~64
+      const float bb_end          = BTIME(208.0);
+
+      #define BB_TOLERANCE            0.0001
+      #define BB_NORM_OFF             0.001
+      #define BB_MAX_RAY_LENGTH       15.0
+      #define BB_MAX_RAY_MARCHES      60
+      #define BB_MAX_SHADOW_MARCHES   15
+      #define BB_MAX_REFLECTIONS      3
+
+      const vec3 bb_lightPos     = 2.0*vec3(4.0, 3.0, 1.5);
+      const vec3 bb_backLightPos = bb_lightPos.x*vec3(-1.0, 1.0, -1.0);
+      const vec3 bb_skyCol1      = vec3(0.2, 0.4, 0.6);
+      const vec3 bb_skyCol2      = vec3(0.4, 0.7, 1.0);
+      const vec3 bb_sunCol       = vec3(8.0,7.0,6.0)/8.0;
+      const vec3 bb_sunDir       = normalize(bb_lightPos);
+      const float bb_period      = 16.0/bounce_freq;
+
+      const float bb_bottom      = -.85;
+
+      vec3   bb_g_baseColor      = vec3(0.0);
+      float  bb_g_refFactor      = 0.0;
+      float  bb_g_time           = 0.0;
+      mat2   bb_g_rot            = rot0;
+      mat2   bb_g_srot           = rot0;
+      float  bb_g_fi             = 0.0;
+      float  bb_g_fo             = 0.0;
+      float  bb_g_fi13           = 0.0;
+      float  bb_g_fi23           = 0.0;
+
+      vec2 bb_bounce(float time) {
+        float tm = bounce_freq*time;
+        float t = fract(tm)-0.5;
+
+        return vec2(t, t*t-0.25);
+      }
+
+      void bb_bounce(inout vec3 p, float r, float amp, float time) {
+        mat2 rot = bb_g_rot;
+        vec2 bh = bb_bounce(time);
+        float h = r+bb_bottom-amp*bh.y;
+        p.y -= h;
+        float f = smoothstep(-0.5, 0.25, bh.x);
+        p.zy *= rot;
+        p.xz *= rot;
+        float a = 3.0*TAU*time;
+        float sx = 1.0-0.25*PSIN(a);
+        float sz = 1.0-0.25*PCOS(a);
+        p.x *= mix(sx, 1.0, f);
+        p.z *= mix(sz, 1.0, f);
+      }
+
+      float bb_planeIntersect(vec3 ro, vec3 rd, float mint) {
+        vec3 p = ro + rd*mint;
+        return (bb_bottom-p.y)/rd.y;
+      }
+
+      vec3 bb_skyColor(vec3 rd) {
+        float sunDot = max(dot(rd, bb_sunDir), 0.0);
+        vec3 final = vec3(0.);
+
+        float roundBox = length(max(abs(rd.xz/max(0.0,rd.y))-vec2(0.5, 0.5),0.0))-0.1;
+        final += vec3(0.75)* pow(saturate(1.0 - roundBox*0.5), 9.0);
+
+        final += mix(bb_skyCol1, bb_skyCol2, rd.y);
+        final += 0.5*bb_sunCol*pow(sunDot, 20.0);
+        final += 4.0*bb_sunCol*pow(sunDot, 400.0);
+        return final;
+      }
+
+      float bb_df1(vec3 p) {
+        const float sr  = 0.5;
+        const float amp = 6.0;
+        float gtime= TIME - bb_begin;
+        float fi   = bb_g_fi;
+        float fo   = bb_g_fo;
+        float ltime= bb_g_time;
+        mat2  rot  = bb_g_rot;
+        mat2  srot = bb_g_srot;
+        float fi13 = bb_g_fi13;
+        float fi23 = bb_g_fi23;
+
+
+        float fifo = fi*fo;
+
+        vec3 p0 = p;
+        bb_bounce(p0, sr, amp, gtime);
+        float d0 = sphere(p0, sr);
+        vec3 c0 = sphereColor(p0);
+        float rf = 0.75;
+        vec3 bc = c0;
+        float d = d0;
+
+      #ifdef BB_EFFECT_0
+        vec3 p1 = p;
+        p1 -= vec3(-2.0*ltime*bounce_freq, -0.5, 0.0);
+        float d1 = max(-p1.x-1.0+2.0*7.0, -(-p1.x-1.0+2.0*14.0));
+        mod1(p1.x, 2.0);
+
+        vec2 tsz = 0.75*fifo*vec2(1.0, 0.1);
+        float d2 = torus(p1, tsz);
+        vec3 c2 = sphereColor(p1);
+        d2 = max(d2, d1);
+        if (d2 < d) {
+          d = d2;
+          bc = c2;
+        }
+      #endif
+
+      #ifdef BB_EFFECT_1
+        const float cl = 5.0;
+        const float cr = 0.75;
+        const float wr = 0.125;
+        float d6 = -(p.x-mix(4.0, -15.0, fi*fo));
+
+        vec3 p1 = p;
+        p1.z = abs(p1.z);
+        p1 -= vec3(0.0, 0.0, 2.5);
+        vec3 p2 = p1;
+        vec3 p4 = p1;
+        p1.z = abs(p1.z);
+        p1 -= vec3(-2.0*ltime*bounce_freq, 0.0, 0.5);
+        vec3 p5 = p1;
+        p1 = p1.zxy;
+        float d1 = verticalCylinder(p1)-0.125;
+        d1 = max(d1, d6);
+
+        p2 -= vec3(-10.0*ltime, 0.75-0.025, 0.0);
+        float d7 = p2.x -cl - cl*2.0*3.0;
+        float d8 = p2.x -cl - cl*2.0*12.0;
+
+        mod1(p2.x, cl*2.0);
+        p2.x += cl*0.5;
+        vec3 p3 = p2;
+        p2 = p2.zxy;
+        float d2 = verticalCapsule(p2, cl, cr);
+        d2 = max(d2, -d7);
+        d2 = max(d2, d8);
+
+        p3.z = abs(p3.z);
+        p3 -= vec3(0.0, 0.0, cr);
+        mod1(p3.x, wr*4.0);
+        float d3 = sphere(p3, wr);
+        d2 = pmax(d2, -d3, 0.05);
+        float dg = -d3;
+
+        mod1(p5.x, 1.2345);
+        p5 = p5.zxy;
+        float d5 = torus(p5, 0.125*vec2(1.0, 0.25));
+        d1 = pmax(d1, -d5, 0.025);
+        float dgg = -d5;
+
+        float ds = d1;
+        ds = min(ds ,d2);
+
+        if (ds < d) {
+          bc = vec3(0.0);
+          rf = 0.5;
+          d = ds;
+        }
+
+        if (dg == d) {
+          bc = vec3(2.0, 0.9, 0.9)*2.0;
+          rf = 0.5;
+        }
+
+        if (dgg == d) {
+          bc = vec3(0.9, 2.0, 0.9)*3.0;
+          rf = 1.0;
+        }
+      #endif
+
+      #ifdef BB_EFFECT_2
+        vec3 p1 = p;
+        float a = -tanh_approx(3.0*sin(ltime*PI*bounce_freq));
+        float r = mix(0.70, 0.275, smoothstep(0.0, bb_period, ltime));
+        p1 -= vec3(0.0, 0.75, (0.56+r)*sin(PI/4.0+ltime*PI*bounce_freq));
+        p1.yz *= ROT(a);
+
+        vec2 tsz = r*fifo*vec2(1.0, 0.1);
+        float d1 = torus(p1, tsz);
+        vec3 c1 = sphereColor(p1);
+        d = pmax(d, -d1, 0.5);
+        if (d1 < d) {
+          d = d1;
+          bc = c1;
+        }
+      #endif
+
+      #ifdef BB_EFFECT_3
+        float bz = 0.66*fi*fo;
+        vec3 p1 = p;
+        p1.zx *= rot;
+        p1 /= bz;
+        p1.x = pabs(p1.x, 1.);
+        p1.z = pabs(p1.z, 1.);
+        p1 -= vec3(0.0, 0.25, 0.0)+vec3(1.0, 0.0, 1.0)*mix(3.0, 0.75, fi13*(1.0-fi23));
+        p1.yz *= transpose(rot);
+        p1.xy *= rot;
+        p1.xz *= srot;
+        float d1 = box(p1, vec3(0.75))-0.125;
+        vec3 p2 = p1;
+        const float sz = 0.9;
+        vec3 n2 = mod3(p2, vec3(sz));
+        float d2 = sphere(p2, sz*0.25);
+        d1 = pmax(d1, -d2, 0.0275);
+        d1 *= bz;
+
+        d1 = pmax(d1, -d, 0.5);
+
+        if(d1 < d) {
+          bc = vec3(0.0);
+          rf = 0.5;
+          d = d1;
+        }
+      #endif
+
+      #ifdef BB_EFFECT_4
+        vec3 p1 = p;
+        p1.xz *= rot;
+        p1.x -= mix(10.0, 2.0, fi*fo);
+        p1.y -= 0.5;
+
+        float d1 = 1E6;
+        float pz = 1.0;
+        float sz = 0.75*fifo;
+        float m13 = fi13*fo;
+        float m23 = fi23*fo;
+        vec3 c1 = vec3(0.0);
+        float rf1 = 0.33;
+        for (int i = 0; i < 3; ++i) {
+          bool even = (i & 0x1) == 0;
+          p1.xz *= rot;
+          p1.xy *= rot;
+          float dd = sphere(p1, sz);
+          float dd1 = torus(p1, sz*vec2(1.0+mix(-0.3, 0.3, m13), 0.1));
+          dd = pmax(dd, -(dd1-0.1), 0.05);
+          dd = min(dd, dd1);
+          float ddd = dd - 0.2;
+          d1 = pmax(d1, -ddd*pz, 0.05);
+          if (dd*pz < d1) {
+            d1 = dd*pz;
+            rf1 = even ? 0.5 : 0.99;
+          }
+          const float zz = 0.35;
+          p1 /= zz;
+          pz *= zz;
+          vec3 sp1 = sign(p1);
+          p1 = abs(p1);
+          p1 -= vec3(mix(0.125, 0.66, m23)*sz/zz);
+        }
+
+        if (d1 < d) {
+          bc = c1;
+          rf = rf1;
+          d = d1;
+        }
+      #endif
+
+        bb_g_refFactor = rf;
+        bb_g_baseColor = bc;
+
+        return d;
+      }
+
+      float bb_df(vec3 p) {
+        return bb_df1(p);
+      }
+
+      vec3 bb_normal(vec3 pos) {
+        vec3 eps = vec3(BB_NORM_OFF, 0.0, 0.0);
+        vec3 nor;
+
+        nor.x = bb_df(pos+eps.xyy) - bb_df(pos-eps.xyy);
+        nor.y = bb_df(pos+eps.yxy) - bb_df(pos-eps.yxy);
+        nor.z = bb_df(pos+eps.yyx) - bb_df(pos-eps.yyx);
+
+        return normalize(nor);
+      }
+
+      float bb_rayMarch(vec3 ro, vec3 rd, float initial, out float nearest, out int iter) {
+        float t = initial;
+
+        float n = 1E6;
+        int ii = 0;
+
+        for (int i = 0; i < BB_MAX_RAY_MARCHES; ++i) {
+          ii = i;
+          vec3 p = ro + rd*t;
+
+          float d = bb_df(p);
+      //    d *= 0.9;
+          n = min(n, d);
+
+          if (d < BB_TOLERANCE || t >= BB_MAX_RAY_LENGTH) break;
+
+          t += d;
+        }
+
+        iter = ii;
+        nearest = n;
+
+        return t < BB_MAX_RAY_LENGTH ? t : MISS;
+      }
+
+      float bb_softShadow(vec3 ps, vec3 ld, float mint, float k) {
+
+        float res = 1.0;
+        float t = mint*6.0;
+        int mat;
+        for (int i=0; i < BB_MAX_SHADOW_MARCHES; ++i) {
+          vec3 p = ps + ld*t;
+          float d = bb_df(p);
+          res = min(res, k*d/t);
+          if (res < BB_TOLERANCE) break;
+
+          t += max(d, mint);
+        }
+        return clamp(res, 0.0, 1.0);
+      }
+
+      vec3 bb_render(vec3 ro, vec3 rd) {
+        vec3 finalCol = vec3(0.0);
+
+        float aggRefFactor = 1.0;
+
+        vec3 bg = bb_skyColor(rd);
+        int titer = 0;
+        int tref = 0;
+
+        for (int rc = 0; rc < BB_MAX_REFLECTIONS; ++rc) {
+            if (aggRefFactor < 0.05) break;
+
+            vec3 sky = bb_skyColor(rd);
+
+            const float mint = 0.05;
+            float tp = bb_planeIntersect(ro, rd, mint);
+
+            int iter;
+            float nearest;
+            float tm = bb_rayMarch(ro, rd, mint, nearest, iter);
+            titer += iter;
+            ++tref;
+
+            vec3 baseColor  = bb_g_baseColor;
+            float refFactor = bb_g_refFactor;
+
+            float shine = exp(-5.0*nearest);
+            const float shinef = 0.125;
+            const vec3 shineCol = vec3(1.25).zyx;
+            shine *= shinef;
+
+            if(tm >= MISS && tp <= 0.0) {
+              // We hit the sky
+              finalCol += aggRefFactor*mix(sky, shineCol, shine);
+              break;
+            }
+
+            vec3 p = ro + tm*rd;
+            vec3 nor = bb_normal(p);
+            float fakeAo = 1.0 - smoothstep(0.5, 1.2, float(iter)/float(BB_MAX_RAY_MARCHES));
+
+            vec3 pp = ro + tp*rd;
+            vec2 pp1 = pp.xz;
+
+            pp1.x -= -2.0*TIME*bounce_freq;
+            pp1 *= sqrt(0.5);
+            vec2 np1 = mod2_1(pp1);
+
+            if (tp < tm && tp >= 0.0) {
+              // Hit plane
+              p = pp;
+              float dd = min(abs(pp1.x), abs(pp1.y));
+              baseColor = vec3(0.75)-0.25*exp(-50.0*dd);
+              refFactor = 0.8;
+              nor = vec3(0.0, 1.0, 0.0);
+              fakeAo = 1.0;
+            }
+
+            refFactor *= pow(abs(dot(nor, rd)), 0.25);
+            vec3 ld  = normalize(bb_lightPos - p);
+            vec3 bld = normalize(bb_backLightPos - p);
+
+
+            float dif  = max(dot(nor, ld), 0.0);
+            float bdif = max(dot(nor, bld), 0.0);
+            float spe  = pow(max(dot(reflect(ld, nor), rd), 0.0), 40.0);
+            float sha  = bb_softShadow(p, ld, 0.1, 4.0);
+            vec3 col = 0.8*baseColor*mix(0.2, 1.0, dif*sha*fakeAo) + 0.25*spe;
+            col += baseColor*mix(0.0, 0.2, bdif);
+            col *= refFactor;
+
+            float yy = 1.0-exp(-4.0*float(iter)/float(BB_MAX_RAY_MARCHES));
+
+            col = mix(col, shineCol, max(shine, yy*shinef));
+            finalCol += aggRefFactor*(col);
+
+            aggRefFactor *= (1.0 - refFactor);
+
+            ro = p;
+            rd = reflect(rd, nor);
+        }
+
+        return finalCol;
+      }
+
+      vec3 bb_effect(vec2 p, vec2 q) {
+        float gtime = TIME-bb_begin;
+        float ltime = mod(gtime, bb_period);
+        bb_g_time   = ltime;
+
+        bb_g_rot    = ROT(TAU*TIME*0.75/4.0);
+        bb_g_srot   = ROT(TAU*TIME*0.75/16.0);
+        bb_g_fi     = smoothstep(0.0, 1.0, ltime);
+        bb_g_fo     = 1.0-smoothstep(bb_period-1.25, bb_period-0.25, ltime);
+        bb_g_fi13   = smoothstep(bb_period*1.0/3.0-0.5, bb_period*1.0/3.0+0.5, ltime);
+        bb_g_fi23   = smoothstep(bb_period*2.0/3.0-0.5, bb_period*2.0/3.0+0.5, ltime);
+
+        vec3 ro = 0.6*vec3(6.0, 5.0, -2.0);
+        vec3 up = vec3(0.0, 1.0, 0.0);
+
+        ro.xz *= ROT(sin(TIME*sqrt(0.3)));
+
+        float fi = smoothstep(0.0, 4.0, gtime);
+
+        vec3 la0 = bb_lightPos;
+        vec3 la1 = vec3(0.0);
+        vec3 la  = mix(la0, la1, fi*fi*fi);
+
+        vec3 ww = normalize(la - ro);
+        vec3 uu = normalize(cross(up, ww));
+        vec3 vv = normalize(cross(ww,uu));
+        vec3 rd = normalize(p.x*uu + p.y*vv + 2.5*ww);
+
+        vec3 col = bb_render(ro, rd);
+
+        col = mix(vec3(1.0), col, fi);
+        return col;
+      }
+
+      void main(void) {
+        vec2 q = v_texcoord;
+        vec2 p = -1. + 2. * q;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+
+        vec3 col = bb_effect(p, q);
+
+        col = postProcess(col, q);
+
+        fragColor = vec4(col, 1.0);
+      }
+    </script>
+
     <script id="fs-cube-scene" type="x-shader/x-fragment">
       // -----------------------------------------------------------------------------
       // PRELUDE
@@ -799,9 +1402,7 @@
       #define L2(x)           dot(x, x)
       #define SCA(a)          vec2(sin(a), cos(a))
       #define MISS            1E6
-      #define INTIME(a, b)    (TIME >= a && TIME < b)
       #define BTIME(n)        (n*beat+start)
-      #define INBEAT(a, b)    (TIME >= BTIME(a) && TIME < BTIME(b))
 
       const float beat            = 0.48;
       const float start           = 41.1;
@@ -814,7 +1415,6 @@
       // COMMON
       // -----------------------------------------------------------------------------
 
-      // IQ's smooth min
       float pmin(float a, float b, float k) {
         float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0 );
         return mix( b, a, h ) - k*h*(1.0-h);
@@ -1144,9 +1744,38 @@
 
     <script type = "text/javascript">
       const allScenes = {
+        no_scene : {
+          vs: "vs-default",
+          fs: "fs-no-scene"
+        },
         intro_scene : {
           vs: "vs-default",
           fs: "fs-intro-scene"
+        },
+        bb_scene_0 : {
+          vs: "vs-default",
+          fs: "fs-bb-scene",
+          defines: ["BB_EFFECT_0"],
+        },
+        bb_scene_1 : {
+          vs: "vs-default",
+          fs: "fs-bb-scene",
+          defines: ["BB_EFFECT_1"],
+        },
+        bb_scene_2 : {
+          vs: "vs-default",
+          fs: "fs-bb-scene",
+          defines: ["BB_EFFECT_2"],
+        },
+        bb_scene_3 : {
+          vs: "vs-default",
+          fs: "fs-bb-scene",
+          defines: ["BB_EFFECT_3"],
+        },
+        bb_scene_4 : {
+          vs: "vs-default",
+          fs: "fs-bb-scene",
+          defines: ["BB_EFFECT_4"],
         },
         cube_scene : {
           vs: "vs-default",
@@ -1161,16 +1790,34 @@
         return n*beat+start;
       }
 
+      const intro_end = btime(48.0);
+      const bb_end_0  = btime(80.0);
+      const bb_end_1  = btime(112.0);
+      const bb_end_2  = btime(144.0);
+      const bb_end_3  = btime(176.0);
+      const bb_end_4  = btime(208.0);
+      const cube_end  = btime(336.0);
+
       function onInitComplete() {
+        const information = document.getElementById("info-label");
+        information.style.display = "none";
       }
 
-      function onLoadingScene(key) {
+      async function onLoadingScene(key) {
         const label = document.getElementById("info-label");
         label.textContent = "Compiling: " + key;
+        await sleep(50);
       }
 
       function onSelectScene(gl, time) {
-        return allScenes.cube_scene;
+        if (time < intro_end) return allScenes.intro_scene;
+        if (time < bb_end_0)  return allScenes.bb_scene_0;
+        if (time < bb_end_1)  return allScenes.bb_scene_1;
+        if (time < bb_end_2)  return allScenes.bb_scene_2;
+        if (time < bb_end_3)  return allScenes.bb_scene_3;
+        if (time < bb_end_4)  return allScenes.bb_scene_4;
+        if (time < cube_end)  return allScenes.cube_scene;
+        return allScenes.no_scene;
       }
 
       function onSetUniforms(gl, time, scene) {

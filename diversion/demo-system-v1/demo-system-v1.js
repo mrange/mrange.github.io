@@ -25,12 +25,16 @@ function now() {
   return (new Date).getTime();
 }
 
+function sleep(milliseconds) {
+  return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
 let initialized = false;
 let playing = false;
 
 let startTime = now();
 
-function runDemo() {
+async function runDemo() {
   audio = document.getElementById("music");
   audio.onplay = () => play();
   audio.onplaying = () => update();
@@ -45,9 +49,8 @@ function runDemo() {
 
   // TODO:  Make configurable
   // Shader is a bit hungry for FLOPs so limit to 1080 in y res
-  const finalHeight = height < 1080 ? height : 1080;
-  const finalWidth = (width/height)*finalHeight;
-
+  const finalHeight = Math.round(height < 1080 ? height : 1080);
+  const finalWidth = Math.round((width/height)*finalHeight);
   canvas.width  = finalWidth;
   canvas.height = finalHeight;
 
@@ -64,7 +67,7 @@ function runDemo() {
     // Initialize the shaders; this is where all the lighting for the
     // vertices and so forth is established.
 
-    initShaders();
+    await initShaders();
 
     // Here's where we call the routine that builds all the objects
     // we'll be drawing.
@@ -210,9 +213,9 @@ function drawScene() {
   requestAnimationFrame(drawScene);
 }
 
-function initShaders() {
+async function initShaders() {
   for (const key in allScenes) {
-    onLoadingScene(key);
+    await onLoadingScene(key);
 
     console.log("Compiling scene: " + key);
     const scene = allScenes[key];
