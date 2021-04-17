@@ -926,8 +926,13 @@
       // BB (The bouncing ball)
       // -----------------------------------------------------------------------------
 
+      #ifdef BB_EFFECT_5
+      const float bb_begin        = BTIME(336.0);  // ~202
+      const float bb_end          = BTIME(368.0);
+      #else
       const float bb_begin        = BTIME(48.0);  // ~64
       const float bb_end          = BTIME(208.0);
+      #endif
 
       #define BB_TOLERANCE            0.0001
       #define BB_NORM_OFF             0.001
@@ -1427,11 +1432,15 @@
 
         ro.xz *= ROT(sin(TIME*sqrt(0.3)));
 
+      #ifdef BB_EFFECT_5
+        vec3 la  = vec3(0.0);
+      #else
         float fi = smoothstep(0.0, 4.0, gtime);
 
         vec3 la0 = bb_lightPos;
         vec3 la1 = vec3(0.0);
         vec3 la  = mix(la0, la1, fi*fi*fi);
+      #endif
 
         vec3 ww = normalize(la - ro);
         vec3 uu = normalize(cross(up, ww));
@@ -1440,7 +1449,11 @@
 
         vec3 col = bb_render(ro, rd);
 
+      #ifdef BB_EFFECT_5
+        col = mix(vec3(0.0), col, smoothstep(bb_begin, bb_begin+beat, TIME)*smoothstep(bb_end, bb_end-beat, TIME));
+      #else
         col = mix(vec3(1.0), col, fi);
+      #endif
         return col;
       }
 
@@ -1496,6 +1509,8 @@
       const vec3 std_gamma        = vec3(2.2);
 
       const float cube_begin      = BTIME(240.0); // ~156
+      const float cube_flash0     = BTIME(334.0);
+      const float cube_flash1     = BTIME(335.0);
       const float cube_end        = BTIME(336.0);
 
       // GLOBAL MUTABLES
@@ -1813,8 +1828,9 @@
         vec3 col = cube_effect(p, q);
 
         col = postProcess(col, q);
-        col = clamp(col, 0.0, 1.0);
         col = mix(vec3(1.0), col, smoothstep(cube_begin+0.25, cube_begin+1.5, TIME));
+        col = mix(vec3(1.0), col, step(TIME, cube_flash0)+smoothstep(cube_flash0, cube_flash1, TIME));
+        col = mix(col, vec3(smoothstep(cube_end, cube_flash1, TIME)), step(cube_flash1, TIME));
 
         fragColor = vec4(col, 1.0);
       }
