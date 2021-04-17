@@ -1470,6 +1470,500 @@
       }
     </script>
 
+    <script id="fs-credits-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+      uniform float time;
+      uniform vec2 resolution;
+      in vec2 v_texcoord;
+      out vec4 fragColor;
+
+      // -----------------------------------------------------------------------------
+      // COMMON
+      // -----------------------------------------------------------------------------
+
+      #define PI              3.141592654
+      #define TAU             (2.0*PI)
+      #define TIME            time
+      #define TTIME           (TAU*time)
+      #define RESOLUTION      resolution
+      #define ROT(a)          mat2(cos(a), sin(a), -sin(a), cos(a))
+      #define SCA(a)          vec2(sin(a), cos(a))
+      #define MISS            1E6
+      #define BTIME(n)        (n*beat+start)
+      #define PCOS(x)         (0.5+0.5*cos(x))
+      #define L2(x)           dot(x, x)
+
+      const float beat            = 0.48;
+      const float start           = 41.1;
+      const float bounce_freq     = 0.5/beat;
+
+      const float corner0 = 0.02;
+      const float corner1 = 0.075;
+      const float topy    = 0.0475+corner0*0.5;
+
+      const float ff_start  = BTIME(208.0);
+      const float ff_end    = BTIME(240.0);
+
+      float hash(vec2 co) {
+        return fract(sin(dot(co, vec2(12.9898,58.233))) * 13758.5453);
+      }
+
+      vec2 hextile(inout vec2 p) {
+        const vec2 sz       = vec2(1.0, sqrt(3.0));
+        const vec2 hsz      = 0.5*sz;
+
+        vec2 p1 = mod(p, sz)-hsz;
+        vec2 p2 = mod(p - hsz, sz)-hsz;
+        vec2 p3 = mix(p2, p1, vec2(dot(p1, p1) < dot(p2, p2)));
+        vec2 n = ((p3 - p + hsz)/sz);
+        p = p3;
+
+        // Rounding to make hextile 0,0 well behaved
+        return round(n*2.0)/2.0;
+      }
+
+      float tanh_approx(float x) {
+      //  return tanh(x);
+        float x2 = x*x;
+        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
+      }
+
+      float vmax(vec2 v) {
+        return max(v.x, v.y);
+      }
+
+      float corner(vec2 p) {
+        return length(max(p, vec2(0))) + vmax(min(p, vec2(0)));
+      }
+
+      float roundedBox(vec2 p, vec2 b, vec4 r) {
+          r.xy = (p.x>0.0)?r.xy : r.zw;
+          r.x  = (p.y>0.0)?r.x  : r.y;
+          vec2 q = abs(p)-b+r.x;
+          return min(max(q.x,q.y),0.0) + length(max(q,0.0)) - r.x;
+      }
+
+      float box(vec2 p, vec2 b) {
+          vec2 d = abs(p)-b;
+          return length(max(d,0.0)) + min(max(d.x,d.y),0.0);
+      }
+
+      float circle(vec2 p, float r) {
+        return length(p)-r;
+      }
+
+      float segmentx(vec2 p) {
+        float d0 = abs(p.y);
+        float d1 = length(p);
+        return p.x > 0.0 ? d1 : d0;
+      }
+
+      float parallelogram(vec2 p, float wi, float he, float sk) {
+          vec2 e = vec2(sk,he);
+          p = (p.y<0.0)?-p:p;
+          vec2  w = p - e; w.x -= clamp(w.x,-wi,wi);
+          vec2  d = vec2(dot(w,w), -w.y);
+          float s = p.x*e.y - p.y*e.x;
+          p = (s<0.0)?-p:p;
+          vec2  v = p - vec2(wi,0); v -= e*clamp(dot(v,e)/dot(e,e),-1.0,1.0);
+          d = min( d, vec2(dot(v,v), wi*he-abs(s)));
+          return sqrt(d.x)*sign(-d.y);
+      }
+
+      vec2 refl(vec2 p, vec2 n) {
+        p -= n*min(0.0, dot(p, n))*2.0;
+        return p;
+      }
+
+      float mod1(inout float p, float size) {
+        float halfsize = size*0.5;
+        float c = floor((p + halfsize)/size);
+        p = mod(p + halfsize, size) - halfsize;
+        return c;
+      }
+
+      float pmin(float a, float b, float k) {
+          float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0);
+          return mix( b, a, h ) - k*h*(1.0-h);
+      }
+
+      float pmax(float a, float b, float k) {
+        return -pmin(-a, -b, k);
+      }
+
+      float pabs(float a, float k) {
+        return pmax(a, -a, k);
+      }
+
+      float commodore(vec2 p, out bool isRed) {
+        vec2 op = p;
+        p.y = abs(p.y);
+        float d0 = circle(p*vec2(1.0*0.865, 1.0), 0.865);
+        d0 = abs(d0)- 0.275;
+        float d1 = p.x-0.375;
+        float d2 = box(p-vec2(0.385+(1.35-0.385)*0.5, 0.235), vec2((1.35-0.385)*0.5, 0.2));
+        const vec2 l3 = vec2(1.35, 0.435)-vec2(0.92, 0.035);
+        const vec2 n3 = normalize(vec2(l3.y, -l3.x));
+        const float m3 = -dot(vec2(1.35, 0.435), n3);
+        float d3 = dot(p, n3)+m3;
+        float d = d0;
+        d = pmax(d, d1, 0.025);
+        d = pmin(d, d2, 0.025);
+        d = pmax(d, d3, 0.025);
+        isRed = op.y > 0.0 && d2 <= 0.0025;
+        return d;
+      }
+
+      float height_(vec2 p) {
+        p *= 0.5;
+        vec2 p0 = p;
+        vec2 n0 = hextile(p0);
+        float h = hash(n0);
+        p0 *= ROT(TAU*h);
+        const float ss = 0.3;
+        bool isRed;
+        float d0 = commodore(p0/ss, isRed)*ss;
+        float d = d0;
+        d -= 0.02;
+        const float aa = 0.02;
+        float a = fract(127.0*h) > 0.5 ? 0.125 : -0.25;
+        return a*tanh_approx(smoothstep(aa, -aa, d));
+      }
+
+      float height(vec2 p) {
+        const mat2 rot1 = ROT(1.23);
+        float tm = 123.0+TTIME/320.0;
+        p += 5.0*vec2(cos(tm), sin(tm*sqrt(0.5)));
+        const float aa = -0.33;
+        const mat2  pp = (1.0/aa)*rot1;
+        float h = 0.0;
+        float a = 1.0;
+        float d = 0.0;
+
+        float tm2 = 0.5*TIME;
+        h += 1.0*sin(0.75*tm2+dot(normalize(vec2(-1.0, 1.5)), 4.0*p));
+        h += 0.5*sin(tm2+dot(normalize(vec2(1.0, 1.0)), 7.0*p));
+        h += 0.25*sin(1.25*tm2+dot(normalize(vec2(-2, 1.0)), 13.0*p));
+        h += 1.75;
+        h*= 0.2;
+
+        for (int i = 0; i < 5; ++i) {
+          h += a*height_(p);
+          d += a;
+          a *= aa;
+          p *= pp;
+        }
+        const float hf = -0.125;
+        return hf*(h/d)+hf;
+      }
+
+      vec3 normal(vec2 p) {
+        vec2 v;
+        vec2 w;
+        vec2 e = vec2(4.0/RESOLUTION.y, 0);
+
+        vec3 n;
+        n.x = height(p + e.xy) - height(p - e.xy);
+        n.y = 2.0*e.x;
+        n.z = height(p + e.yx) - height(p - e.yx);
+
+        return normalize(n);
+      }
+
+
+      float omega_a(vec2 p) {
+        p.x = abs(p.x);
+        float db = roundedBox(p, vec2 (0.19, 0.166), vec4(corner1, corner0, corner1, corner0));
+        float dc = corner(p-vec2(0.065, -topy))-corner0;
+
+        float d = db;
+        d = max(d, -dc);
+
+        return d;
+      }
+
+      float omega_e(vec2 p) {
+        float db = roundedBox(p, vec2 (0.19, 0.166), vec4(corner0));
+        vec2 ps = p;
+        ps -= vec2(-0.055, -topy);
+        ps.x = -ps.x;
+        float ds = segmentx(ps)-corner0;
+
+        float d = db;
+        d = max(d, -ds);
+        return d;
+      }
+
+      float omega_f(vec2 p) {
+        float db = roundedBox(p, vec2 (0.19, 0.166), vec4(corner0));
+        vec2 pc = p;
+        pc -= vec2(-0.065, -topy);
+        pc.x = -pc.x;
+        float dc = corner(pc)-corner0;
+
+        float d = db;
+        d = max(d, -dc);
+        return d;
+      }
+
+      float omega_i(vec2 p) {
+        return roundedBox(p, vec2 (0.066, 0.166), vec4(corner0));
+      }
+
+      float omega_g(vec2 p) {
+        float db = roundedBox(p, vec2 (0.19, 0.166), vec4(corner0, corner1, corner1, corner1));
+        float dc = corner(-(p-vec2(-0.045, -0.057)));
+        dc = abs(dc) - corner0;
+        float dd = max(p.x-0.065, p.y-topy-corner0);
+        float d = db;
+        d = max(d, -max(dc, dd));
+        return d;
+      }
+
+      float omega_l(vec2 p) {
+        float db = roundedBox(p, vec2 (0.175, 0.166), vec4(corner0, corner0, corner0, corner1));
+        float dc = corner(-(p-vec2(-0.027, -0.055)))-corner0;
+        float d = db;
+        d = max(d, -dc);
+        return d;
+      }
+
+
+      float omega_m(vec2 p) {
+        float db = roundedBox(p, vec2 (0.255, 0.166), vec4(corner1, corner0, corner0, corner0));
+        p.x = abs(p.x);
+        float dl = abs(p.x-0.095)-corner0*2.0;
+        float dt = p.y-topy;
+
+        float d = db;
+        d = max(d, -max(dl,dt));
+
+        return d;
+      }
+
+      float omega_o(vec2 p) {
+        float db = roundedBox(p, vec2 (0.19, 0.166), vec4(corner1));
+        float di = roundedBox(p, vec2 (0.19, 0.166)*0.45, vec4(corner0));
+        float d = db;
+        d = max(d, -di);
+        return d;
+      }
+
+      float omega_r(vec2 p) {
+        p.x = abs(p.x);
+        float db = roundedBox(p, vec2 (0.19, 0.166), vec4(corner1, corner0, corner1, corner0));
+        float dc = corner(p-vec2(0.065, -topy))-corner0;
+
+        float d = db;
+        d = max(d, -dc);
+
+        return d;
+      }
+
+      float omega_x(vec2 p) {
+        p = abs(p);
+        float db = parallelogram(p-vec2(0.03, 0.0), 0.065-corner0, 0.166-corner0, 0.1)-corner0;
+
+        float d = db;
+
+        return d;
+      }
+
+      float omega_y(vec2 p) {
+        if(p.y > -0.044) p.x = abs(p.x);
+        float db = parallelogram(p-vec2(0.03, 0.0), 0.065-corner0, 0.166-corner0, 0.1)-corner0;
+
+        float d = db;
+
+        return d;
+      }
+
+      float firefoxText(vec2 p) {
+        vec2 pn = p;
+        pn.y -= topy;
+        float dn = abs(pn.y)-corner0;
+        p.x += 1.225;
+
+        vec2 pf = p;
+        pf.x -= 0.775;
+        float ps = sign(pf.x);
+        pf.x = abs(pf.x);
+        pf.x -= 0.775;
+        pf.x *= ps;
+        float df = omega_f(pf);
+
+        vec2 pi = p;
+        pi.x -= 0.325;
+        float di = omega_i(pi);
+
+        vec2 pr = p;
+        pr.x -= 0.65;
+        float dr = omega_r(pr);
+
+        vec2 pe = p;
+        pe.x -= 1.1;
+        float de = omega_e(pe);
+
+        vec2 po = p;
+        po.x -= 2.0;
+        float do_ = omega_o(po);
+
+        vec2 px = p;
+        px.x -= 2.45;
+        float dx = omega_x(px);
+
+        float d = 1E6;
+        d = min(d, df);
+        d = min(d, di);
+        d = min(d, dr);
+        d = min(d, de);
+        d = min(d, do_);
+        d = min(d, dx);
+        d = max(d, -dn);
+        return d;
+      }
+
+      float galaxyText(vec2 p) {
+        vec2 pn = p;
+        pn.y -= topy;
+        float dn = abs(pn.y)-corner0;
+        p.x += 1.105;
+
+        vec2 pg = p;
+        pg.x -= 0.0;
+        float dg = omega_g(pg);
+
+        vec2 pa = p;
+        pa.x -= 0.88;
+        pa.x = abs(pa.x);
+        pa.x -= 0.43;
+        float da = omega_a(pa);
+
+        vec2 pl = p;
+        pl.x -= 0.88;
+        float dl = omega_l(pl);
+
+        vec2 px = p;
+        px.x -= 1.755;
+        float dx = omega_x(px);
+
+        vec2 py = p;
+        py.x -= 2.205;
+        float dy = omega_y(py);
+
+        float d = 1E6;
+        d = min(d, dg);
+        d = min(d, da);
+        d = min(d, dl);
+        d = min(d, dx);
+        d = min(d, dy);
+        d = max(d, -dn);
+
+        return d;
+      }
+
+      vec3 color(vec2 p) {
+        vec2 ppp = p;
+        const float s = 1.0;
+        const vec3 lp1 = vec3(1.0, 1.25, 1.0)*vec3(s, 1.0, s);
+        const vec3 lp2 = vec3(-1.0, 1.25, 1.0)*vec3(s, 1.0, s);
+        const vec3 lcol1 = sqrt(vec3(1.25, 1.35, 2.0).zxy*0.15);
+        const vec3 lcol2 = vec3(2.0, 1.55, 1.25).zyx*0.85;
+
+        float aa = 2.0/RESOLUTION.y;
+
+        vec3 col = vec3(0.0);
+        float h = height(p);
+        vec3  n = normal(p);
+
+        vec3 ro = vec3(0.0, mix(-3.0, -10.0, PCOS(TIME+PI*p.x)), 0.0);
+        vec3 pp = vec3(p.x, 0.0, p.y);
+
+        vec3 po = vec3(p.x, h, p.y);
+        vec3 rd = normalize(ro - po);
+
+        vec3 ld1 = normalize(lp1 - po);
+        vec3 ld2 = normalize(lp2 - po);
+
+        float diff1 = max(dot(n, ld1), 0.0);
+        float diff2 = max(dot(n, ld2), 0.0);
+
+        vec3  rn    = n;
+        vec3  ref   = reflect(rd, rn);
+        float ref1  = max(dot(ref, ld1), 0.0);
+        float ref2  = max(dot(ref, ld2), 0.0);
+
+        vec3 lpow1 = 0.15*lcol1/L2(ld1);
+        vec3 lpow2 = 0.25*lcol2/L2(ld2);
+        vec3 dm = vec3(1.0)*tanh_approx(-h*10.0+0.125);
+        col += dm*pow(diff1, 4.0)*lpow1;
+        col += dm*pow(diff2, 4.0)*lpow2;
+        vec3 rm = vec3(1.0)*mix(0.25, 1.0, tanh_approx(-h*1000.0));
+        col += rm*pow(ref1, 20.0)*lcol1;
+        col += rm*pow(ref2, 20.0)*lcol2;
+
+        col = mix(vec3(0.0), col, smoothstep(BTIME(212.0), BTIME(214.0), TIME));
+
+        const float zp = 1.175;
+
+        float off = .125*p.x*p.x*p.x-p.y;
+        const float coff = PI;
+        float angle = off+mix(coff*0.5, -coff*0.5, smoothstep(BTIME(232.0), BTIME(236.0), TIME));
+        float split = angle+coff;
+        int nsplit = int(mod1(split, coff));
+        split = (nsplit & 1) == 0 ? split : -split;
+
+        vec2 op = ppp;
+        op.x += -0.25*ppp.y;
+        op /= zp;
+        float di = split > 0.0 ? firefoxText(op) : galaxyText(op);
+        di *= zp;
+        float dio = di;
+        dio -= 0.025;
+        dio = abs(dio) - 0.005;
+        di = pmin(di, dio, 0.025);
+        float dg = di;
+
+        float gmix = pow(abs(cos(angle)), 14.0);
+        float gmix2 = abs(1.0/tanh_approx(split))*0.5;
+        col += -lcol2*0.25*(exp(-9.0*max(di, 0.0)));
+
+        dg = abs(dg-0.025);
+        float glow = exp(-20.0*max(dg+0., 0.0));
+        vec3 glowCol = mix(lcol2.zyx*lcol2.zyx/6.0, lcol2.zyx, glow*glow)*gmix2;
+        col = mix(col, vec3(mix(vec3(0.9), sqrt(glowCol*0.5), gmix)), smoothstep(-aa, aa, -di));
+        col += glowCol*glow*gmix;
+
+        return col;
+      }
+
+      // Post processing I found somewhere on shadertoy years ago
+      vec3 postProcess(vec3 col, vec2 q) {
+        col = clamp(col, 0.0, 1.0);
+        col = pow(col, 1.0/vec3(2.2));
+        col = col*0.6+0.4*col*col*(3.0-2.0*col);
+        col = mix(col, vec3(dot(col, vec3(0.33))), -0.4);
+        col *=0.5+0.5*pow(19.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.7);
+        return col;
+      }
+
+      void main(void) {
+        vec2 q = v_texcoord;
+        vec2 p = -1. + 2. * q;
+        float aa = 2.0/RESOLUTION.y;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+
+        vec3 col = color(p);
+        col = postProcess(col, q);
+        col = mix(vec3(0.0), col, smoothstep(ff_start, BTIME(209.0), TIME));
+
+        fragColor = vec4(col, 1.0);
+      }
+    </script>
+
     <script id="fs-cube-scene" type="x-shader/x-fragment">
       // -----------------------------------------------------------------------------
       // PRELUDE
@@ -1876,6 +2370,10 @@
           fs: "fs-bb-scene",
           defines: ["BB_EFFECT_5"],
         },
+        credits_scene : {
+          vs: "vs-default",
+          fs: "fs-credits-scene"
+        },
         cube_scene : {
           vs: "vs-default",
           fs: "fs-cube-scene"
@@ -1889,15 +2387,15 @@
         return n*beat+start;
       }
 
-      const intro_end = btime(48.0);
-      const bb_end_0  = btime(80.0);
-      const bb_end_1  = btime(112.0);
-      const bb_end_2  = btime(144.0);
-      const bb_end_3  = btime(176.0);
-      const bb_end_4  = btime(208.0);
-      const inf_end   = btime(240.0);
-      const cube_end  = btime(336.0);
-      const bb_end_5  = btime(368.0);
+      const intro_end   = btime(48.0);
+      const bb_end_0    = btime(80.0);
+      const bb_end_1    = btime(112.0);
+      const bb_end_2    = btime(144.0);
+      const bb_end_3    = btime(176.0);
+      const bb_end_4    = btime(208.0);
+      const credits_end = btime(240.0);
+      const cube_end    = btime(336.0);
+      const bb_end_5    = btime(368.0);
 
       function onInitComplete() {
         const information = document.getElementById("info-label");
@@ -1910,15 +2408,15 @@
       }
 
       function onSelectScene(gl, time) {
-        if (time < intro_end) return allScenes.intro_scene;
-        if (time < bb_end_0)  return allScenes.bb_scene_0;
-        if (time < bb_end_1)  return allScenes.bb_scene_1;
-        if (time < bb_end_2)  return allScenes.bb_scene_2;
-        if (time < bb_end_3)  return allScenes.bb_scene_3;
-        if (time < bb_end_4)  return allScenes.bb_scene_4;
-        if (time < inf_end)   return allScenes.no_scene;
-        if (time < cube_end)  return allScenes.cube_scene;
-        if (time < bb_end_5)  return allScenes.bb_scene_5;
+        if (time < intro_end)   return allScenes.intro_scene;
+        if (time < bb_end_0)    return allScenes.bb_scene_0;
+        if (time < bb_end_1)    return allScenes.bb_scene_1;
+        if (time < bb_end_2)    return allScenes.bb_scene_2;
+        if (time < bb_end_3)    return allScenes.bb_scene_3;
+        if (time < bb_end_4)    return allScenes.bb_scene_4;
+        if (time < credits_end) return allScenes.credits_scene;
+        if (time < cube_end)    return allScenes.cube_scene;
+        if (time < bb_end_5)    return allScenes.bb_scene_5;
         return allScenes.no_scene;
       }
 
