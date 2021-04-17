@@ -472,10 +472,8 @@
         vec2 nps = ns*vec2(s);
         float dl = galaxy(nps);
         d0 = dl < 0.075 && fract(rr.x) < length(nps) ? d0 : d1;
+
         float d = d0;
-
-      //  d = abs(d) - 0.005;
-
         return d;
       }
 
@@ -660,14 +658,16 @@
           d = pmax(d, -(di-0.01), sm);
           d = min(d, di);
 
-
           float dg = pmin(di, -da, sm*10.0);
           col *= mix(0.125, 1.0, exp(-4.0*(max(dg, 0.0))));
           col = mix(col, vec3(1.0), smoothstep(-aa, aa, -d));
         } else if (TIME > galaxy_logo && TIME <= galaxy_disappear) {
           float st = smoothstep(galaxy_logo, galaxy_disappear, TIME);
-          float zg = mix(1.75, 2.5, st);
-          vec2 dg = starryGalaxy(p/zg)*zg;
+          float zg = mix(3.0, 1.75, st);
+          vec2 pg = p;
+          pg *= ROT(PI/6.0*(1.0-st));
+          pg /= zg;
+          vec2 dg = starryGalaxy(pg)*zg;
           float dgg = dg.x;
           float dogg = dg.x;
           dogg -= 0.03;
@@ -675,9 +675,9 @@
           dogg = abs(dogg);
           float fo = 1.0-smoothstep(galaxy_logo+1.0, galaxy_logo+4.0, TIME);
           col -= 0.25*exp(-5.0*max(dgg, 0.0));
-          col += (2.0*vec3(1.0, 0.75, 0.5))*exp(-mix(8.0, 1.0, fo)*max(dgg, 0.0))*mix(0.3, 1.0,fo);
-          col += (1.0*vec3(1.0, 0.75, 0.5))*exp(-max(300.0*max(dogg, 0.0), 0.0));
           col = mix(col, vec3(1.0), smoothstep(-aa, aa, -dg.y));
+          col += (2.0*vec3(1.0, 0.75, 0.5))*exp(-mix(8.0, 1.0, fo)*max(dgg, 0.0))*mix(0.3, 1.0,fo)*(1.0-st);
+          col += (1.0*vec3(1.0, 0.75, 0.5))*exp(-max(300.0*max(dogg, 0.0), 0.0));
         } else if (TIME > galaxy_disappear) {
           float fi = smoothstep(galaxy_disappear+1.0, galaxy_disappear+2.0, TIME);
           float fo = 1.0-smoothstep(galaxy_end-2.0, galaxy_end, TIME);
@@ -1796,6 +1796,7 @@
       const bb_end_2  = btime(144.0);
       const bb_end_3  = btime(176.0);
       const bb_end_4  = btime(208.0);
+      const inf_end   = btime(240.0);
       const cube_end  = btime(336.0);
 
       function onInitComplete() {
@@ -1815,6 +1816,7 @@
         if (time < bb_end_2)  return allScenes.bb_scene_2;
         if (time < bb_end_3)  return allScenes.bb_scene_3;
         if (time < bb_end_4)  return allScenes.bb_scene_4;
+        if (time < inf_end)   return allScenes.no_scene;
         if (time < cube_end)  return allScenes.cube_scene;
         return allScenes.no_scene;
       }
