@@ -800,6 +800,7 @@
       // -----------------------------------------------------------------------------
       // CONSTANTS
       // -----------------------------------------------------------------------------
+
       #define PI              3.141592654
       #define TAU             (2.0*PI)
       #define TIME            time
@@ -995,7 +996,83 @@
         return final;
       }
 
-      float bb_df1(vec3 p) {
+      #ifdef BB_EFFECT_5
+      float bb_df(vec3 p) {
+
+        float gtime= TIME - bb_begin;
+        float fi   = bb_g_fi;
+        float fo   = bb_g_fo;
+        float ltime= bb_g_time;
+        mat2  rot  = bb_g_rot;
+        mat2  srot = bb_g_srot;
+        float fi13 = bb_g_fi13;
+        float fi23 = bb_g_fi23;
+
+        float oo = mix(2.5, 0.5, fi*fo);
+        float ss = mix(0.05, 0.4, fi13*fo);
+        float rr = mix(0.125, 0.75, fi23*fo);
+
+        vec3 p0 = p;
+        p0.y -= 0.5;
+        p0.zy *= rot;
+        p0.xy *= rot;
+        float d0 = box(p0, vec3(0.65));
+
+        vec3 p1 = p;
+        p1.y -= oo;
+
+        float s = 1.0;
+
+        float d1 = torus(p1, s*vec2(1.0, 0.125));
+
+        vec3 c1 = vec3(0.125);
+
+        float trf = 0.75;
+
+        for (int i = 0; i < 3; ++i) {
+          p1.xz *= rot;
+          p1.xyz = p1.zxy;
+
+          float pr = length(p1.xy);
+          float pa = atan(p1.y, p1.x);
+
+          float n = mod1(pa, TAU/8.0);
+
+          p1.xy = pr*vec2(cos(pa), sin(pa));
+          p1.x -= s;
+          s *= ss;
+          float dd = torus(p1, s*vec2(1.0, rr));
+
+
+          d1 = pmax(d1, -dd, 0.75*s);
+          trf = dd < d1 ? trf = 1.0-trf : trf;
+          d1 = min(d1, dd);
+        }
+
+
+        float rf = 0.35;
+        vec3 bc = vec3(0.5);
+
+        float d = d0;
+
+        d = d0;
+
+        d = pmax(d, -d1, 0.1);
+
+        if (d1 < d) {
+          bc = c1;
+          rf = trf;
+          d = d1;
+        }
+
+        bb_g_refFactor = rf;
+        bb_g_baseColor = bc;
+
+        return d;
+      }
+
+      #else
+      float bb_df(vec3 p) {
         const float sr  = 0.5;
         const float amp = 6.0;
         float gtime= TIME - bb_begin;
@@ -1189,10 +1266,7 @@
 
         return d;
       }
-
-      float bb_df(vec3 p) {
-        return bb_df1(p);
-      }
+      #endif
 
       vec3 bb_normal(vec3 pos) {
         vec3 eps = vec3(BB_NORM_OFF, 0.0, 0.0);
@@ -1320,6 +1394,11 @@
             float yy = 1.0-exp(-4.0*float(iter)/float(BB_MAX_RAY_MARCHES));
 
             col = mix(col, shineCol, max(shine, yy*shinef));
+      #ifdef BB_EFFECT_5
+            vec3 weird = (nor);
+            col *= mix(0.95, -1.0, abs(dot(weird,rd)));
+      #endif
+
             finalCol += aggRefFactor*(col);
 
             aggRefFactor *= (1.0 - refFactor);
@@ -1404,12 +1483,31 @@
       #define MISS            1E6
       #define BTIME(n)        (n*beat+start)
 
+      #define CUBE_TOLERANCE       0.0001
+      #define CUBE_MAX_RAY_LENGTH  8.0
+      #define CUBE_MAX_RAY_MARCHES 80
+      #define CUBE_NORM_OFF        0.0005
+
       const float beat            = 0.48;
       const float start           = 41.1;
       const float bounce_freq     = 0.5/beat;
 
       const mat2 rot0             = ROT(0.00);
       const vec3 std_gamma        = vec3(2.2);
+
+      const float cube_begin      = BTIME(240.0); // ~156
+      const float cube_end        = BTIME(336.0);
+
+      // GLOBAL MUTABLES
+
+      vec4  cube_g_plane       = vec4(normalize(vec3(1.0, 0.0, 0.0)), 0.0);
+      float cube_g_pw          = 0.0;
+      mat2 cube_g_rotxy        = rot0;
+      mat2 cube_g_rotxz        = rot0;
+      mat2 cube_g_rotxw        = rot0;
+      mat2 cube_g_rotyw        = rot0;
+      mat2 cube_g_rotzw        = rot0;
+
 
       // -----------------------------------------------------------------------------
       // COMMON
@@ -1469,26 +1567,6 @@
       // -----------------------------------------------------------------------------
       // CUBE
       // -----------------------------------------------------------------------------
-
-      const float cube_begin      = BTIME(240.0); // ~156
-      const float cube_end        = BTIME(336.0);
-
-      #define CUBE_TOLERANCE       0.0001
-      #define CUBE_MAX_RAY_LENGTH  8.0
-      #define CUBE_MAX_RAY_MARCHES 80
-      #define CUBE_NORM_OFF        0.0005
-
-      // GLOBAL MUTABLES
-      //  Hopefully helps performance
-
-      vec4  cube_g_plane       = vec4(normalize(vec3(1.0, 0.0, 0.0)), 0.0);
-      float cube_g_pw          = 0.0;
-
-      mat2 cube_g_rotxy        = rot0;
-      mat2 cube_g_rotxz        = rot0;
-      mat2 cube_g_rotxw        = rot0;
-      mat2 cube_g_rotyw        = rot0;
-      mat2 cube_g_rotzw        = rot0;
 
       vec2 cube_mengerSponge(vec4 p) {
         float db = box(p, vec4(1.0));
@@ -1608,7 +1686,6 @@
         tp2 *= ROT(a);
         float tpd = box(tp2, 0.6*vec2(4.0/3.0, 1.0));
         float taa = 0.001;
-        vec3 tcol = vec3(0.125*0.25);
         mod2(tp2, vec2(0.125));
         float tpgd = min(abs(tp2.x), abs(tp2.y));
         tpgd = max(tpgd, -otd);
@@ -1620,12 +1697,11 @@
 
         const vec3 greenGlow = vec3(1.25, 2.0, 1.25);
         const vec3 redGlow = vec3(2.0, 1.25, 1.5);
+        vec3 tcol = vec3(0.0125);
         tcol += greenGlow*exp(-max(tpgd, 0.0)*900.0);
-        tcol += greenGlow*(1.0-abs(dot(rd, tnor)))*0.1;
+        tcol += greenGlow*(1.0-abs(dot(rd, tnor)))*0.2*PSIN(500.*tp2.y);
         tcol = mix(vec3(0.0), tcol, smoothstep(-taa, taa, -(tpd-0.025)));
         tcol += redGlow*exp(-max(tgd, 0.0)*100.0);
-      //  tcol += vec3(1.25, 2.0, 1.25)*(1.0-exp(-2*abs(ttp3.z - ttp3.x)))*smoothstep(0.0, 0.1, -(tpd_0-0.1));
-      //  tcol += vec3(1.25, 2.0, 1.25)*smoothstep(-0.01, 0.01, -(tpd_0-0.1))*(1.0-exp(-2.0*abs(ttp3.z - ttp3.x)));
         return tcol;
       }
 
@@ -1737,6 +1813,8 @@
         vec3 col = cube_effect(p, q);
 
         col = postProcess(col, q);
+        col = clamp(col, 0.0, 1.0);
+        col = mix(vec3(1.0), col, smoothstep(cube_begin+0.25, cube_begin+1.5, TIME));
 
         fragColor = vec4(col, 1.0);
       }
@@ -1777,6 +1855,11 @@
           fs: "fs-bb-scene",
           defines: ["BB_EFFECT_4"],
         },
+        bb_scene_5 : {
+          vs: "vs-default",
+          fs: "fs-bb-scene",
+          defines: ["BB_EFFECT_5"],
+        },
         cube_scene : {
           vs: "vs-default",
           fs: "fs-cube-scene"
@@ -1798,6 +1881,7 @@
       const bb_end_4  = btime(208.0);
       const inf_end   = btime(240.0);
       const cube_end  = btime(336.0);
+      const bb_end_5  = btime(368.0);
 
       function onInitComplete() {
         const information = document.getElementById("info-label");
@@ -1818,6 +1902,7 @@
         if (time < bb_end_4)  return allScenes.bb_scene_4;
         if (time < inf_end)   return allScenes.no_scene;
         if (time < cube_end)  return allScenes.cube_scene;
+        if (time < bb_end_5)  return allScenes.bb_scene_5;
         return allScenes.no_scene;
       }
 
