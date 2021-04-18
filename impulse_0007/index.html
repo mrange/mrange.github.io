@@ -1,0 +1,3156 @@
+<!--
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+-->
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>impulse-0007: mod.galaxy tribute</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <script src="demo-system-v1.js" type="text/javascript"></script>
+    <link href='https://fonts.googleapis.com/css?family=Josefin Slab' rel='stylesheet'>
+    <style>
+        body {
+            font-family: 'Josefin Slab';
+            font-size: 2vw;
+            color: white;
+            background-color: black;
+        }
+        a:link {
+          text-decoration: none;
+          color: #FF8240;
+        }
+        a:visited {
+          text-decoration: none;
+          color: #FF8240;
+        }
+        a:hover {
+          text-decoration: underline;
+          color: #DFF180;
+        }
+        a:active {
+          text-decoration: underline;
+          color: #DFF180;
+        }
+        canvas.gl {
+          position:fixed;
+          z-index:-1;
+          top:0;
+          left: 0;
+          height: 100%;
+          width: 100%;
+          background-color: black;
+        }
+        canvas.gl {
+          position:fixed;
+          z-index:-1;
+          top:0;
+          left: 0;
+          height: 100%;
+          width: 100%;
+          background-color: black;
+        }
+        div.center-flex {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+    </style>
+
+    <script id="vs-default" type="x-shader/x-vertex">
+      precision highp float;
+
+      in vec4 a_position;
+      in vec2 a_texcoord;
+
+      out vec2 v_texcoord;
+
+      void main(void) {
+        // Some drivers don't like position being written here
+        // with the tessellation stages enabled also.
+        // Comment next line when Tess.Eval shader is enabled.
+        gl_Position = a_position;
+
+        v_texcoord = a_texcoord;
+      }
+    </script>
+
+    <script id="fs-no-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+      uniform float time;
+      uniform vec2 resolution;
+      in vec2 v_texcoord;
+      out vec4 fragColor;
+
+      void main(void) {
+        vec3 col = vec3(1.0, 0.0, 0.0);
+
+        fragColor = vec4(col, 1.0);
+      }
+    </script>
+
+    <script id="fs-intro-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+      uniform float time;
+      uniform vec2 resolution;
+      in vec2 v_texcoord;
+      out vec4 fragColor;
+
+      // -----------------------------------------------------------------------------
+      // COMMON
+      // -----------------------------------------------------------------------------
+
+      #define PI              3.141592654
+      #define TAU             (2.0*PI)
+      #define TIME            time
+      #define RESOLUTION      resolution
+      #define ROT(a)          mat2(cos(a), sin(a), -sin(a), cos(a))
+      #define PCOS(a)         (0.5+0.5*cos(a))
+      #define SCA(a)          vec2(sin(a), cos(a))
+      #define MISS            1E6
+      #define BTIME(n)        (n*beat+start)
+
+      const float beat            = 0.48;
+      const float start           = 41.1;
+      const float bounce_freq     = 0.5/beat;
+
+      const vec2 sca0             = SCA(0.0);
+      const mat2 rotSome          = ROT(1.0);
+      const vec3 std_gamma        = vec3(2.2);
+
+      float pmin(float a, float b, float k) {
+        float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0 );
+        return mix( b, a, h ) - k*h*(1.0-h);
+      }
+
+      float pmax(float a, float b, float k) {
+        return -pmin(-a, -b, k);
+      }
+
+      float hash(float co) {
+        return fract(sin(co*12.9898) * 13758.5453);
+      }
+
+      vec4 alphaBlend(vec4 back, vec4 front) {
+        float w = front.w + back.w*(1.0-front.w);
+        vec3 xyz = (front.xyz*front.w + back.xyz*back.w*(1.0-front.w))/w;
+        return w > 0.0 ? vec4(xyz, w) : vec4(0.0);
+      }
+
+      vec3 alphaBlend(vec3 back, vec4 front) {
+        return mix(back, front.xyz, front.w);
+      }
+
+      float tanh_approx(float x) {
+      //  return tanh(x);
+        float x2 = x*x;
+        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
+      }
+
+      float box(vec2 p, vec2 b) {
+        vec2 d = abs(p)-b;
+        return length(max(d,0.0)) + min(max(d.x,d.y),0.0);
+      }
+
+      float circle(vec2 p, float r) {
+        return length(p) - r;
+      }
+
+      float segmentx(vec2 p, float l) {
+        p = abs(p);
+        float d0 = max(p.x-l, p.y);
+        float d1 = length(p - vec2(l, 0.0));
+        return p.x > l ? d1 : d0;
+      }
+
+      float segment(vec2 p, vec2 a, vec2 b ) {
+          vec2 pa = p-a, ba = b-a;
+          float h = clamp( dot(pa,ba)/dot(ba,ba), 0.0, 1.0 );
+          return length( pa - ba*h );
+      }
+
+      float roundedX(vec2 p, float w, float r) {
+          p = abs(p);
+          return length(p-min(p.x+p.y,w)*0.5) - r;
+      }
+
+      float horseshoe(vec2 p, vec2 c, float r, vec2 w) {
+        p.x = abs(p.x);
+        float l = length(p);
+        p = mat2(-c.x, c.y,
+                  c.y, c.x)*p;
+        p = vec2((p.y>0.0)?p.x:l*sign(-c.x),
+                 (p.x>0.0)?p.y:l );
+        p = vec2(p.x,abs(p.y-r))-w;
+        return length(max(p,0.0)) + min(0.0,max(p.x,p.y));
+      }
+
+      vec2 mod2_1(inout vec2 p) {
+        vec2 c = floor(p + 0.5);
+        p = fract(p + 0.5) - 0.5;
+        return c;
+      }
+
+      vec2 mod2(inout vec2 p, vec2 size) {
+        vec2 c = floor((p + size*0.5)/size);
+        p = mod(p + size*0.5,size) - size*0.5;
+        return c;
+      }
+
+      vec3 hsv2rgb(vec3 c) {
+        const vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+        vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+        return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+      }
+
+      float hash(in vec2 co) {
+        co += 123.4;
+        return fract(sin(dot(co, vec2(12.9898,58.233))) * 13758.5453);
+      }
+
+      vec2 nhash2(vec2 p) {
+        p = vec2 (dot (p, vec2 (127.1, 311.7)),
+                  dot (p, vec2 (269.5, 183.3)));
+
+        return -1. + 2.*fract (sin (p)*43758.5453123);
+      }
+
+      float vnoise(vec2 x) {
+        vec2 i = floor(x);
+        vec2 w = fract(x);
+
+      #if 1
+        // quintic interpolation
+        vec2 u = w*w*w*(w*(w*6.0-15.0)+10.0);
+      #else
+        // cubic interpolation
+        vec2 u = w*w*(3.0-2.0*w);
+      #endif
+
+        float a = hash(i+vec2(0.0,0.0));
+        float b = hash(i+vec2(1.0,0.0));
+        float c = hash(i+vec2(0.0,1.0));
+        float d = hash(i+vec2(1.0,1.0));
+
+        float k0 =   a;
+        float k1 =   b - a;
+        float k2 =   c - a;
+        float k3 =   d - c + a - b;
+
+        float aa = mix(a, b, u.x);
+        float bb = mix(c, d, u.x);
+        float cc = mix(aa, bb, u.y);
+
+        return k0 + k1*u.x + k2*u.y + k3*u.x*u.y;
+      }
+
+      float lettere(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 1.05+off;
+        p -= vec2(0.5, 0.5);
+        return min(box(p, vec2(0.4, 0.1)), max(circle(p, 0.5), -circle(p, 0.3)));
+      }
+
+      float letterI(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 0.25+off;
+        p -= vec2(0.125, 0.75);
+        return box(p, vec2(0.125, 0.75));
+      }
+
+      float letterl(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 0.2+off;
+        p -= vec2(0.10, 0.5);
+        return box(p, vec2(0.1, 0.666));
+      }
+
+      float letterm(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 2.2+off;
+        p -= vec2(1.1, 0.5);
+        p.y = -p.y;
+        p.x = abs(p.x);
+        p -= vec2(0.5, 0.0);
+        float d = horseshoe(p, sca0, 0.5, vec2(0.5, 0.1));
+        return d;
+      }
+
+      float lettern(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 1.15+off;
+        p -= vec2(0.55, 0.5);
+        p.y = -p.y;
+        float l = horseshoe(p, sca0, 0.5, vec2(0.5, 0.1));
+        return l;
+      }
+
+      float letterp(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 1.05+off;
+        p -= vec2(0.55, 0.5);
+        float b = box(p - vec2(-0.45, -0.25), vec2(0.1, 0.75));
+        float c = abs(circle(p, 0.4)) - 0.1;
+        return min(b, c);
+      }
+
+      float letterr(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 0.6+off;
+        p -= vec2(0.1, 0.5);
+        float d0 = box(p-vec2(0.20, 0.4), vec2(0.3, 0.1));
+        float d1 = box(p, vec2(0.1, 0.5));
+        return min(d0, d1);
+      }
+
+      float letters(inout vec2 pp, float off) {
+        const mat2 rots1 = ROT(-PI/6.0-PI/2.0);
+        const mat2 rots2 = ROT(PI);
+        vec2 p = pp;
+        pp.x -= 0.875+off;
+        p -= vec2(0.435, 0.5);
+        p *= rots1;
+        float u = horseshoe(p - vec2(-0.25*3.0/4.0, -0.125/2.0), sca0, 0.375, vec2(0.2, 0.1));
+        p *= rots2;
+        float l = horseshoe(p - vec2(-0.25*3.0/4.0, -0.125/2.0), sca0, 0.375, vec2(0.2, 0.1));
+        return min(u,l);
+      }
+
+      float letteru(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 1.2+off;
+        p -= vec2(0.6, 0.475);
+        return horseshoe(p - vec2(0.0, 0.125), sca0, 0.5, vec2(0.4, 0.1));
+      }
+
+      float lettert(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 0.6+off;
+        p -= vec2(0.3, 0.6);
+        float d0 = box(p-vec2(0.0, 0.3), vec2(0.3, 0.1));
+        float d1 = box(p, vec2(0.1, 0.6));
+        return min(d0, d1);
+      }
+
+      float impulse(vec2 p, float off) {
+        p += vec2(3.385+3.0*off, 0.5);
+
+        float d = 1E6;
+        d = min(d, letterI(p, off));
+        d = min(d, letterm(p, off));
+        d = min(d, letterp(p, off));
+        d = min(d, letteru(p, off));
+        d = min(d, letterl(p, off));
+        d = min(d, letters(p, off));
+        d = min(d, lettere(p, off));
+
+        return d;
+      }
+
+      float presents(vec2 p, float off) {
+        p += vec2(3.65+3.5*off, 0.5);
+
+        float d = 1E6;
+        d = min(d, letterp(p, off));
+        d = min(d, letterr(p, off));
+        d = min(d, lettere(p, off));
+        d = min(d, letters(p, off));
+        d = min(d, lettere(p, off));
+        d = min(d, lettern(p, off));
+        d = min(d, lettert(p, off));
+        d = min(d, letters(p, off));
+
+        return d;
+      }
+
+      const float galaxy_lw       = 0.025;
+
+      float galaxy_g(vec2 p) {
+        const float s = 0.5;
+        float d0 = segment(p, s*vec2(0.0, 0.0), s*vec2(1.0, 1.0))-galaxy_lw;
+        float d1 = segmentx(p-s*vec2(0.5, 0.0), s*0.5)-galaxy_lw;
+        float d2 = segmentx((p - s*vec2(1.0, 0.125)).yx, s*0.125)-galaxy_lw;
+        float d3 = segmentx(p - s*vec2(1.0-0.125, 0.25), s*0.125)-galaxy_lw;
+
+        float d = 1E6;
+        d = min(d, d0);
+        d = min(d, d1);
+        d = min(d, d2);
+        d = min(d, d3);
+        return d;
+      }
+
+      float galaxy_a(vec2 p) {
+        const float s = 0.375;
+        const vec2 n = normalize(vec2(1.0, 1.0));
+
+        p += vec2(-0.5, 0.125);
+        p -= n*max(0.0, dot(p, n))*2.0;
+        p -= vec2(-0.5, 0.125);
+
+        float dx = circle(p, 0.1);
+        float d0 = segment(p, s*vec2(0.0, 0.0), s*vec2(1.0, 1.0))-galaxy_lw;
+        float d1 = segmentx(p-s*vec2(0.5, 0.0), s*0.5)-galaxy_lw;
+
+        float d = 1E6;
+        d = min(d, d0);
+        d = min(d, d1);
+        return d;
+      }
+
+      float galaxy_l(vec2 p) {
+        const float s = 0.5;
+        float d0 = segment(p, s*vec2(0.0, 0.0), s*vec2(0.0, 1.0))-galaxy_lw;
+
+        float d = 1E6;
+        d = min(d, d0);
+        return d;
+      }
+
+      float galaxy_x(vec2 p) {
+        const float s = 1.0;
+        float d0 = roundedX(p-vec2(0.0, 0.5*s), s, galaxy_lw*1.5);
+
+        float d = 1E6;
+        d = min(d, d0);
+        return d;
+      }
+
+      float galaxy_y(vec2 p) {
+        const float s = 0.5;
+        float d0 = segment(p, s*vec2(0.0, 0.0), s*vec2(1.0, 1.0))-galaxy_lw;
+        float d1 = segment(p, s*vec2(1.0/3.0, 1.0), s*2.0/3.0*vec2(1.0, 1.0))-galaxy_lw;
+
+        float d = 1E6;
+        d = min(d, d0);
+        d = min(d, d1);
+        return d;
+      }
+
+
+      float galaxy(vec2 p) {
+        p -= vec2(-0.89, -0.25);
+        float d = 1E6;
+        float dg = galaxy_g(p-vec2(0.1, 0.0));
+        vec2 pa = p;
+        pa -= vec2(0.8, 0.0);
+        pa.x = abs(pa.x);
+        pa.x = -pa.x;
+        pa -= -vec2(0.465, 0.0);
+        float da = galaxy_a(pa);
+        float dl = galaxy_l(p-vec2(0.8, 0.0));
+        float dx = galaxy_x(p-vec2(1.14, -0.25));
+        float dy = galaxy_y(p-vec2(1.0125, -0.125));
+
+        const float sm = 0.0125;
+
+        d = min(d, da);
+        d = pmax(d, -(dg-galaxy_lw*0.5), sm);
+        d = min(d, dg);
+        d = min(d, dl);
+        d = pmax(d, -(dy-galaxy_lw*0.5), sm);
+        d = min(d, dy);
+        d = pmax(d, -(dx-galaxy_lw*0.5), sm);
+        d = min(d, dx);
+
+        return d;
+      }
+
+      float star5(in vec2 p, in float r, in float rf) {
+          const vec2 k1 = vec2(0.809016994375, -0.587785252292);
+          const vec2 k2 = vec2(-k1.x,k1.y);
+          p.x = abs(p.x);
+          p -= 2.0*max(dot(k1,p),0.0)*k1;
+          p -= 2.0*max(dot(k2,p),0.0)*k2;
+          p.x = abs(p.x);
+          p.y -= r;
+          vec2 ba = rf*vec2(-k1.y,k1.x) - vec2(0,1);
+          float h = clamp( dot(p,ba)/dot(ba,ba), 0.0, r );
+          return length(p-ba*h) * sign(p.y*ba.x-p.x*ba.y);
+      }
+
+      float stars(vec2 p) {
+        const float s = 0.25;
+        vec2 ps = p;
+        vec2 ns = mod2(ps, vec2(s));
+        vec2 rr = nhash2(ns);
+        float d1 = length(ps);
+        ps -= -s*0.2*rr;
+        ps *= ROT(TAU*rr.x+TIME*0.2*(fract(rr.x) > 0.5 ? 1.0 : -1.0));
+        float d0 = star5(ps, s*0.25, 0.35);
+        vec2 nps = ns*vec2(s);
+        float dl = galaxy(nps);
+        d0 = dl < 0.075 && fract(rr.x) < length(nps) ? d0 : d1;
+
+        float d = d0;
+        return d;
+      }
+
+      vec2 starryGalaxy(vec2 p) {
+        float d1 = galaxy(p);
+        float d2 = stars(p);
+
+        float d = d1;
+        d = max(d, -(d2-0.0075));
+        d = min(d, d2);
+
+        return vec2(d1, d);
+      }
+
+      // Classic post processing
+      vec3 postProcess(vec3 col, vec2 q) {
+        col = clamp(col, 0.0, 1.0);
+        col = pow(col, 1.0/std_gamma);
+        col = col*0.6+0.4*col*col*(3.0-2.0*col);
+        col = mix(col, vec3(dot(col, vec3(0.33))), -0.4);
+        col *=0.5+0.5*pow(19.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.7);
+        return col;
+      }
+
+      // -----------------------------------------------------------------------------
+      // GALAXY
+      // -----------------------------------------------------------------------------
+
+      const float galaxy_begin    = 0.0;
+      const float galaxy_end      = BTIME(48.0);
+
+      const float galaxy_logo     = 41.1;
+      const float galaxy_disappear= 52.6;
+
+      // The path function
+      vec3 galaxy_offset(float z) {
+        float a = z*0.05;
+        vec2 p = -5.0*step(galaxy_logo, TIME)*step(TIME, galaxy_disappear)*(vec2(cos(a), sin(a*sqrt(2.0))) + vec2(cos(a*sqrt(0.75)), sin(a*sqrt(0.5))));
+        return vec3(p, z);
+      }
+
+      // The derivate of the path function
+      //  Used to generate where we are looking
+      vec3 galaxy_doffset(float z) {
+        float eps = 0.05;
+        return (galaxy_offset(z + eps) - galaxy_offset(z - eps))/(2.0*eps);
+      }
+
+      // The second derivate of the path function
+      //  Used to generate tilt
+      vec3 galaxy_ddoffset(float z) {
+        float eps = 0.5;
+        return (galaxy_doffset(z + eps) - galaxy_doffset(z - eps))/(2.0*eps);
+      }
+
+      float galaxy_globalCloudDensity(vec2 p, float n) {
+        p*=0.1;
+        float gcd = vnoise(p+10.0*hash(n)+100.0);
+        return gcd;
+      }
+
+      float galaxy_localCloudDensity(vec2 p, float n) {
+        const float aa = -0.45;
+        const mat2 pp = 2.03*rotSome;
+        float a = 0.5;
+        float s = 0.0;
+        p += 10.0*hash(n)+100.0;
+
+        s += a*vnoise(p); a *= aa; p *= pp;
+        s += a*vnoise(p); a *= aa; p *= pp;
+        s += a*vnoise(p); a *= aa; p *= pp;
+        s += a*vnoise(p); a *= aa; p *= pp;
+        s += a*vnoise(p); a *= aa; p *= pp;
+
+        return s*2.75-0.0;
+      }
+
+      vec4 galaxy_plane(vec3 ro, vec3 rd, vec3 pp, vec3 off, float aa, float n) {
+        vec2 p = pp.xy;
+        float z = pp.z;
+        float nz = pp.z-ro.z;
+
+        float ds = 1E6;
+        float r = 0.0;
+
+        float gcd = galaxy_globalCloudDensity(p, n);
+
+        float s = mix(1.0, 2.0, gcd);
+        vec2 ps = p;
+        ps *= s;
+        float sf = 1.0-tanh_approx(0.5*nz);
+      //  sf = 0;
+        for (int i = 0; i < 5; ++i) {
+          ps *= rotSome;
+          vec2 ips = ps;
+          vec2 ipn = mod2_1(ips);
+          float ir = hash(ipn+n*100.0+float(i)*10.0);
+          ips = ips -0.3*vec2(ir, fract(-23.0*ir));
+          float sf = mix(1.0, sqrt(1000000.0*abs(ips.x*ips.y)), sf);
+          float ids = length(ips)*sf-0.0025;
+          if (ids < ds) {
+            r = ir;
+            ds = min(ds, ids);
+          }
+        }
+
+        float hues = mix(0.6, 0.8, r*r);
+        float sats = mix(0.6, 0.0, sqrt(r));
+        float bris = mix(0.5, 1.0, r);
+        float ts = pow(max(1.0-ds, 0.0), mix(200.0, 100.0, gcd)/sqrt(s));
+        vec3 cols = 2.0*hsv2rgb(vec3(hues, sats, bris));
+        vec4 cs = vec4(cols, ts);
+
+        float cd = gcd*galaxy_localCloudDensity(p, n);
+        float cdo = gcd*galaxy_localCloudDensity(p+vec2(0.125, 0.25), n);
+        const float level0 = 0.0;
+        const float level1 = 0.05;
+        // Some serious fake shadow & lighting of clouds
+        float cli = mix(-0.1, 1.0, 0.5 + 0.5*tanh_approx(10.0*(cd-cdo)));
+
+        float huec = (mix(-0.2, 0.05, (cd))+0.05)-0.1*PCOS(2.0*pp.z);
+        float tc = clamp(cd, 0.0, 1.0);
+        tc *= tc;
+        float satc = 0.5;
+        float bric = 1.0;
+        vec3 colc = hsv2rgb(vec3(huec, satc, bric))+cli*vec3(0.9, 0.7, 0.9);
+        vec4 cc = vec4(colc*0.66, tc);
+        cc = clamp(cc, 0.0, 1.0);
+      //  cc.xyz= sqrt(cc.xyz);
+
+        cc.w*=tanh_approx(max(0.125*0.25*n-1.0, 0.0));
+        vec4 ct = alphaBlend(cs, cc);
+        return ct;
+      }
+
+      vec3 galaxy_skyColor(vec3 ro, vec3 rd) {
+        const vec3 l = normalize(vec3(0.0, 0.0, 1));
+        const vec3 baseCol = vec3(0.5, 0.66, 1.0);
+        return 1.25*baseCol*pow(max(dot(l, normalize(rd*vec3(1.0, 0.33, 1.0))), 0.0), 50.0);
+      }
+
+      vec3 galaxy_overlay(vec3 col, vec2 p) {
+        float aa = 2.0/RESOLUTION.y;
+        const float sm = 0.02;
+        const float appear = 19.0;
+        const float period = 7.6;
+
+        if (TIME > appear && TIME <= appear + period*2.0) {
+          float tm  =TIME - appear;
+          float pf = fract(tm/period);
+          float zg = mix(1.0, 1.5, pf);
+          float off = (0.275*5.0)*zg;
+          float zi = 0.145*zg;
+          float zp = zg;
+
+          vec2 pi = p;
+          pi /= zi;
+          vec2 pp = p;
+          pp /= zp;
+
+          vec2 na = vec2(0.0, -1.0);
+          na *= ROT(mix(-0.5, 0.5, pf));
+          float da = dot(na, p) + +1.5*cos(pf*TAU);
+          da = circle(p + vec2(0.5, -1.0)*-4.0*mix(-1.0, 1.0, pf), 2.5);
+
+          float di = 1E6;
+          if (TIME > appear && TIME < appear + period*1.0) {
+            di = impulse(pi, off);
+          } else {
+            di = presents(pi, off);
+          }
+
+          float dy = pi.y;
+          dy = abs(dy);
+          dy -=0.1;
+          dy = abs(dy) - 0.02;
+
+          di = pmax(di, -dy, sm);
+          di *= zi;
+          di = pmax(di, da, sm*10.0);
+          float d = 1E6;
+          d = pmax(d, -(di-0.01), sm);
+          d = min(d, di);
+
+          float dg = pmin(di, -da, sm*10.0);
+          col *= mix(0.125, 1.0, exp(-4.0*(max(dg, 0.0))));
+          col = mix(col, vec3(1.0), smoothstep(-aa, aa, -d));
+        } else if (TIME > galaxy_logo && TIME <= galaxy_disappear) {
+          float st = smoothstep(galaxy_logo, galaxy_disappear, TIME);
+          float zg = mix(3.0, 1.75, st);
+          vec2 pg = p;
+          pg *= ROT(PI/6.0*(1.0-st));
+          pg /= zg;
+          vec2 dg = starryGalaxy(pg)*zg;
+          float dgg = dg.x;
+          float dogg = dg.x;
+          dogg -= 0.03;
+          dogg = abs(dogg) - 0.0125;
+          dogg = abs(dogg);
+          float fo = 1.0-smoothstep(galaxy_logo+1.0, galaxy_logo+4.0, TIME);
+          col -= 0.25*exp(-5.0*max(dgg, 0.0));
+          col = mix(col, vec3(1.0), smoothstep(-aa, aa, -dg.y));
+          col += (2.0*vec3(1.0, 0.75, 0.5))*exp(-mix(8.0, 1.0, fo)*max(dgg, 0.0))*mix(0.3, 1.0,fo)*(1.0-st);
+          col += (1.0*vec3(1.0, 0.75, 0.5))*exp(-max(300.0*max(dogg, 0.0), 0.0));
+        } else if (TIME > galaxy_disappear) {
+          float fi = smoothstep(galaxy_disappear+1.0, galaxy_disappear+2.0, TIME);
+          float fo = 1.0-smoothstep(galaxy_end-2.0, galaxy_end, TIME);
+          col = mix(vec3(1.0), col, fi*fo);
+        }
+
+        return col;
+      }
+
+      vec3 galaxy_color(vec3 ww, vec3 uu, vec3 vv, vec3 ro, vec2 p) {
+        float lp = length(p);
+        vec2 np = p + 1.0/RESOLUTION.xy;
+        float warpf = smoothstep(galaxy_disappear+4.0, galaxy_end, TIME);
+        float rdd0 = 2.0+1.0*tanh_approx(lp);
+        float rdd1 = 2.0+mix(1.0, 15.0, warpf)*tanh_approx(lp);
+        float rdd  = rdd1;
+        vec3 rd = normalize(p.x*uu + p.y*vv + rdd*ww);
+        vec3 nrd = normalize(np.x*uu + np.y*vv + rdd*ww);
+
+        float planeDist = mix(3.0, 2.75, warpf);
+      //  float planeDist = mix(3.0, 2.0, fo*fo);
+        const int furthest = 8;
+        const int fadeFrom = max(furthest-4, 0);
+        float fadeDist = planeDist*float(furthest - fadeFrom);
+        float nz = floor(ro.z / planeDist);
+
+        vec3 skyCol = galaxy_skyColor(ro, rd);
+
+        // Steps from nearest to furthest plane and accumulates the color
+
+        vec4 acol = vec4(0.0);
+        const float cutOff = 0.95;
+        bool cutOut = false;
+
+        for (int i = 1; i <= furthest; ++i) {
+          float pz = planeDist*nz + planeDist*float(i);
+
+          float pd = (pz - ro.z)/rd.z;
+
+          if (pd > 0.0 && acol.w < cutOff) {
+            vec3 pp = ro + rd*pd;
+            vec3 npp = ro + nrd*pd;
+
+            float aa = 3.0*length(pp - npp);
+
+            vec3 off = galaxy_offset(pp.z);
+
+            vec4 pcol = galaxy_plane(ro, rd, pp, off, aa, nz+float(i));
+
+            float nz = pp.z-ro.z;
+            float fadeIn = exp(-2.5*max((nz - planeDist*float(fadeFrom))/fadeDist, 0.0));
+            float fadeOut = smoothstep(0.0, planeDist*0.1, nz);
+            pcol.xyz = mix(skyCol, pcol.xyz, (fadeIn));
+            pcol.w *= fadeOut;
+
+            pcol = clamp(pcol, 0.0, 1.0);
+
+            acol = alphaBlend(pcol, acol);
+          } else {
+            cutOut = true;
+            break;
+          }
+
+        }
+
+        vec3 col = alphaBlend(skyCol, acol);
+      // To debug cutouts due to transparency
+      //  col += cutOut ? vec3(1.0, -1.0, 0.0) : vec3(0.0);
+
+        col = galaxy_overlay(col, p);
+
+        float fi = smoothstep(0.0, 10.0, TIME);
+
+        col = mix(vec3(0.0), col, fi);
+
+        return col;
+      }
+
+      vec3 galaxy_effect(vec2 p, vec2 q) {
+        const float v0 = 3.0;
+        const float v1 = 6.0;
+        float v = mix(v0, v1, step(galaxy_logo, TIME));
+        float z = v*TIME;
+        vec3 ro   = galaxy_offset(z);
+        vec3 dro  = galaxy_doffset(z);
+        vec3 ddro = galaxy_ddoffset(z)*1.0;
+        vec3 up = normalize(vec3(0.0,1.0,0.0)+10.0*ddro);
+        vec3 ww = normalize(dro);
+        vec3 uu = normalize(cross(up, ww));
+        vec3 vv = normalize(cross(ww, uu));
+
+        vec3 col = galaxy_color(ww, uu, vv, ro, p);
+
+        return col;
+      }
+
+      void main(void) {
+        vec2 q = v_texcoord;
+        vec2 p = -1. + 2. * q;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+
+        vec3 col = galaxy_effect(p, q);
+
+        col = postProcess(col, q);
+
+        fragColor = vec4(col, 1.0);
+      }
+    </script>
+
+    <script id="fs-bb-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+      uniform float time;
+      uniform vec2 resolution;
+      in vec2 v_texcoord;
+      out vec4 fragColor;
+
+      // -----------------------------------------------------------------------------
+      // CONSTANTS
+      // -----------------------------------------------------------------------------
+
+      #define PI              3.141592654
+      #define TAU             (2.0*PI)
+      #define TIME            time
+      #define RESOLUTION      resolution
+      #define ROT(a)          mat2(cos(a), sin(a), -sin(a), cos(a))
+      #define PCOS(a)         (0.5+0.5*cos(a))
+      #define PSIN(a)         (0.5+0.5*sin(a))
+      #define L2(x)           dot(x, x)
+      #define SCA(a)          vec2(sin(a), cos(a))
+      #define MISS            1E6
+      #define BTIME(n)        (n*beat+start)
+
+      const float beat            = 0.48;
+      const float start           = 41.1;
+      const float bounce_freq     = 0.5/beat;
+
+      const vec2 sca0             = SCA(0.0);
+      const mat2 rot0             = ROT(0.00);
+      const mat2 rotSome          = ROT(1.0);
+      const vec3 std_gamma        = vec3(2.2);
+
+      const float galaxy_lw       = 0.025;
+
+      // -----------------------------------------------------------------------------
+      // COMMON
+      // -----------------------------------------------------------------------------
+
+      float saturate(float a) { return clamp(a, 0.0, 1.0); }
+
+      float pmin(float a, float b, float k) {
+        float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0 );
+        return mix( b, a, h ) - k*h*(1.0-h);
+      }
+
+      float pmax(float a, float b, float k) {
+        return -pmin(-a, -b, k);
+      }
+
+      float pabs(float a, float k) {
+        return pmax(a, -a, k);
+      }
+
+      float tanh_approx(float x) {
+      //  return tanh(x);
+        float x2 = x*x;
+        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
+      }
+
+      float box(vec3 p, vec3 b) {
+        vec3 q = abs(p) - b;
+        return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
+      }
+
+      float torus(vec3 p, vec2 t) {
+        vec2 q = vec2(length(p.xz)-t.x,p.y);
+        return length(q)-t.y;
+      }
+
+      float verticalCapsule(vec3 p, float h, float r) {
+        p.y -= clamp( p.y, 0.0, h );
+        return length( p ) - r;
+      }
+
+      float verticalCylinder(vec3 p) {
+        return length(p.xz);
+      }
+
+      float sphere(vec3 p, float r) {
+        return length(p) - r;
+      }
+
+      float mod1(inout float p, float size) {
+        float halfsize = size*0.5;
+        float c = floor((p + halfsize)/size);
+        p = mod(p + halfsize, size) - halfsize;
+        return c;
+      }
+
+      vec2 mod2_1(inout vec2 p) {
+        vec2 c = floor(p + 0.5);
+        p = fract(p + 0.5) - 0.5;
+        return c;
+      }
+
+      vec2 mod2(inout vec2 p, vec2 size) {
+        vec2 c = floor((p + size*0.5)/size);
+        p = mod(p + size*0.5,size) - size*0.5;
+        return c;
+      }
+
+      vec3 mod3(inout vec3 p, vec3 size) {
+        vec3 c = floor((p + size*0.5)/size);
+        p = mod(p + size*0.5, size) - size*0.5;
+        return c;
+      }
+      vec3 sphereColor(vec3 p) {
+        float lxz = length(p.xz);
+        const float d0 = 4.0;
+        const float d1 = 4.0;
+        const float m0 = PI/2.0/d0;
+        const float m1 = PI/2.0/d1;
+        float a0 = atan(p.y, lxz)+PI/4.0/d0;
+        float n0 = mod1(a0, m0);
+        float x0 = fract(n0*0.5)*2.0;
+        float a1 = atan(p.x, p.z)+PI/4.0/d1;
+        float n1 = mod1(a1, m1);
+        float x1 = fract(n1*0.5)*2.0;
+        int m = int(round(x0))^int(round(x1));
+        return m > 0 ? vec3(1.0, 1.0, 1.0) : vec3(1.0, 0.0, 0.0);
+      }
+
+      // Classic post processing
+      vec3 postProcess(vec3 col, vec2 q) {
+        col = clamp(col, 0.0, 1.0);
+        col = pow(col, 1.0/std_gamma);
+        col = col*0.6+0.4*col*col*(3.0-2.0*col);
+        col = mix(col, vec3(dot(col, vec3(0.33))), -0.4);
+        col *=0.5+0.5*pow(19.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.7);
+        return col;
+      }
+
+      // -----------------------------------------------------------------------------
+      // BB (The bouncing ball)
+      // -----------------------------------------------------------------------------
+
+      #ifdef BB_EFFECT_5
+      const float bb_begin        = BTIME(336.0);  // ~202
+      const float bb_end          = BTIME(368.0);
+      #else
+      const float bb_begin        = BTIME(48.0);  // ~64
+      const float bb_end          = BTIME(208.0);
+      #endif
+
+      #define BB_TOLERANCE            0.0001
+      #define BB_NORM_OFF             0.001
+      #define BB_MAX_RAY_LENGTH       15.0
+      #define BB_MAX_RAY_MARCHES      60
+      #define BB_MAX_SHADOW_MARCHES   15
+      #define BB_MAX_REFLECTIONS      3
+
+      const vec3 bb_lightPos     = 2.0*vec3(4.0, 3.0, 1.5);
+      const vec3 bb_backLightPos = bb_lightPos.x*vec3(-1.0, 1.0, -1.0);
+      const vec3 bb_skyCol1      = vec3(0.2, 0.4, 0.6);
+      const vec3 bb_skyCol2      = vec3(0.4, 0.7, 1.0);
+      const vec3 bb_sunCol       = vec3(8.0,7.0,6.0)/8.0;
+      const vec3 bb_sunDir       = normalize(bb_lightPos);
+      const float bb_period      = 16.0/bounce_freq;
+
+      const float bb_bottom      = -.85;
+
+      vec3   bb_g_baseColor      = vec3(0.0);
+      float  bb_g_refFactor      = 0.0;
+      float  bb_g_time           = 0.0;
+      mat2   bb_g_rot            = rot0;
+      mat2   bb_g_srot           = rot0;
+      float  bb_g_fi             = 0.0;
+      float  bb_g_fo             = 0.0;
+      float  bb_g_fi13           = 0.0;
+      float  bb_g_fi23           = 0.0;
+
+      vec2 bb_bounce(float time) {
+        float tm = bounce_freq*time;
+        float t = fract(tm)-0.5;
+
+        return vec2(t, t*t-0.25);
+      }
+
+      void bb_bounce(inout vec3 p, float r, float amp, float time) {
+        mat2 rot = bb_g_rot;
+        vec2 bh = bb_bounce(time);
+        float h = r+bb_bottom-amp*bh.y;
+        p.y -= h;
+        float f = smoothstep(-0.5, 0.25, bh.x);
+        p.zy *= rot;
+        p.xz *= rot;
+        float a = 3.0*TAU*time;
+        float sx = 1.0-0.25*PSIN(a);
+        float sz = 1.0-0.25*PCOS(a);
+        p.x *= mix(sx, 1.0, f);
+        p.z *= mix(sz, 1.0, f);
+      }
+
+      float bb_planeIntersect(vec3 ro, vec3 rd, float mint) {
+        vec3 p = ro + rd*mint;
+        return (bb_bottom-p.y)/rd.y;
+      }
+
+      vec3 bb_skyColor(vec3 rd) {
+        float sunDot = max(dot(rd, bb_sunDir), 0.0);
+        vec3 final = vec3(0.);
+
+        float roundBox = length(max(abs(rd.xz/max(0.0,rd.y))-vec2(0.5, 0.5),0.0))-0.1;
+        final += vec3(0.75)* pow(saturate(1.0 - roundBox*0.5), 9.0);
+
+        final += mix(bb_skyCol1, bb_skyCol2, rd.y);
+        final += 0.5*bb_sunCol*pow(sunDot, 20.0);
+        final += 4.0*bb_sunCol*pow(sunDot, 400.0);
+        return final;
+      }
+
+      #ifdef BB_EFFECT_5
+      float bb_df(vec3 p) {
+
+        float gtime= TIME - bb_begin;
+        float fi   = bb_g_fi;
+        float fo   = bb_g_fo;
+        float ltime= bb_g_time;
+        mat2  rot  = bb_g_rot;
+        mat2  srot = bb_g_srot;
+        float fi13 = bb_g_fi13;
+        float fi23 = bb_g_fi23;
+
+        float oo = mix(2.5, 0.5, fi*fo);
+        float ss = mix(0.05, 0.4, fi13*fo);
+        float rr = mix(0.125, 0.75, fi23*fo);
+
+        vec3 p0 = p;
+        p0.y -= 0.5;
+        p0.zy *= rot;
+        p0.xy *= rot;
+        float d0 = box(p0, vec3(0.65));
+
+        vec3 p1 = p;
+        p1.y -= oo;
+
+        float s = 1.0;
+
+        float d1 = torus(p1, s*vec2(1.0, 0.125));
+
+        vec3 c1 = vec3(0.125);
+
+        float trf = 0.75;
+
+        for (int i = 0; i < 3; ++i) {
+          p1.xz *= rot;
+          p1.xyz = p1.zxy;
+
+          float pr = length(p1.xy);
+          float pa = atan(p1.y, p1.x);
+
+          float n = mod1(pa, TAU/8.0);
+
+          p1.xy = pr*vec2(cos(pa), sin(pa));
+          p1.x -= s;
+          s *= ss;
+          float dd = torus(p1, s*vec2(1.0, rr));
+
+
+          d1 = pmax(d1, -dd, 0.75*s);
+          trf = dd < d1 ? trf = 1.0-trf : trf;
+          d1 = min(d1, dd);
+        }
+
+
+        float rf = 0.35;
+        vec3 bc = vec3(0.5);
+
+        float d = d0;
+
+        d = d0;
+
+        d = pmax(d, -d1, 0.1);
+
+        if (d1 < d) {
+          bc = c1;
+          rf = trf;
+          d = d1;
+        }
+
+        bb_g_refFactor = rf;
+        bb_g_baseColor = bc;
+
+        return d;
+      }
+
+      #else
+      float bb_df(vec3 p) {
+        const float sr  = 0.5;
+        const float amp = 6.0;
+        float gtime= TIME - bb_begin;
+        float fi   = bb_g_fi;
+        float fo   = bb_g_fo;
+        float ltime= bb_g_time;
+        mat2  rot  = bb_g_rot;
+        mat2  srot = bb_g_srot;
+        float fi13 = bb_g_fi13;
+        float fi23 = bb_g_fi23;
+
+
+        float fifo = fi*fo;
+
+        vec3 p0 = p;
+        bb_bounce(p0, sr, amp, gtime);
+        float d0 = sphere(p0, sr);
+        vec3 c0 = sphereColor(p0);
+        float rf = 0.75;
+        vec3 bc = c0;
+        float d = d0;
+
+      #ifdef BB_EFFECT_0
+        vec3 p1 = p;
+        p1 -= vec3(-2.0*ltime*bounce_freq, -0.5, 0.0);
+        float d1 = max(-p1.x-1.0+2.0*7.0, -(-p1.x-1.0+2.0*14.0));
+        mod1(p1.x, 2.0);
+
+        vec2 tsz = 0.75*fifo*vec2(1.0, 0.1);
+        float d2 = torus(p1, tsz);
+        vec3 c2 = sphereColor(p1);
+        d2 = max(d2, d1);
+        if (d2 < d) {
+          d = d2;
+          bc = c2;
+        }
+      #endif
+
+      #ifdef BB_EFFECT_1
+        const float cl = 5.0;
+        const float cr = 0.75;
+        const float wr = 0.125;
+        float d6 = -(p.x-mix(4.0, -15.0, fi*fo));
+
+        vec3 p1 = p;
+        p1.z = abs(p1.z);
+        p1 -= vec3(0.0, 0.0, 2.5);
+        vec3 p2 = p1;
+        vec3 p4 = p1;
+        p1.z = abs(p1.z);
+        p1 -= vec3(-2.0*ltime*bounce_freq, 0.0, 0.5);
+        vec3 p5 = p1;
+        p1 = p1.zxy;
+        float d1 = verticalCylinder(p1)-0.125;
+        d1 = max(d1, d6);
+
+        p2 -= vec3(-10.0*ltime, 0.75-0.025, 0.0);
+        float d7 = p2.x -cl - cl*2.0*3.0;
+        float d8 = p2.x -cl - cl*2.0*12.0;
+
+        mod1(p2.x, cl*2.0);
+        p2.x += cl*0.5;
+        vec3 p3 = p2;
+        p2 = p2.zxy;
+        float d2 = verticalCapsule(p2, cl, cr);
+        d2 = max(d2, -d7);
+        d2 = max(d2, d8);
+
+        p3.z = abs(p3.z);
+        p3 -= vec3(0.0, 0.0, cr);
+        mod1(p3.x, wr*4.0);
+        float d3 = sphere(p3, wr);
+        d2 = pmax(d2, -d3, 0.05);
+        float dg = -d3;
+
+        mod1(p5.x, 1.2345);
+        p5 = p5.zxy;
+        float d5 = torus(p5, 0.125*vec2(1.0, 0.25));
+        d1 = pmax(d1, -d5, 0.025);
+        float dgg = -d5;
+
+        float ds = d1;
+        ds = min(ds ,d2);
+
+        if (ds < d) {
+          bc = vec3(0.0);
+          rf = 0.5;
+          d = ds;
+        }
+
+        if (dg == d) {
+          bc = vec3(2.0, 0.9, 0.9)*2.0;
+          rf = 0.5;
+        }
+
+        if (dgg == d) {
+          bc = vec3(0.9, 2.0, 0.9)*3.0;
+          rf = 1.0;
+        }
+      #endif
+
+      #ifdef BB_EFFECT_2
+        vec3 p1 = p;
+        float a = -tanh_approx(3.0*sin(ltime*PI*bounce_freq));
+        float r = mix(0.70, 0.275, smoothstep(0.0, bb_period, ltime));
+        p1 -= vec3(0.0, 0.75, (0.56+r)*sin(PI/4.0+ltime*PI*bounce_freq));
+        p1.yz *= ROT(a);
+
+        vec2 tsz = r*fifo*vec2(1.0, 0.1);
+        float d1 = torus(p1, tsz);
+        vec3 c1 = sphereColor(p1);
+        d = pmax(d, -d1, 0.5);
+        if (d1 < d) {
+          d = d1;
+          bc = c1;
+        }
+      #endif
+
+      #ifdef BB_EFFECT_3
+        float bz = 0.66*fi*fo;
+        vec3 p1 = p;
+        p1.zx *= rot;
+        p1 /= bz;
+        p1.x = pabs(p1.x, 1.);
+        p1.z = pabs(p1.z, 1.);
+        p1 -= vec3(0.0, 0.25, 0.0)+vec3(1.0, 0.0, 1.0)*mix(3.0, 0.75, fi13*(1.0-fi23));
+        p1.yz *= transpose(rot);
+        p1.xy *= rot;
+        p1.xz *= srot;
+        float d1 = box(p1, vec3(0.75))-0.125;
+        vec3 p2 = p1;
+        const float sz = 0.9;
+        vec3 n2 = mod3(p2, vec3(sz));
+        float d2 = sphere(p2, sz*0.25);
+        d1 = pmax(d1, -d2, 0.0275);
+        d1 *= bz;
+
+        d1 = pmax(d1, -d, 0.5);
+
+        if(d1 < d) {
+          bc = vec3(0.0);
+          rf = 0.5;
+          d = d1;
+        }
+      #endif
+
+      #ifdef BB_EFFECT_4
+        vec3 p1 = p;
+        p1.xz *= rot;
+        p1.x -= mix(10.0, 2.0, fi*fo);
+        p1.y -= 0.5;
+
+        float d1 = 1E6;
+        float pz = 1.0;
+        float sz = 0.75*fifo;
+        float m13 = fi13*fo;
+        float m23 = fi23*fo;
+        vec3 c1 = vec3(0.0);
+        float rf1 = 0.33;
+        for (int i = 0; i < 3; ++i) {
+          bool even = (i & 0x1) == 0;
+          p1.xz *= rot;
+          p1.xy *= rot;
+          float dd = sphere(p1, sz);
+          float dd1 = torus(p1, sz*vec2(1.0+mix(-0.3, 0.3, m13), 0.1));
+          dd = pmax(dd, -(dd1-0.1), 0.05);
+          dd = min(dd, dd1);
+          float ddd = dd - 0.2;
+          d1 = pmax(d1, -ddd*pz, 0.05);
+          if (dd*pz < d1) {
+            d1 = dd*pz;
+            rf1 = even ? 0.5 : 0.99;
+          }
+          const float zz = 0.35;
+          p1 /= zz;
+          pz *= zz;
+          vec3 sp1 = sign(p1);
+          p1 = abs(p1);
+          p1 -= vec3(mix(0.125, 0.66, m23)*sz/zz);
+        }
+
+        if (d1 < d) {
+          bc = c1;
+          rf = rf1;
+          d = d1;
+        }
+      #endif
+
+        bb_g_refFactor = rf;
+        bb_g_baseColor = bc;
+
+        return d;
+      }
+      #endif
+
+      vec3 bb_normal(vec3 pos) {
+        vec3 eps = vec3(BB_NORM_OFF, 0.0, 0.0);
+        vec3 nor;
+
+        nor.x = bb_df(pos+eps.xyy) - bb_df(pos-eps.xyy);
+        nor.y = bb_df(pos+eps.yxy) - bb_df(pos-eps.yxy);
+        nor.z = bb_df(pos+eps.yyx) - bb_df(pos-eps.yyx);
+
+        return normalize(nor);
+      }
+
+      float bb_rayMarch(vec3 ro, vec3 rd, float initial, out float nearest, out int iter) {
+        float t = initial;
+
+        float n = 1E6;
+        int ii = 0;
+
+        for (int i = 0; i < BB_MAX_RAY_MARCHES; ++i) {
+          ii = i;
+          vec3 p = ro + rd*t;
+
+          float d = bb_df(p);
+      //    d *= 0.9;
+          n = min(n, d);
+
+          if (d < BB_TOLERANCE || t >= BB_MAX_RAY_LENGTH) break;
+
+          t += d;
+        }
+
+        iter = ii;
+        nearest = n;
+
+        return t < BB_MAX_RAY_LENGTH ? t : MISS;
+      }
+
+      float bb_softShadow(vec3 ps, vec3 ld, float mint, float k) {
+
+        float res = 1.0;
+        float t = mint*6.0;
+        int mat;
+        for (int i=0; i < BB_MAX_SHADOW_MARCHES; ++i) {
+          vec3 p = ps + ld*t;
+          float d = bb_df(p);
+          res = min(res, k*d/t);
+          if (res < BB_TOLERANCE) break;
+
+          t += max(d, mint);
+        }
+        return clamp(res, 0.0, 1.0);
+      }
+
+      vec3 bb_render(vec3 ro, vec3 rd) {
+        vec3 finalCol = vec3(0.0);
+
+        float aggRefFactor = 1.0;
+
+        vec3 bg = bb_skyColor(rd);
+        int titer = 0;
+        int tref = 0;
+
+        for (int rc = 0; rc < BB_MAX_REFLECTIONS; ++rc) {
+            if (aggRefFactor < 0.05) break;
+
+            vec3 sky = bb_skyColor(rd);
+
+            const float mint = 0.05;
+            float tp = bb_planeIntersect(ro, rd, mint);
+
+            int iter;
+            float nearest;
+            float tm = bb_rayMarch(ro, rd, mint, nearest, iter);
+            titer += iter;
+            ++tref;
+
+            vec3 baseColor  = bb_g_baseColor;
+            float refFactor = bb_g_refFactor;
+
+            float shine = exp(-5.0*nearest);
+            const float shinef = 0.125;
+            const vec3 shineCol = vec3(1.25).zyx;
+            shine *= shinef;
+
+            if(tm >= MISS && tp <= 0.0) {
+              // We hit the sky
+              finalCol += aggRefFactor*mix(sky, shineCol, shine);
+              break;
+            }
+
+            vec3 p = ro + tm*rd;
+            vec3 nor = bb_normal(p);
+            float fakeAo = 1.0 - smoothstep(0.5, 1.2, float(iter)/float(BB_MAX_RAY_MARCHES));
+
+            vec3 pp = ro + tp*rd;
+            vec2 pp1 = pp.xz;
+
+            pp1.x -= -2.0*TIME*bounce_freq;
+            pp1 *= sqrt(0.5);
+            vec2 np1 = mod2_1(pp1);
+
+            if (tp < tm && tp >= 0.0) {
+              // Hit plane
+              p = pp;
+              float dd = min(abs(pp1.x), abs(pp1.y));
+              baseColor = vec3(0.75)-0.25*exp(-50.0*dd);
+              refFactor = 0.8;
+              nor = vec3(0.0, 1.0, 0.0);
+              fakeAo = 1.0;
+            }
+
+            refFactor *= pow(abs(dot(nor, rd)), 0.25);
+            vec3 ld  = normalize(bb_lightPos - p);
+            vec3 bld = normalize(bb_backLightPos - p);
+
+
+            float dif  = max(dot(nor, ld), 0.0);
+            float bdif = max(dot(nor, bld), 0.0);
+            float spe  = pow(max(dot(reflect(ld, nor), rd), 0.0), 40.0);
+            float sha  = bb_softShadow(p, ld, 0.1, 4.0);
+            vec3 col = 0.8*baseColor*mix(0.2, 1.0, dif*sha*fakeAo) + 0.25*spe;
+            col += baseColor*mix(0.0, 0.2, bdif);
+            col *= refFactor;
+
+            float yy = 1.0-exp(-4.0*float(iter)/float(BB_MAX_RAY_MARCHES));
+
+            col = mix(col, shineCol, max(shine, yy*shinef));
+      #ifdef BB_EFFECT_5
+            vec3 weird = (nor);
+            col *= mix(0.95, -1.0, abs(dot(weird,rd)));
+      #endif
+
+            finalCol += aggRefFactor*(col);
+
+            aggRefFactor *= (1.0 - refFactor);
+
+            ro = p;
+            rd = reflect(rd, nor);
+        }
+
+        return finalCol;
+      }
+
+      vec3 bb_effect(vec2 p, vec2 q) {
+        float gtime = TIME-bb_begin;
+        float ltime = mod(gtime, bb_period);
+        bb_g_time   = ltime;
+
+        bb_g_rot    = ROT(TAU*TIME*0.75/4.0);
+        bb_g_srot   = ROT(TAU*TIME*0.75/16.0);
+        bb_g_fi     = smoothstep(0.0, 1.0, ltime);
+        bb_g_fo     = 1.0-smoothstep(bb_period-1.25, bb_period-0.25, ltime);
+        bb_g_fi13   = smoothstep(bb_period*1.0/3.0-0.5, bb_period*1.0/3.0+0.5, ltime);
+        bb_g_fi23   = smoothstep(bb_period*2.0/3.0-0.5, bb_period*2.0/3.0+0.5, ltime);
+
+        vec3 ro = 0.6*vec3(6.0, 5.0, -2.0);
+        vec3 up = vec3(0.0, 1.0, 0.0);
+
+        ro.xz *= ROT(sin(TIME*sqrt(0.3)));
+
+      #ifdef BB_EFFECT_5
+        vec3 la  = vec3(0.0);
+      #else
+        float fi = smoothstep(0.0, 4.0, gtime);
+
+        vec3 la0 = bb_lightPos;
+        vec3 la1 = vec3(0.0);
+        vec3 la  = mix(la0, la1, fi*fi*fi);
+      #endif
+
+        vec3 ww = normalize(la - ro);
+        vec3 uu = normalize(cross(up, ww));
+        vec3 vv = normalize(cross(ww,uu));
+        vec3 rd = normalize(p.x*uu + p.y*vv + 2.5*ww);
+
+        vec3 col = bb_render(ro, rd);
+
+      #ifdef BB_EFFECT_5
+        col = mix(vec3(0.0), col, smoothstep(bb_begin, bb_begin+beat, TIME)*smoothstep(bb_end, bb_end-beat, TIME));
+      #else
+        col = mix(vec3(1.0), col, fi);
+        col = mix(vec3(0.0), col, smoothstep(bb_end, bb_end-beat, TIME));
+      #endif
+        return col;
+      }
+
+      void main(void) {
+        vec2 q = v_texcoord;
+        vec2 p = -1. + 2. * q;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+
+        vec3 col = bb_effect(p, q);
+
+        col = postProcess(col, q);
+
+        fragColor = vec4(col, 1.0);
+      }
+    </script>
+
+    <script id="fs-credits-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+      uniform float time;
+      uniform vec2 resolution;
+      in vec2 v_texcoord;
+      out vec4 fragColor;
+
+      // -----------------------------------------------------------------------------
+      // COMMON
+      // -----------------------------------------------------------------------------
+
+      #define PI              3.141592654
+      #define TAU             (2.0*PI)
+      #define TIME            time
+      #define TTIME           (TAU*time)
+      #define RESOLUTION      resolution
+      #define ROT(a)          mat2(cos(a), sin(a), -sin(a), cos(a))
+      #define SCA(a)          vec2(sin(a), cos(a))
+      #define MISS            1E6
+      #define BTIME(n)        (n*beat+start)
+      #define PCOS(x)         (0.5+0.5*cos(x))
+      #define L2(x)           dot(x, x)
+
+      const float beat            = 0.48;
+      const float start           = 41.1;
+      const float bounce_freq     = 0.5/beat;
+
+      const float corner0 = 0.02;
+      const float corner1 = 0.075;
+      const float topy    = 0.0475+corner0*0.5;
+
+      const float ff_start  = BTIME(208.0);
+      const float ff_end    = BTIME(240.0);
+
+      float hash(vec2 co) {
+        return fract(sin(dot(co, vec2(12.9898,58.233))) * 13758.5453);
+      }
+
+      vec2 hextile(inout vec2 p) {
+
+        const vec2 sz       = vec2(1.0, sqrt(3.0));
+        const vec2 hsz      = 0.5*sz;
+
+        vec2 p1 = mod(p, sz)-hsz;
+        vec2 p2 = mod(p - hsz, sz)-hsz;
+        vec2 p3 = mix(p2, p1, vec2(dot(p1, p1) < dot(p2, p2)));
+        vec2 n = ((p3 - p + hsz)/sz);
+        p = p3;
+
+        // Rounding to make hextile 0,0 well behaved
+        return round(n*2.0)/2.0;
+      }
+
+      float tanh_approx(float x) {
+      //  return tanh(x);
+        float x2 = x*x;
+        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
+      }
+
+      float vmax(vec2 v) {
+        return max(v.x, v.y);
+      }
+
+      float corner(vec2 p) {
+        return length(max(p, vec2(0))) + vmax(min(p, vec2(0)));
+      }
+
+      float roundedBox(vec2 p, vec2 b, vec4 r) {
+          r.xy = (p.x>0.0)?r.xy : r.zw;
+          r.x  = (p.y>0.0)?r.x  : r.y;
+          vec2 q = abs(p)-b+r.x;
+          return min(max(q.x,q.y),0.0) + length(max(q,0.0)) - r.x;
+      }
+
+      float box(vec2 p, vec2 b) {
+          vec2 d = abs(p)-b;
+          return length(max(d,0.0)) + min(max(d.x,d.y),0.0);
+      }
+
+      float circle(vec2 p, float r) {
+        return length(p)-r;
+      }
+
+      float segmentx(vec2 p) {
+        float d0 = abs(p.y);
+        float d1 = length(p);
+        return p.x > 0.0 ? d1 : d0;
+      }
+
+      float parallelogram(vec2 p, float wi, float he, float sk) {
+          vec2 e = vec2(sk,he);
+          p = (p.y<0.0)?-p:p;
+          vec2  w = p - e; w.x -= clamp(w.x,-wi,wi);
+          vec2  d = vec2(dot(w,w), -w.y);
+          float s = p.x*e.y - p.y*e.x;
+          p = (s<0.0)?-p:p;
+          vec2  v = p - vec2(wi,0); v -= e*clamp(dot(v,e)/dot(e,e),-1.0,1.0);
+          d = min( d, vec2(dot(v,v), wi*he-abs(s)));
+          return sqrt(d.x)*sign(-d.y);
+      }
+
+      vec2 refl(vec2 p, vec2 n) {
+        p -= n*min(0.0, dot(p, n))*2.0;
+        return p;
+      }
+
+      float mod1(inout float p, float size) {
+        float halfsize = size*0.5;
+        float c = floor((p + halfsize)/size);
+        p = mod(p + halfsize, size) - halfsize;
+        return c;
+      }
+
+      float pmin(float a, float b, float k) {
+          float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0);
+          return mix( b, a, h ) - k*h*(1.0-h);
+      }
+
+      float pmax(float a, float b, float k) {
+        return -pmin(-a, -b, k);
+      }
+
+      float pabs(float a, float k) {
+        return pmax(a, -a, k);
+      }
+
+      float commodore(vec2 p, out bool isRed) {
+        vec2 op = p;
+        p.y = abs(p.y);
+        float d0 = circle(p*vec2(1.0*0.865, 1.0), 0.865);
+        d0 = abs(d0)- 0.275;
+        float d1 = p.x-0.375;
+        float d2 = box(p-vec2(0.385+(1.35-0.385)*0.5, 0.235), vec2((1.35-0.385)*0.5, 0.2));
+        const vec2 l3 = vec2(1.35, 0.435)-vec2(0.92, 0.035);
+        const vec2 n3 = normalize(vec2(l3.y, -l3.x));
+        const float m3 = -dot(vec2(1.35, 0.435), n3);
+        float d3 = dot(p, n3)+m3;
+        float d = d0;
+        d = pmax(d, d1, 0.025);
+        d = pmin(d, d2, 0.025);
+        d = pmax(d, d3, 0.025);
+        isRed = op.y > 0.0 && d2 <= 0.0025;
+        return d;
+      }
+
+      float height_(vec2 p) {
+        p *= 0.5;
+        vec2 p0 = p;
+        vec2 n0 = hextile(p0);
+        float h = hash(n0);
+        p0 *= ROT(TAU*h);
+        const float ss = 0.3;
+        bool isRed;
+        float d0 = commodore(p0/ss, isRed)*ss;
+        float d = d0;
+        d -= 0.02;
+        const float aa = 0.02;
+        float a = fract(127.0*h) > 0.5 ? 0.125 : -0.25;
+        return a*tanh_approx(smoothstep(aa, -aa, d));
+      }
+
+      float height(vec2 p) {
+        const mat2 rot1 = ROT(1.23);
+        float tm = 123.0+TTIME/320.0;
+        p += 5.0*vec2(cos(tm), sin(tm*sqrt(0.5)));
+        const float aa = -0.33;
+        const mat2  pp = (1.0/aa)*rot1;
+        float h = 0.0;
+        float a = 1.0;
+        float d = 0.0;
+
+        float tm2 = 0.5*TIME;
+        h += 1.0*sin(0.75*tm2+dot(normalize(vec2(-1.0, 1.5)), 4.0*p));
+        h += 0.5*sin(tm2+dot(normalize(vec2(1.0, 1.0)), 7.0*p));
+        h += 0.25*sin(1.25*tm2+dot(normalize(vec2(-2, 1.0)), 13.0*p));
+        h += 1.75;
+        h*= 0.2;
+
+        for (int i = 0; i < 5; ++i) {
+          h += a*height_(p);
+          d += a;
+          a *= aa;
+          p *= pp;
+        }
+        const float hf = -0.125;
+        return hf*(h/d)+hf;
+      }
+
+      vec3 normal(vec2 p) {
+        vec2 v;
+        vec2 w;
+        vec2 e = vec2(4.0/RESOLUTION.y, 0);
+
+        vec3 n;
+        n.x = height(p + e.xy) - height(p - e.xy);
+        n.y = 2.0*e.x;
+        n.z = height(p + e.yx) - height(p - e.yx);
+
+        return normalize(n);
+      }
+
+
+      float omega_a(vec2 p) {
+        p.x = abs(p.x);
+        float db = roundedBox(p, vec2 (0.19, 0.166), vec4(corner1, corner0, corner1, corner0));
+        float dc = corner(p-vec2(0.065, -topy))-corner0;
+
+        float d = db;
+        d = max(d, -dc);
+
+        return d;
+      }
+
+      float omega_e(vec2 p) {
+        float db = roundedBox(p, vec2 (0.19, 0.166), vec4(corner0));
+        vec2 ps = p;
+        ps -= vec2(-0.055, -topy);
+        ps.x = -ps.x;
+        float ds = segmentx(ps)-corner0;
+
+        float d = db;
+        d = max(d, -ds);
+        return d;
+      }
+
+      float omega_f(vec2 p) {
+        float db = roundedBox(p, vec2 (0.19, 0.166), vec4(corner0));
+        vec2 pc = p;
+        pc -= vec2(-0.065, -topy);
+        pc.x = -pc.x;
+        float dc = corner(pc)-corner0;
+
+        float d = db;
+        d = max(d, -dc);
+        return d;
+      }
+
+      float omega_i(vec2 p) {
+        return roundedBox(p, vec2 (0.066, 0.166), vec4(corner0));
+      }
+
+      float omega_g(vec2 p) {
+        float db = roundedBox(p, vec2 (0.19, 0.166), vec4(corner0, corner1, corner1, corner1));
+        float dc = corner(-(p-vec2(-0.045, -0.057)));
+        dc = abs(dc) - corner0;
+        float dd = max(p.x-0.065, p.y-topy-corner0);
+        float d = db;
+        d = max(d, -max(dc, dd));
+        return d;
+      }
+
+      float omega_l(vec2 p) {
+        float db = roundedBox(p, vec2 (0.175, 0.166), vec4(corner0, corner0, corner0, corner1));
+        float dc = corner(-(p-vec2(-0.027, -0.055)))-corner0;
+        float d = db;
+        d = max(d, -dc);
+        return d;
+      }
+
+
+      float omega_m(vec2 p) {
+        float db = roundedBox(p, vec2 (0.255, 0.166), vec4(corner1, corner0, corner0, corner0));
+        p.x = abs(p.x);
+        float dl = abs(p.x-0.095)-corner0*2.0;
+        float dt = p.y-topy;
+
+        float d = db;
+        d = max(d, -max(dl,dt));
+
+        return d;
+      }
+
+      float omega_o(vec2 p) {
+        float db = roundedBox(p, vec2 (0.19, 0.166), vec4(corner1));
+        float di = roundedBox(p, vec2 (0.19, 0.166)*0.45, vec4(corner0));
+        float d = db;
+        d = max(d, -di);
+        return d;
+      }
+
+      float omega_r(vec2 p) {
+        p.x = abs(p.x);
+        float db = roundedBox(p, vec2 (0.19, 0.166), vec4(corner1, corner0, corner1, corner0));
+        float dc = corner(p-vec2(0.065, -topy))-corner0;
+
+        float d = db;
+        d = max(d, -dc);
+
+        return d;
+      }
+
+      float omega_x(vec2 p) {
+        p = abs(p);
+        float db = parallelogram(p-vec2(0.03, 0.0), 0.065-corner0, 0.166-corner0, 0.1)-corner0;
+
+        float d = db;
+
+        return d;
+      }
+
+      float omega_y(vec2 p) {
+        if(p.y > -0.044) p.x = abs(p.x);
+        float db = parallelogram(p-vec2(0.03, 0.0), 0.065-corner0, 0.166-corner0, 0.1)-corner0;
+
+        float d = db;
+
+        return d;
+      }
+
+      float firefoxText(vec2 p) {
+        vec2 pn = p;
+        pn.y -= topy;
+        float dn = abs(pn.y)-corner0;
+        p.x += 1.225;
+
+        vec2 pf = p;
+        pf.x -= 0.775;
+        float ps = sign(pf.x);
+        pf.x = abs(pf.x);
+        pf.x -= 0.775;
+        pf.x *= ps;
+        float df = omega_f(pf);
+
+        vec2 pi = p;
+        pi.x -= 0.325;
+        float di = omega_i(pi);
+
+        vec2 pr = p;
+        pr.x -= 0.65;
+        float dr = omega_r(pr);
+
+        vec2 pe = p;
+        pe.x -= 1.1;
+        float de = omega_e(pe);
+
+        vec2 po = p;
+        po.x -= 2.0;
+        float do_ = omega_o(po);
+
+        vec2 px = p;
+        px.x -= 2.45;
+        float dx = omega_x(px);
+
+        float d = 1E6;
+        d = min(d, df);
+        d = min(d, di);
+        d = min(d, dr);
+        d = min(d, de);
+        d = min(d, do_);
+        d = min(d, dx);
+        d = max(d, -dn);
+        return d;
+      }
+
+      float galaxyText(vec2 p) {
+        vec2 pn = p;
+        pn.y -= topy;
+        float dn = abs(pn.y)-corner0;
+        p.x += 1.105;
+
+        vec2 pg = p;
+        pg.x -= 0.0;
+        float dg = omega_g(pg);
+
+        vec2 pa = p;
+        pa.x -= 0.88;
+        pa.x = abs(pa.x);
+        pa.x -= 0.43;
+        float da = omega_a(pa);
+
+        vec2 pl = p;
+        pl.x -= 0.88;
+        float dl = omega_l(pl);
+
+        vec2 px = p;
+        px.x -= 1.755;
+        float dx = omega_x(px);
+
+        vec2 py = p;
+        py.x -= 2.205;
+        float dy = omega_y(py);
+
+        float d = 1E6;
+        d = min(d, dg);
+        d = min(d, da);
+        d = min(d, dl);
+        d = min(d, dx);
+        d = min(d, dy);
+        d = max(d, -dn);
+
+        return d;
+      }
+
+      vec3 color(vec2 p) {
+        vec2 ppp = p;
+        const float s = 1.0;
+        const vec3 lp1 = vec3(1.0, 1.25, 1.0)*vec3(s, 1.0, s);
+        const vec3 lp2 = vec3(-1.0, 1.25, 1.0)*vec3(s, 1.0, s);
+        const vec3 lcol1 = sqrt(vec3(1.25, 1.35, 2.0).zxy*0.15);
+        const vec3 lcol2 = vec3(2.0, 1.55, 1.25).zyx*0.85;
+
+        float aa = 2.0/RESOLUTION.y;
+
+        vec3 col = vec3(0.0);
+        float h = height(p);
+        vec3  n = normal(p);
+
+        vec3 ro = vec3(0.0, mix(-3.0, -10.0, PCOS(TIME+PI*p.x)), 0.0);
+        vec3 pp = vec3(p.x, 0.0, p.y);
+
+        vec3 po = vec3(p.x, h, p.y);
+        vec3 rd = normalize(ro - po);
+
+        vec3 ld1 = normalize(lp1 - po);
+        vec3 ld2 = normalize(lp2 - po);
+
+        float diff1 = max(dot(n, ld1), 0.0);
+        float diff2 = max(dot(n, ld2), 0.0);
+
+        vec3  rn    = n;
+        vec3  ref   = reflect(rd, rn);
+        float ref1  = max(dot(ref, ld1), 0.0);
+        float ref2  = max(dot(ref, ld2), 0.0);
+
+        vec3 lpow1 = 0.15*lcol1/L2(ld1);
+        vec3 lpow2 = 0.25*lcol2/L2(ld2);
+        vec3 dm = vec3(1.0)*tanh_approx(-h*10.0+0.125);
+        col += dm*pow(diff1, 4.0)*lpow1;
+        col += dm*pow(diff2, 4.0)*lpow2;
+        vec3 rm = vec3(1.0)*mix(0.25, 1.0, tanh_approx(-h*1000.0));
+        col += rm*pow(ref1, 20.0)*lcol1;
+        col += rm*pow(ref2, 20.0)*lcol2;
+
+        float fo = smoothstep(BTIME(240.0), BTIME(232.0), TIME);
+        col = mix(vec3(0.0), col*mix(10.0, 1.0, smoothstep(BTIME(213.0), BTIME(214.0), TIME)), smoothstep(BTIME(212.0), BTIME(214.0), TIME)*fo);
+
+        const float zp = 1.175;
+
+        float off = .125*p.x*p.x*p.x-p.y;
+        const float coff = PI;
+        float angle = off+mix(coff*0.42, -coff*0.42 , smoothstep(BTIME(216.0), BTIME(224.0), TIME)*fo);
+        float split = angle+coff;
+        int nsplit = int(mod1(split, coff));
+        split = (nsplit & 1) == 0 ? split : -split;
+
+        vec2 op = ppp;
+        op.x += -0.25*ppp.y;
+        op /= zp;
+        float di = split > 0.0 ? firefoxText(op) : galaxyText(op);
+        di *= zp;
+        float dio = di;
+        dio -= 0.025;
+        dio = abs(dio) - 0.005;
+        di = pmin(di, dio, 0.025);
+        float dg = di;
+
+        float gmix = pow(abs(cos(angle)), 14.0);
+        float gmix2 = abs(1.0/tanh_approx(split))*0.5;
+        col += -lcol2*0.25*(exp(-9.0*max(di, 0.0)));
+
+        dg = abs(dg-0.025);
+        float glow = exp(-20.0*max(dg+0., 0.0));
+        vec3 glowCol = mix(lcol2.zyx*lcol2.zyx/6.0, lcol2.zyx, glow*glow)*gmix2;
+        col = mix(col, vec3(mix(vec3(0.9), sqrt(glowCol*0.5), gmix)), smoothstep(-aa, aa, -di));
+        col += glowCol*glow*gmix;
+
+        return col;
+      }
+
+      // Post processing I found somewhere on shadertoy years ago
+      vec3 postProcess(vec3 col, vec2 q) {
+        col = clamp(col, 0.0, 1.0);
+        col = pow(col, 1.0/vec3(2.2));
+        col = col*0.6+0.4*col*col*(3.0-2.0*col);
+        col = mix(col, vec3(dot(col, vec3(0.33))), -0.4);
+        col *=0.5+0.5*pow(19.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.7);
+        return col;
+      }
+
+      void main(void) {
+        vec2 q = v_texcoord;
+        vec2 p = -1. + 2. * q;
+        float aa = 2.0/RESOLUTION.y;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+
+        vec3 col = color(p);
+        col = postProcess(col, q);
+        col = mix(vec3(0.0), col, smoothstep(ff_start, BTIME(209.0), TIME));
+
+        fragColor = vec4(col, 1.0);
+      }
+    </script>
+
+    <script id="fs-cube-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+      uniform float time;
+      uniform vec2 resolution;
+      in vec2 v_texcoord;
+      out vec4 fragColor;
+
+      // -----------------------------------------------------------------------------
+      // CONSTANTS
+      // -----------------------------------------------------------------------------
+
+      #define PI              3.141592654
+      #define TAU             (2.0*PI)
+      #define TIME            time
+      #define RESOLUTION      resolution
+      #define ROT(a)          mat2(cos(a), sin(a), -sin(a), cos(a))
+      #define PCOS(a)         (0.5+0.5*cos(a))
+      #define PSIN(a)         (0.5+0.5*sin(a))
+      #define L2(x)           dot(x, x)
+      #define SCA(a)          vec2(sin(a), cos(a))
+      #define MISS            1E6
+      #define BTIME(n)        (n*beat+start)
+
+      #define CUBE_TOLERANCE       0.0001
+      #define CUBE_MAX_RAY_LENGTH  8.0
+      #define CUBE_MAX_RAY_MARCHES 80
+      #define CUBE_NORM_OFF        0.0005
+
+      const float beat            = 0.48;
+      const float start           = 41.1;
+      const float bounce_freq     = 0.5/beat;
+
+      const mat2 rot0             = ROT(0.00);
+      const vec3 std_gamma        = vec3(2.2);
+
+      const float cube_begin      = BTIME(240.0); // ~156
+      const float cube_flash0     = BTIME(334.0);
+      const float cube_flash1     = BTIME(335.0);
+      const float cube_end        = BTIME(336.0);
+
+      // GLOBAL MUTABLES
+
+      vec4  cube_g_plane       = vec4(normalize(vec3(1.0, 0.0, 0.0)), 0.0);
+      float cube_g_pw          = 0.0;
+      mat2 cube_g_rotxy        = rot0;
+      mat2 cube_g_rotxz        = rot0;
+      mat2 cube_g_rotxw        = rot0;
+      mat2 cube_g_rotyw        = rot0;
+      mat2 cube_g_rotzw        = rot0;
+
+
+      // -----------------------------------------------------------------------------
+      // COMMON
+      // -----------------------------------------------------------------------------
+
+      float pmin(float a, float b, float k) {
+        float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0 );
+        return mix( b, a, h ) - k*h*(1.0-h);
+      }
+
+      float rayPlane(vec3 ro, vec3 rd, vec4 p) {
+        return -(dot(ro,p.xyz)+p.w)/dot(rd,p.xyz);
+      }
+
+      float tanh_approx(float x) {
+      //  return tanh(x);
+        float x2 = x*x;
+        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
+      }
+
+      float plane(vec3 p, vec4 plane) {
+        return dot(plane.xyz, p)+plane.w;
+      }
+
+      float box(vec2 p, vec2 b) {
+        vec2 d = abs(p)-b;
+        return length(max(d,0.0)) + min(max(d.x,d.y),0.0);
+      }
+
+      float box(vec4 p, vec4 b) {
+        vec4 q = abs(p) - b;
+        return length(max(q,0.0)) + min(max(max(q.x, q.w),max(q.y,q.z)),0.0);
+      }
+
+      vec2 mod2(inout vec2 p, vec2 size) {
+        vec2 c = floor((p + size*0.5)/size);
+        p = mod(p + size*0.5,size) - size*0.5;
+        return c;
+      }
+
+      vec3 hsv2rgb(vec3 c) {
+        const vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+        vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+        return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+      }
+
+      // Classic post processing
+      vec3 postProcess(vec3 col, vec2 q) {
+        col = clamp(col, 0.0, 1.0);
+        col = pow(col, 1.0/std_gamma);
+        col = col*0.6+0.4*col*col*(3.0-2.0*col);
+        col = mix(col, vec3(dot(col, vec3(0.33))), -0.4);
+        col *=0.5+0.5*pow(19.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.7);
+        return col;
+      }
+
+      // -----------------------------------------------------------------------------
+      // CUBE
+      // -----------------------------------------------------------------------------
+
+      vec2 cube_mengerSponge(vec4 p) {
+        float db = box(p, vec4(1.0));
+        if(db > .125) vec2(db, db);
+
+        float d_ = db;
+        float res = d_;
+
+        float s = 1.0;
+        for(int m = 0; m < 4; ++m) {
+          float ss = 0.75;
+          vec4 a = mod(p*s, 2.0)-1.0;
+          s *= 3.0;
+          vec4 r = abs(1.0 - 3.0*abs(a));
+
+          float da = max(max(r.x,r.y),r.w);
+          float db = max(max(r.y,r.z),r.w);
+          float dc = max(max(r.z,r.x),r.w);
+          float dd = max(max(r.z,r.x),r.y);
+          float df = length(r)-2.16;
+
+          float du = da;
+          du = min(du, db);
+          du = min(du, dc);
+          du = pmin(du, dd, ss); // Soften the edges a bit
+          du = max(du, -df);
+          du -= 1.0;
+          du /= s;
+
+          res = max(res, du);
+        }
+
+        return vec2(db, res);
+      }
+
+      float cube_intersectTransformPlane(vec3 ro, vec3 rd) {
+        return rayPlane(ro, rd, cube_g_plane);
+      }
+
+      float cube_dtransformPlane(vec3 p) {
+        return plane(p, cube_g_plane);
+      }
+
+      float cube_df(vec3 p) {
+        float dp = cube_dtransformPlane(p);
+        const float s = 1.0/3.0;
+        p /= s;
+        p.xy *= cube_g_rotxy;
+        p.xz *= cube_g_rotxz;
+        vec4 pp = vec4(p, cube_g_pw);
+        pp.xw *= cube_g_rotxw;
+        pp.yw *= cube_g_rotyw;
+        pp.zw *= cube_g_rotzw;
+
+        // TODO: Optimize
+        vec2 dms = cube_mengerSponge(pp);
+
+        float d0 = dms.x*s;
+        float d2 = d0;
+        d0 = max(dp, d0);
+
+        float d1 = dms.y*s;
+        d1 = max(-dp, d1);
+        return max(d2, pmin(d0, d1, 0.05));
+      }
+
+      float cube_rayMarch(vec3 ro, vec3 rd, out int iter) {
+        float t = 0.0;
+        int i = 0;
+        for (i = 0; i < CUBE_MAX_RAY_MARCHES; i++) {
+          float d = cube_df(ro + rd*t);
+          if (d < CUBE_TOLERANCE || t > CUBE_MAX_RAY_LENGTH) break;
+          t += d;
+        }
+        iter = i;
+        return t;
+      }
+
+      vec3 cube_normal(vec3 pos) {
+        vec2  eps = vec2(CUBE_NORM_OFF,0.0);
+        vec3 nor;
+        nor.x = cube_df(pos+eps.xyy) - cube_df(pos-eps.xyy);
+        nor.y = cube_df(pos+eps.yxy) - cube_df(pos-eps.yxy);
+        nor.z = cube_df(pos+eps.yyx) - cube_df(pos-eps.yyx);
+        return normalize(nor);
+      }
+
+      float cube_softShadow(vec3 pos, vec3 ld, float ll, float mint, float k) {
+        const float minShadow = 0.25;
+        float res = 1.0;
+        float t = mint;
+        for (int i=0; i<24; i++) {
+          float d = cube_df(pos + ld*t);
+          res = min(res, k*d/t);
+          if (ll <= t) break;
+          if(res <= minShadow) break;
+          t += max(mint*0.2, d);
+        }
+        return clamp(res,minShadow,1.0);
+      }
+
+      vec3 cube_transformPlane(vec3 ro, vec3 rd, vec4 plane, out float ttp) {
+        vec3 tnor = plane.xyz;
+        float t = rayPlane(ro, rd, plane);
+        ttp = t;
+        if (t < 0.0) return vec3(0.0);
+        vec3 tp = ro + t*rd;
+        float td = cube_df(tp);
+        td -= 0.025;
+        float otd = td;
+        td = abs(td)- 0.005;
+        const vec3 tup = vec3(0.0, 1.0, 0.0);
+        vec3 txx = normalize(cross(tnor, tup));
+        vec3 tyy = normalize(cross(tnor, txx));
+        vec2 tp2 = vec2(dot(txx, tp), dot(tyy, tp));
+        float a  = mix(0.0, PI/4.0 + 0.5*(TIME-BTIME(288.0)), smoothstep(BTIME(288.0), BTIME(292.0), TIME));
+        tp2 *= ROT(a);
+        float tpd = box(tp2, 0.6*vec2(4.0/3.0, 1.0));
+        float taa = 0.001;
+        mod2(tp2, vec2(0.125));
+        float tpgd = min(abs(tp2.x), abs(tp2.y));
+        tpgd = max(tpgd, -otd);
+        tpgd = max(tpgd, tpd);
+        float tgd = tpd;
+        tgd -= 0.0125;
+        tgd = abs(tgd)- 0.005;
+        tgd = min(tgd, td);
+
+        const vec3 greenGlow = vec3(1.25, 2.0, 1.25);
+        const vec3 redGlow = vec3(2.0, 1.25, 1.5);
+        vec3 tcol = vec3(0.0125);
+        tcol += greenGlow*exp(-max(tpgd, 0.0)*900.0);
+        tcol += greenGlow*(1.0-abs(dot(rd, tnor)))*0.2*PSIN(500.*tp2.y);
+        tcol = mix(vec3(0.0), tcol, smoothstep(-taa, taa, -(tpd-0.025)));
+        tcol += redGlow*exp(-max(tgd, 0.0)*100.0);
+        return tcol;
+      }
+
+      vec3 cube_render(in vec3 ro, in vec3 rd) {
+        vec3 lightPos = 2.0*vec3(1.5, 3.0, 1.0);
+
+        float alpha   = 0.05*TIME;
+        vec3 tnor     = normalize(vec3(1.0, 0.0, 0.0));
+        tnor.xy       *= ROT(PI*(1.0-cos(sqrt(0.3)*max(TIME-BTIME(296.0), 0.0))));
+        tnor.xz       *= ROT(PI*(1.0-cos(sqrt(0.15)*max(TIME-BTIME(304.0), 0.0))));
+
+        float tm      = -0.5*(cos((2.0*TAU/(4.0/beat))*max(TIME-BTIME(292.0), 0.0)));
+        tm  = mix(0.75 , tm, smoothstep(BTIME(272.0), BTIME(288.0), TIME));
+        tm  = mix(-0.75, tm, smoothstep(BTIME(248.0), BTIME(272.0), TIME));
+        tm  = mix(-3.0 , tm, smoothstep(BTIME(244.0), BTIME(248.0), TIME));
+
+        vec4 plane    = vec4(tnor, tm);
+
+        cube_g_plane       = plane;
+        cube_g_rotxy       = ROT(TIME);
+        cube_g_rotxz       = ROT(TIME*sqrt(0.5));
+        cube_g_pw          = 0.5*cos(alpha*sqrt(2.0));
+        cube_g_rotxw       = ROT(alpha);
+        cube_g_rotyw       = ROT(alpha*sqrt(0.5));
+        cube_g_rotzw       = ROT(alpha*sqrt(2.0));
+
+      //  tnor.xy *= g_rotxy;
+        // background color
+        vec3 skyCol = vec3(0.0);
+
+        int iter = 0;
+        float t = cube_rayMarch(ro, rd, iter);
+        float tp;
+        vec3 tcol = cube_transformPlane(ro, rd, plane, tp);
+        tcol = mix(vec3(0.0), tcol, float(tp < t));
+
+        float ifade = 1.0-tanh_approx(2.0*float(iter)/float(CUBE_MAX_RAY_MARCHES));
+
+        vec3 pos = ro + t*rd;
+        vec3 nor = vec3(0.0, 1.0, 0.0);
+
+        vec3 color = vec3(0.0);
+
+        float dp   = -(ro.y+1.)/rd.y;
+
+        if (dp > 0.0 && dp < t) {
+          // Ray intersected plane
+          t   = dp;
+          pos = ro + t*rd;
+          nor = vec3(0.0, 1.0, 0.0);
+          vec2 pp = pos.xz*1.5;
+          float m = 0.5+0.25*(sin(3.0*pp.x+TIME*2.1)+sin(3.3*pp.y+TIME*2.0));
+          m *= m;
+          m *= m;
+          pp = fract(pp+0.5)-0.5;
+          float dp = pmin(abs(pp.x), abs(pp.y), 0.025);
+          vec3 hsv = vec3(0.4+mix(0.15,0.0, m), tanh_approx(mix(100.0, 10.0, m)*dp), 1.0);
+          color = 2.5*hsv2rgb(hsv)*exp(-mix(30.0, 10.0, m)*dp);
+        } else if (t < CUBE_MAX_RAY_LENGTH) {
+          // Ray intersected object
+          nor        = cube_normal(pos);
+          vec3 hsv   = (vec3(-0.2+0.25*t, 1.0-ifade, 1.0));
+          color = hsv2rgb(hsv);
+        } else {
+          // Ray intersected sky
+          return (skyCol)*ifade+tcol;
+        }
+
+        vec3 lv   = lightPos - pos;
+        float ll2 = dot(lv, lv);
+        float ll  = sqrt(ll2);
+        vec3 ld   = lv / ll;
+        float sha = cube_softShadow(pos, ld, ll, 0.01, 64.0);
+
+        float dm  = min(1.0, 40.0/ll2);
+        float dif = max(dot(nor,ld),0.0)*dm;
+        float spe = pow(max(dot(reflect(-ld, nor), -rd), 0.), 10.);
+        float l   = dif*sha;
+
+        float lin = mix(0.2, 1.0, l);
+
+        vec3 col = lin*color + spe*sha;
+
+        float f = exp(-20.0*(max(t-3.0, 0.0) / CUBE_MAX_RAY_LENGTH));
+
+        return (mix(skyCol, col , f))*ifade+tcol;
+      }
+
+      vec3 cube_effect(vec2 p, vec2 q) {
+        float m = smoothstep(BTIME(264.0), BTIME(272.0), TIME);
+        float tm = TIME-BTIME(264.0);
+        // camera
+        vec3 ro = mix(1.0, 0.6, m)*vec3(2.0, 0, 0.2)+vec3(0.0, 0.25, 0.0);
+        ro.xz *= ROT(mix(0.0, tm*0.25, m));
+        ro.yz *= ROT(-(1.0-PCOS(tm*0.25*sqrt(0.5)))*0.25);
+        vec3 ww = normalize(vec3(0.0, 0.0, 0.0) - ro);
+        vec3 uu = normalize(cross( vec3(0.0,1.0,0.0), ww ));
+        vec3 vv = normalize(cross(ww,uu));
+        vec3 rd = normalize( p.x*uu + p.y*vv + 2.5*ww );
+
+        return cube_render(ro, rd);
+      }
+
+      void main(void) {
+        vec2 q = v_texcoord;
+        vec2 p = -1. + 2. * q;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+
+        vec3 col = cube_effect(p, q);
+
+        col = postProcess(col, q);
+        col = mix(vec3(1.0), col, smoothstep(cube_begin+0.25, cube_begin+1.5, TIME));
+        col = mix(vec3(1.0), col, step(TIME, cube_flash0)+smoothstep(cube_flash0, cube_flash1, TIME));
+        col = mix(col, vec3(smoothstep(cube_end, cube_flash1, TIME)), step(cube_flash1, TIME));
+
+        fragColor = vec4(col, 1.0);
+      }
+    </script>
+
+    <script id="fs-planes-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+      uniform float time;
+      uniform vec2 resolution;
+      in vec2 v_texcoord;
+      out vec4 fragColor;
+
+      // -----------------------------------------------------------------------------
+      // COMMON
+      // -----------------------------------------------------------------------------
+
+      #define PI              3.141592654
+      #define TAU             (2.0*PI)
+      #define TIME            time
+      #define RESOLUTION      resolution
+      #define ROT(a)          mat2(cos(a), sin(a), -sin(a), cos(a))
+      #define PCOS(a)         (0.5+0.5*cos(a))
+      #define SCA(a)          vec2(sin(a), cos(a))
+      #define BTIME(n)        (n*beat+start)
+
+      #define LESS(a,b,c)     mix(a,b,step(0.,c))
+      #define SABS(x,k)       LESS((.5/(k))*(x)*(x)+(k)*.5,abs(x),abs(x)-(k))
+      #define L2(x)           dot(x, x)
+      #define PSIN(x)         (0.5+0.5*sin(x))
+
+      const float beat            = 0.48;
+      const float start           = 41.1;
+      const float bounce_freq     = 0.5/beat;
+
+      const vec3 std_gamma        = vec3(2.2);
+
+      float beatf() {
+        return PCOS(TAU*TIME/beat);
+      }
+
+      float hash(float co) {
+        return fract(sin(co*12.9898) * 13758.5453);
+      }
+
+      vec2 toPolar(vec2 p) {
+        return vec2(length(p), atan(p.y, p.x));
+      }
+
+      vec2 toRect(vec2 p) {
+        return vec2(p.x*cos(p.y), p.x*sin(p.y));
+      }
+
+      float modMirror1(inout float p, float size) {
+        float halfsize = size*0.5;
+        float c = floor((p + halfsize)/size);
+        p = mod(p + halfsize,size) - halfsize;
+        p *= mod(c, 2.0)*2.0 - 1.0;
+        return c;
+      }
+
+      vec2 mod2_1(inout vec2 p) {
+        vec2 c = floor(p + 0.5);
+        p = fract(p + 0.5) - 0.5;
+        return c;
+      }
+
+      float hex(vec2 p, float r) {
+        const vec3 k = vec3(-sqrt(3.0)/2.0,1.0/2.0,sqrt(3.0)/3.0);
+        p = p.yx;
+        p = abs(p);
+        p -= 2.0*min(dot(k.xy,p),0.0)*k.xy;
+        p -= vec2(clamp(p.x, -k.z*r, k.z*r), r);
+        return length(p)*sign(p.y);
+      }
+
+      float circle(vec2 p, float r) {
+        return length(p) - r;
+      }
+
+      float smoothKaleidoscope(inout vec2 p, float sm, float rep) {
+        vec2 hp = p;
+
+        vec2 hpp = toPolar(hp);
+        float rn = modMirror1(hpp.y, TAU/rep);
+
+        float sa = PI/rep - SABS(PI/rep - abs(hpp.y), sm);
+        hpp.y = sign(hpp.y)*(sa);
+
+        hp = toRect(hpp);
+
+        p = hp;
+
+        return rn;
+      }
+
+      vec4 alphaBlend(vec4 back, vec4 front) {
+        float w = front.w + back.w*(1.0-front.w);
+        vec3 xyz = (front.xyz*front.w + back.xyz*back.w*(1.0-front.w))/w;
+        return w > 0.0 ? vec4(xyz, w) : vec4(0.0);
+      }
+
+      vec3 alphaBlend(vec3 back, vec4 front) {
+        return mix(back, front.xyz, front.w);
+      }
+
+      float tanh_approx(float x) {
+      //  return tanh(x);
+        float x2 = x*x;
+        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
+      }
+
+      float pmin(float a, float b, float k) {
+        float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0);
+
+        return mix(b, a, h) - k*h*(1.0-h);
+      }
+
+      vec3 hsv2rgb(vec3 c) {
+        const vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+        vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+        return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+      }
+
+      float apollian(vec4 p, float s) {
+        float scale = 1.0;
+
+        for(int i=0; i<7; ++i) {
+          p = -1.0 + 2.0*fract(0.5*p+0.5);
+
+          float r2 = dot(p,p);
+
+          float k  = s/r2;
+          p       *= k;
+          scale   *= k;
+        }
+
+        return abs(p.y)/scale;
+      }
+
+      const float fixed_radius2 = 1.9;
+      const float min_radius2   = 0.5;
+      const float folding_limit = 1.0;
+      const float scale         = -2.8;
+
+      void sphere_fold(inout vec3 z, inout float dz) {
+          float r2 = dot(z, z);
+          if(r2 < min_radius2) {
+              float temp = (fixed_radius2 / min_radius2);
+              z *= temp;
+              dz *= temp;
+          } else if(r2 < fixed_radius2) {
+              float temp = (fixed_radius2 / r2);
+              z *= temp;
+              dz *= temp;
+          }
+      }
+
+      vec3 polySoftMin3(vec3 a, vec3 b, vec3 k) {
+        vec3 h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0);
+
+        return mix(b, a, h) - k*h*(1.0-h);
+      }
+
+      void box_fold(inout vec3 z, inout float dz) {
+        const float k = 0.05;
+        // Soft clamp after suggestion from ollij
+        vec3 zz = sign(z)*polySoftMin3(abs(z), vec3(folding_limit), vec3(k));
+        // Hard clamp
+        // z = clamp(z, -folding_limit, folding_limit);
+        z = zz * 2.0 - z;
+      }
+
+      float sphere(vec3 p, float t) {
+        return length(p)-t;
+      }
+
+      float torus(vec3 p, vec2 t) {
+        vec2 q = vec2(length(p.xz)-t.x,p.y);
+        return length(q)-t.y;
+      }
+
+      float mb(vec3 z) {
+          vec3 offset = z;
+          float dr = 1.0;
+          float fd = 0.0;
+          for(int n = 0; n < 5; ++n) {
+              box_fold(z, dr);
+              sphere_fold(z, dr);
+              z = scale * z + offset;
+              dr = dr * abs(scale) + 1.0;
+              float r1 = sphere(z, 5.0);
+              float r2 = torus(z, vec2(8.0, 1));
+              r2 = abs(r2) - 0.25;
+              float r = n < 4 ? r2 : r1;
+              float dd = r / abs(dr);
+              if (n < 3 || dd < fd) {
+                fd = dd;
+              }
+          }
+          return fd;
+      }
+
+      vec3 offset(float z) {
+        float a = z;
+        vec2 p = -0.10*(vec2(cos(a), sin(a*sqrt(2.0))) + vec2(cos(a*sqrt(0.75)), sin(a*sqrt(0.5))));
+        return vec3(p, z);
+      }
+
+      vec3 doffset(float z) {
+        float eps = 0.1;
+        return 0.5*(offset(z + eps) - offset(z - eps))/eps;
+      }
+
+      vec3 ddoffset(float z) {
+        float eps = 0.1;
+        return 0.125*(doffset(z + eps) - doffset(z - eps))/eps;
+      }
+
+      float weird1(vec2 p, float h) {
+        float z = 4.0;
+        float tm = 0.2*TIME+h*10.0;
+        p *= ROT(tm*0.5);
+        float r = 0.5;
+        vec4 off = vec4(r*PSIN(tm*sqrt(3.0)), r*PSIN(tm*sqrt(1.5)), r*PSIN(tm*sqrt(2.0)), 0.0);
+        vec4 pp = vec4(p.x, p.y, 0.0, 0.0)+off;
+        pp.w = 0.125*(1.0-tanh_approx(length(pp.xyz)));
+        pp.yz *= ROT(tm);
+        pp.xz *= ROT(tm*sqrt(0.5));
+        pp /= z;
+        float d = apollian(pp, 0.8+h);
+        return d*z;
+      }
+
+      float weird2(vec2 p, float h) {
+        const float s = 0.55;
+        p /= s;
+        float rep = 20.0;
+        float ss = 0.05*6.0/rep;
+        vec3 p3 = vec3(p.x, p.y, PSIN(TIME*0.5+TAU*h));
+        p3.yz *= ROT(TIME*0.1+TAU*h);
+        float n = smoothKaleidoscope(p3.xy, ss, rep);
+        return mb(p3)*s;
+      }
+
+      float circles(vec2 p) {
+        vec2 pp = toPolar(p);
+        const float ss = 1.5;
+        pp.x = fract(pp.x*ss)/ss;
+        p = toRect(pp);
+        float d = circle(p, 0.5/ss);
+        return d;
+      }
+
+      vec2 df(vec2 p, float h, float ptime) {
+        const float lw = 0.0125;
+        vec2 wp = p;
+        float rep = 12.0;
+        float ss = 0.05*6.0/rep;
+        vec2 skp = wp;
+      #ifdef PL_KALEIDOSCOPE
+        float skn = smoothKaleidoscope(wp, ss, rep);
+      #endif
+      #ifdef PL_WEIRD1
+        float d0 = weird1(wp, h);
+      #elif defined PL_WEIRD2
+        float d0 = weird2(wp, h);
+      #else
+        float d0 = weird1(wp, h);
+      #endif
+        float d1 = hex(p, 0.25)-0.1;
+        float d  = d0;
+        d = pmin(d, abs(d1)-lw, 0.05);
+      #ifdef PL_CIRCLES
+        float d2 = circles(p);
+        d2 = abs(d2)-lw;
+        d = pmin(d, d2, 0.1);
+      #endif
+        return vec2(d, d1+lw);
+      }
+
+      vec4 plane(vec3 ro, vec3 rd, vec3 pp, vec3 off, float aa, float n, float ptime) {
+        float hh = hash(n);
+        float h1 = fract(113.0*hh);
+        float h2 = fract(123.0*hh);
+        float h3 = fract(127.0*hh);
+        float s = 0.25*mix(0.5, 0.25, h1);
+        float dd= length(pp-ro);
+
+        const vec3 nor  = vec3(0.0, 0.0, 1.0);
+        const vec3 loff = vec3(0.25*0.5, 0.125*0.5, -0.125);
+        vec3 lp1  = ro + loff;
+        vec3 lp2  = ro + loff*vec3(-1.0, 1.0, 1.0);
+        vec3 ld1  = normalize(pp - lp1);
+        vec3 ld2  = normalize(pp - lp2);
+        float lpw1= 0.2/L2(pp - lp1);
+        float lpw2= 0.2/L2(pp - lp2);
+        vec3 ref  = reflect(rd, nor);
+        float ref1= pow(max(dot(nor, ld1), 0.0), 20.0);
+        float ref2= pow(max(dot(nor, ld2), 0.0), 20.0);
+        vec3  col1= vec3(0.75, 0.5, 1.0);
+        vec3  col2= vec3(1.0, 0.5, 0.75);
+
+        vec3 hn;
+        vec2 p = (pp-off*vec3(1.0, 1.0, 0.0)).xy;
+        p *= ROT(TAU*h2);
+        vec2 d2 = df(p/s, h3, ptime)*s;
+
+        float ha = smoothstep(-aa, aa, d2.y);
+        float d = d2.x;
+        vec4 col = vec4(0.0);
+
+        float l   = length(10.0*p);
+        float ddf = 1.0/((1.0+2.0*dd));
+        float hue = fract(0.75*l-0.3*TIME)+0.3+0.15;
+        float sat = 0.75*tanh_approx(2.0*l)*ddf;
+        float vue = sqrt(ddf);
+        vec3 hsv  = vec3(hue, sat, vue);
+        vec3 bcol = hsv2rgb(hsv);
+        col.xyz   = mix(col.xyz, bcol, smoothstep(-aa, aa, -d));
+        float glow = (exp(-(10.0+100.0*tanh_approx(l))*10.0*max(d, 0.0)*ddf));
+        col.xyz   += 0.5*sqrt(bcol.zxy)*glow;
+        col.w     = ha*mix(0.75, 1.0, ha*glow);
+        col.xyz   += 0.125*col.w*(col1*ref1+col2*ref2);
+
+        return col;
+      }
+
+      vec3 skyColor(vec3 ro, vec3 rd) {
+        float ld = max(dot(rd, vec3(0.0, 0.0, 1.0)), 0.0);
+        return vec3(1.25, 1.0, 1.1)*tanh_approx(3.0*pow(ld, 100.0))*mix(1.0, 0.5, pow(beatf(), 8.0));
+      }
+
+      const float planeDist   = 1.0-0.8;
+      const float planeSpeed  = planeDist/beat;
+
+      vec3 color(vec3 ww, vec3 uu, vec3 vv, vec3 ro, vec2 p) {
+        float lp = length(p);
+        vec2 np = p + 1.0/RESOLUTION.xy;
+        float rdd = (2.0+0.5*tanh_approx(lp));  // Playing around with rdd can give interesting distortions
+        vec3 rd = normalize(p.x*uu + p.y*vv + rdd*ww);
+        vec3 nrd = normalize(np.x*uu + np.y*vv + rdd*ww);
+
+        const int furthest = 9;
+        const int fadeFrom = max(furthest-4, 0);
+        const float fadeDist = planeDist*float(furthest - fadeFrom);
+        float nz = floor(ro.z / planeDist);
+
+        vec3 skyCol = skyColor(ro, rd);
+
+        // Steps from nearest to furthest plane and accumulates the color
+
+        vec4 acol = vec4(0.0);
+        const float cutOff = 0.95;
+        bool cutOut = false;
+
+        for (int i = 1; i <= furthest; ++i) {
+          float pz = planeDist*nz + planeDist*float(i);
+          float ptime = pz/planeSpeed;
+
+          float pd = (pz - ro.z)/rd.z;
+
+          if (pd > 0.0 && acol.w < cutOff) {
+            vec3 pp = ro + rd*pd;
+            vec3 npp = ro + nrd*pd;
+
+            float aa = 3.0*length(pp - npp);
+
+            vec3 off = offset(pp.z);
+
+            vec4 pcol = plane(ro, rd, pp, off, aa, nz+float(i), ptime);
+
+            float nz = pp.z-ro.z;
+            float fadeIn = exp(-2.5*max((nz - planeDist*float(fadeFrom))/fadeDist, 0.0));
+            float fadeOut = smoothstep(0.0, planeDist*0.1, nz);
+            pcol.xyz = mix(skyCol, pcol.xyz, (fadeIn));
+            pcol.w *= fadeOut;
+
+            pcol = clamp(pcol, 0.0, 1.0);
+
+            acol = alphaBlend(pcol, acol);
+          } else {
+            cutOut = true;
+            break;
+          }
+
+        }
+
+        vec3 col = alphaBlend(skyCol, acol);
+      // To debug cutouts due to transparency
+      //  col += cutOut ? vec3(1.0, -1.0, 0.0) : vec3(0.0);
+        return col;
+      }
+
+      // Classic post processing
+      vec3 postProcess(vec3 col, vec2 q) {
+        col = clamp(col, 0.0, 1.0);
+        col = pow(col, 1.0/std_gamma);
+        col = col*0.6+0.4*col*col*(3.0-2.0*col);
+        col = mix(col, vec3(dot(col, vec3(0.33))), -0.4);
+        col *=0.5+0.5*pow(19.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.7);
+        return col;
+      }
+
+      vec3 effect(vec2 p, vec2 q) {
+        float aa = 2.0/RESOLUTION.y;
+        float tm  = planeSpeed*(TIME);
+        vec3 ro   = offset(tm);
+        vec3 dro  = doffset(tm);
+        vec3 ddro = ddoffset(tm);
+
+        vec3 ww = normalize(dro);
+        vec3 uu = normalize(cross(normalize(vec3(0.0,1.0,0.0)+ddro), ww));
+        vec3 vv = normalize(cross(ww, uu));
+
+        vec3 col = color(ww, uu, vv, ro, p);
+
+        return col;
+      }
+
+      void main(void) {
+        vec2 q = v_texcoord;
+        vec2 p = -1. + 2. * q;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+
+        vec3 col = effect(p, q);
+        col = postProcess(col, q);
+        const float nbeats = 16.0;
+        float ptime = mod(TIME-start, nbeats*beat);
+        float fi = smoothstep(0.0, beat, ptime);
+        float fo = smoothstep(nbeats*beat, (nbeats-1.0)*beat, ptime);
+        col = mix(vec3(0.0), col, fi*fo);
+
+        fragColor = vec4(col, 1.0);
+      }
+    </script>
+
+    <script id="fs-outro-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+      uniform float time;
+      uniform vec2 resolution;
+      in vec2 v_texcoord;
+      out vec4 fragColor;
+
+      // -----------------------------------------------------------------------------
+      // COMMON
+      // -----------------------------------------------------------------------------
+
+      #define PI              3.141592654
+      #define TAU             (2.0*PI)
+      #define TIME            time
+      #define RESOLUTION      resolution
+      #define ROT(a)          mat2(cos(a), sin(a), -sin(a), cos(a))
+      #define PCOS(a)         (0.5+0.5*cos(a))
+      #define SCA(a)          vec2(sin(a), cos(a))
+      #define MISS            1E6
+      #define BTIME(n)        (n*beat+start)
+
+      const float beat            = 0.48;
+      const float start           = 41.1;
+      const float bounce_freq     = 0.5/beat;
+
+      const float flash_start = BTIME(430.0);
+      const float flash_end   = BTIME(432.0);
+      const float all_end     = BTIME(436.0);
+      const float nbeats = 4.0;
+
+      const vec3  std_gamma   = vec3(2.2);
+
+      const vec2 sca0         = SCA(0.0);
+
+      float pmin(float a, float b, float k) {
+        float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0 );
+        return mix( b, a, h ) - k*h*(1.0-h);
+      }
+
+      float pmax(float a, float b, float k) {
+        return -pmin(-a, -b, k);
+      }
+
+
+      float box(vec2 p, vec2 b) {
+        vec2 d = abs(p)-b;
+        return length(max(d,0.0)) + min(max(d.x,d.y),0.0);
+      }
+
+      float circle(vec2 p, float r) {
+        return length(p) - r;
+      }
+
+      float horseshoe(vec2 p, vec2 c, float r, vec2 w) {
+        p.x = abs(p.x);
+        float l = length(p);
+        p = mat2(-c.x, c.y,
+                  c.y, c.x)*p;
+        p = vec2((p.y>0.0)?p.x:l*sign(-c.x),
+                 (p.x>0.0)?p.y:l );
+        p = vec2(p.x,abs(p.y-r))-w;
+        return length(max(p,0.0)) + min(0.0,max(p.x,p.y));
+      }
+
+      float lettere(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 1.05+off;
+        p -= vec2(0.5, 0.5);
+        return min(box(p, vec2(0.4, 0.1)), max(circle(p, 0.5), -circle(p, 0.3)));
+      }
+
+      float letterI(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 0.25+off;
+        p -= vec2(0.125, 0.75);
+        return box(p, vec2(0.125, 0.75));
+      }
+
+      float letterl(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 0.2+off;
+        p -= vec2(0.10, 0.5);
+        return box(p, vec2(0.1, 0.666));
+      }
+
+      float letterm(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 2.2+off;
+        p -= vec2(1.1, 0.5);
+        p.y = -p.y;
+        p.x = abs(p.x);
+        p -= vec2(0.5, 0.0);
+        float d = horseshoe(p, sca0, 0.5, vec2(0.5, 0.1));
+        return d;
+      }
+
+      float letterp(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 1.05+off;
+        p -= vec2(0.55, 0.5);
+        float b = box(p - vec2(-0.45, -0.25), vec2(0.1, 0.75));
+        float c = abs(circle(p, 0.4)) - 0.1;
+        return min(b, c);
+      }
+
+      float letters(inout vec2 pp, float off) {
+        const mat2 rots1 = ROT(-PI/6.0-PI/2.0);
+        const mat2 rots2 = ROT(PI);
+        vec2 p = pp;
+        pp.x -= 0.875+off;
+        p -= vec2(0.435, 0.5);
+        p *= rots1;
+        float u = horseshoe(p - vec2(-0.25*3.0/4.0, -0.125/2.0), sca0, 0.375, vec2(0.2, 0.1));
+        p *= rots2;
+        float l = horseshoe(p - vec2(-0.25*3.0/4.0, -0.125/2.0), sca0, 0.375, vec2(0.2, 0.1));
+        return min(u,l);
+      }
+
+      float letteru(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 1.2+off;
+        p -= vec2(0.6, 0.475);
+        return horseshoe(p - vec2(0.0, 0.125), sca0, 0.5, vec2(0.4, 0.1));
+      }
+
+      float impulse(vec2 p, float off) {
+        float dy = p.y;
+        dy = abs(dy);
+        dy -= 0.1;
+        dy = abs(dy) - 0.02;
+
+        float dc = circle(p, 2.6);
+        dc = abs(dc)-mix(-0.025, 0.025, tanh(abs(0.45*p.y)));
+
+        p += vec2(3.385+3.0*off, 0.5);
+
+        float d = 1E6;
+        d = min(d, letterI(p, off));
+        d = min(d, letterm(p, off));
+        d = min(d, letterp(p, off));
+        d = min(d, letteru(p, off));
+        d = min(d, letterl(p, off));
+        d = min(d, letters(p, off));
+        d = min(d, lettere(p, off));
+        d = pmax(d, -dy, 0.025);
+        d = min(d, dc);
+
+        return d;
+      }
+
+      vec3 hsv2rgb(vec3 c) {
+        const vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+        vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+        return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+      }
+
+      float tanh_approx(float x) {
+      //  return tanh(x);
+        float x2 = x*x;
+        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
+      }
+
+      // Classic post processing
+      vec3 postProcess(vec3 col, vec2 q) {
+        col = clamp(col, 0.0, 1.0);
+        col = pow(col, 1.0/std_gamma);
+        col = col*0.6+0.4*col*col*(3.0-2.0*col);
+        col = mix(col, vec3(dot(col, vec3(0.33))), -0.4);
+        col *=0.5+0.5*pow(19.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.7);
+        return col;
+      }
+
+      vec3 effect(vec2 p, vec2 q) {
+        vec3 col = vec3(0.0);
+        float aa = 2.0/RESOLUTION.y;
+        float fm = mix(0.0, 0.999, (clamp(TIME, flash_start, flash_end)-flash_start)/(flash_end-flash_start));
+        float zi = mix(1.0, 0.33, sqrt(floor(nbeats*fm)/(nbeats-1.0)));
+        vec2 pi = p;
+        pi /= zi;
+        float di = impulse(pi, 0.275)*zi;
+        col = mix(col, vec3(1.0), smoothstep(1.0, 0.0, fract(nbeats*fm))*step(TIME, flash_end));
+        col = mix(col, vec3(1.0), smoothstep(-aa, aa, -di));
+
+        return col;
+      }
+
+      void main(void) {
+        vec2 q = v_texcoord;
+        vec2 p = -1. + 2. * q;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+
+        vec3 col = effect(p, q);
+        col = postProcess(col, q);
+        float fo = smoothstep(flash_end, all_end, TIME);
+        col = mix(col, vec3(0.0), fo*fo);
+
+        fragColor = vec4(col, 1.0);
+      }
+    </script>
+
+    <script type = "text/javascript">
+      const allScenes = {
+        no_scene : {
+          vs: "vs-default",
+          fs: "fs-no-scene"
+        },
+        intro_scene : {
+          vs: "vs-default",
+          fs: "fs-intro-scene"
+        },
+        bb_scene_0 : {
+          vs: "vs-default",
+          fs: "fs-bb-scene",
+          defines: ["BB_EFFECT_0"],
+        },
+        bb_scene_1 : {
+          vs: "vs-default",
+          fs: "fs-bb-scene",
+          defines: ["BB_EFFECT_1"],
+        },
+        bb_scene_2 : {
+          vs: "vs-default",
+          fs: "fs-bb-scene",
+          defines: ["BB_EFFECT_2"],
+        },
+        bb_scene_3 : {
+          vs: "vs-default",
+          fs: "fs-bb-scene",
+          defines: ["BB_EFFECT_3"],
+        },
+        bb_scene_4 : {
+          vs: "vs-default",
+          fs: "fs-bb-scene",
+          defines: ["BB_EFFECT_4"],
+        },
+        bb_scene_5 : {
+          vs: "vs-default",
+          fs: "fs-bb-scene",
+          defines: ["BB_EFFECT_5"],
+        },
+        credits_scene : {
+          vs: "vs-default",
+          fs: "fs-credits-scene"
+        },
+        cube_scene : {
+          vs: "vs-default",
+          fs: "fs-cube-scene"
+        },
+        pl_scene_0 : {
+          vs: "vs-default",
+          fs: "fs-planes-scene",
+          defines: ["PL_WEIRD1"],
+        },
+        pl_scene_0 : {
+          vs: "vs-default",
+          fs: "fs-planes-scene",
+          defines: ["PL_WEIRD1"],
+        },
+        pl_scene_1 : {
+          vs: "vs-default",
+          fs: "fs-planes-scene",
+          defines: ["PL_WEIRD2"],
+        },
+        pl_scene_2 : {
+          vs: "vs-default",
+          fs: "fs-planes-scene",
+          defines: ["PL_WEIRD1", "PL_KALEIDOSCOPE", "PL_CIRCLES"],
+        },
+        pl_scene_3 : {
+          vs: "vs-default",
+          fs: "fs-planes-scene",
+          defines: ["PL_WEIRD2", "PL_KALEIDOSCOPE", "PL_CIRCLES"],
+        },
+        outro_scene : {
+          vs: "vs-default",
+          fs: "fs-outro-scene"
+        },
+      };
+
+      const beat  = 0.48;
+      const start = 41.1;
+
+      function btime(n) {
+        return n*beat+start;
+      }
+
+      const intro_end   = btime(48.0);
+      const bb_end_0    = btime(80.0);
+      const bb_end_1    = btime(112.0);
+      const bb_end_2    = btime(144.0);
+      const bb_end_3    = btime(176.0);
+      const bb_end_4    = btime(208.0);
+      const credits_end = btime(240.0);
+      const cube_end    = btime(336.0);
+      const bb_end_5    = btime(368.0);
+      const pl_end_0    = btime(384.0);
+      const pl_end_1    = btime(400.0);
+      const pl_end_2    = btime(416.0);
+      const pl_end_3    = btime(430.0);
+
+      function onInitComplete() {
+        const label = document.getElementById("info-label");
+        label.textContent = "Ready, click play to run";
+      }
+
+      function onStarted() {
+        const information = document.getElementById("information");
+        information.style.display = "none";
+      }
+
+      function onLoadingScene(key) {
+        const label = document.getElementById("info-label");
+        label.textContent = "Compiling: " + key;
+      }
+
+      function onSelectScene(gl, time) {
+        if (time < intro_end)   return allScenes.intro_scene;
+        if (time < bb_end_0)    return allScenes.bb_scene_0;
+        if (time < bb_end_1)    return allScenes.bb_scene_1;
+        if (time < bb_end_2)    return allScenes.bb_scene_2;
+        if (time < bb_end_3)    return allScenes.bb_scene_3;
+        if (time < bb_end_4)    return allScenes.bb_scene_4;
+        if (time < credits_end) return allScenes.credits_scene;
+        if (time < cube_end)    return allScenes.cube_scene;
+        if (time < bb_end_5)    return allScenes.bb_scene_5;
+        if (time < pl_end_0)    return allScenes.pl_scene_0;
+        if (time < pl_end_1)    return allScenes.pl_scene_1;
+        if (time < pl_end_2)    return allScenes.pl_scene_2;
+        if (time < pl_end_3)    return allScenes.pl_scene_3;
+        return allScenes.outro_scene;
+      }
+
+      function onSetUniforms(gl, time, scene) {
+      }
+    </script>
+  </head>
+
+  <body onload="runDemo()">
+    <audio id="music" style="visibility: hidden;" controls src="firefox-galaxy.mp3"></audio>
+    <div id="information" style="margin-left: 16pt;">
+      <h1>impulse-0007: mod.galaxy tribute</h1>
+
+      <p>As a young guy I listened alot to the PRO tracker module "mod.galaxy" by Firefox. I wanted to make a demo to it but I lacked the commitment and the skills to do it. Now, a few years later I have discovered shader programing at <a target="_blank" href="https://www.shadertoy.com/">shadertoy.com</a> and wanted to recreate the demo I had in my head. Obviously today's computers are way beyond the old Amiga but I tried to capture the feeling and some of the tropes from classic Amiga demos.</p>
+
+      <p>Music <a target="_blank" href="https://soundcloud.com/firefox-amigamusician/galaxy">Galaxy - Firefox</a> from <a target="_blank" href="https://soundcloud.com/">soundcloud.com</a></p>
+
+      <p>Thanks to the <a target="_blank" href="https://www.shadertoy.com/">shadertoy</a> community for inspiration especially IQ, Shane, Shau, EvilRyu, ollj and otaviogood</p>
+
+      <h2 id="info-label">Please wait... </h2>
+    </div>
+    <div class="center-flex">
+      <div>
+        <canvas id="glcanvas" class="gl">
+          Your browser doesn't appear to support the HTML5 <code>&lt;canvas&gt;</code> element.
+        </canvas>
+      </div>
+    </div>
+  </body>
+</html>

@@ -31,6 +31,7 @@ function sleep(milliseconds) {
 
 let initialized = false;
 let playing = false;
+let neverPlayed = true;
 
 let startTime = now();
 
@@ -88,6 +89,10 @@ async function runDemo() {
 
 function play() {
   if (initialized&&!playing) {
+    if (neverPlayed) {
+      neverPlayed = false;
+      onStarted();
+    }
     startTime = now() - audio.currentTime*1000;
     requestAnimationFrame(drawScene);
     playing = true;
