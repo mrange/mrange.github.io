@@ -2767,6 +2767,23 @@
       }
     </script>
 
+    <script id="fs-outro-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+      uniform float time;
+      uniform vec2 resolution;
+      in vec2 v_texcoord;
+      out vec4 fragColor;
+
+      void main(void) {
+        vec3 col = vec3(0.0, 0.0, 0.0);
+
+        fragColor = vec4(col, 1.0);
+      }
+    </script>
+
     <script type = "text/javascript">
       const allScenes = {
         no_scene : {
@@ -2840,6 +2857,10 @@
           fs: "fs-planes-scene",
           defines: ["PL_WEIRD2", "PL_KALEIDOSCOPE", "PL_CIRCLES"],
         },
+        outro_scene : {
+          vs: "vs-default",
+          fs: "fs-outro-scene"
+        },
       };
 
       const beat  = 0.48;
@@ -2887,7 +2908,7 @@
         if (time < pl_end_1)    return allScenes.pl_scene_1;
         if (time < pl_end_2)    return allScenes.pl_scene_2;
         if (time < pl_end_3)    return allScenes.pl_scene_3;
-        return allScenes.no_scene;
+        return allScenes.outro_scene;
       }
 
       function onSetUniforms(gl, time, scene) {
