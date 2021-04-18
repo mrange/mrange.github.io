@@ -2971,7 +2971,8 @@
         vec3 col = vec3(0.0);
         float aa = 2.0/RESOLUTION.y;
         float fm = mix(0.0, 0.999, (clamp(TIME, flash_start, flash_end)-flash_start)/(flash_end-flash_start));
-        float zi = mix(1.0, 0.33, sqrt(floor(nbeats*fm)/(nbeats-1.0)));
+        float fz = mix(0.33, 0.3, smoothstep(flash_start, all_end, TIME));
+        float zi = mix(1.0, fz, sqrt(floor(nbeats*fm)/(nbeats-1.0)));
         vec2 pi = p;
         pi /= zi;
         float di = impulse(pi, 0.275)*zi;
