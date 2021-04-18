@@ -1453,6 +1453,7 @@
         col = mix(vec3(0.0), col, smoothstep(bb_begin, bb_begin+beat, TIME)*smoothstep(bb_end, bb_end-beat, TIME));
       #else
         col = mix(vec3(1.0), col, fi);
+        col = mix(vec3(0.0), col, smoothstep(bb_end, bb_end-beat, TIME));
       #endif
         return col;
       }
@@ -1512,6 +1513,7 @@
       }
 
       vec2 hextile(inout vec2 p) {
+
         const vec2 sz       = vec2(1.0, sqrt(3.0));
         const vec2 hsz      = 0.5*sz;
 
@@ -1905,13 +1907,14 @@
         col += rm*pow(ref1, 20.0)*lcol1;
         col += rm*pow(ref2, 20.0)*lcol2;
 
-        col = mix(vec3(0.0), col, smoothstep(BTIME(212.0), BTIME(214.0), TIME));
+        float fo = smoothstep(BTIME(240.0), BTIME(232.0), TIME);
+        col = mix(vec3(0.0), col*mix(10.0, 1.0, smoothstep(BTIME(213.0), BTIME(214.0), TIME)), smoothstep(BTIME(212.0), BTIME(214.0), TIME)*fo);
 
         const float zp = 1.175;
 
         float off = .125*p.x*p.x*p.x-p.y;
         const float coff = PI;
-        float angle = off+mix(coff*0.5, -coff*0.5, smoothstep(BTIME(232.0), BTIME(236.0), TIME));
+        float angle = off+mix(coff*0.42, -coff*0.42 , smoothstep(BTIME(216.0), BTIME(224.0), TIME)*fo);
         float split = angle+coff;
         int nsplit = int(mod1(split, coff));
         split = (nsplit & 1) == 0 ? split : -split;
