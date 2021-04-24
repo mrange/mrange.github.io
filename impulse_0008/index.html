@@ -1,0 +1,1133 @@
+<!--
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+-->
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>demo-system-v1</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <script src="demo-system-v1.js" type="text/javascript"></script>
+    <link href='https://fonts.googleapis.com/css?family=Josefin Slab' rel='stylesheet'>
+    <style>
+        body {
+            font-family: 'Josefin Slab';
+            font-size: 2vw;
+            color: white;
+            background-color: black;
+        }
+        a:link {
+          text-decoration: none;
+          color: #FF8240;
+        }
+        a:visited {
+          text-decoration: none;
+          color: #FF8240;
+        }
+        a:hover {
+          text-decoration: underline;
+          color: #DFF180;
+        }
+        a:active {
+          text-decoration: underline;
+          color: #DFF180;
+        }
+        canvas.gl {
+          position:fixed;
+          z-index:-1;
+          top:0;
+          left: 0;
+          height: 100%;
+          width: 100%;
+          background-color: black;
+        }
+        div.center-flex {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+    </style>
+
+    <script id="vs-default" type="x-shader/x-vertex">
+      precision highp float;
+
+      in vec4 a_position;
+      in vec2 a_texcoord;
+
+      out vec2 v_texcoord;
+
+      void main(void) {
+        // Some drivers don't like position being written here
+        // with the tessellation stages enabled also.
+        // Comment next line when Tess.Eval shader is enabled.
+        gl_Position = a_position;
+
+        v_texcoord = a_texcoord;
+      }
+    </script>
+
+    <script id="fs-blue-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+      uniform float time;
+      uniform vec2 resolution;
+      in vec2 v_texcoord;
+      out vec4 fragColor;
+
+      void main(void) {
+        vec3 col = vec3(0.0, 0.0, 1.0);
+
+        fragColor = vec4(col, 1.0);
+      }
+    </script>
+
+    <script id="fs-planes-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float time      ;
+      uniform vec2  resolution;
+      uniform vec4  foreColor ;
+      in vec2       v_texcoord;
+      out vec4      fragColor ;
+
+      // -----------------------------------------------------------------------------
+      // COMMON
+      // -----------------------------------------------------------------------------
+
+      #define PI              3.141592654
+      #define TAU             (2.0*PI)
+      #define TIME            time
+      #define TTIME           (TAU*time)
+      #define RESOLUTION      resolution
+      #define ROT(a)          mat2(cos(a), sin(a), -sin(a), cos(a))
+      #define PCOS(x)         (0.5+0.5*cos(x))
+      #define BPM             256.0
+      #define L2(x)           dot(x, x)
+      #define QUINTIC
+
+      //#define PSYCHEDELIC_MIST_PLANES
+      //#define FUNKY_PLANES
+      //#define BW_PLANES
+      //#define GLOWING_STARS_PLANES
+      //#define STAR_PLANES
+
+      //#define TRUCHET_DF
+      //#define CLOCKS_DF
+
+      //#define KALEIDOSCOPE
+
+      const vec3   std_gamma          = vec3(1.0/2.2);
+      const vec2   hexcell_sz         = vec2(1.0, sqrt(3.0));
+      const vec2   hexcell_hsz        = 0.5*hexcell_sz;
+      const float  truchet_lw         = 0.05;
+      const mat2[] truchet_rots       = mat2[](ROT(0.0*PI/2.0), ROT(1.00*PI/2.0), ROT(2.0*PI/2.0), ROT(3.0*PI/2.0));
+      const float  clocks_smallCount  = 16.0;
+      const mat2   rotSome            = ROT(1.0);
+
+      float tanh_approx(float x) {
+      //  return tanh(x);
+        float x2 = x*x;
+        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
+      }
+
+      float beat() {
+        return PCOS(TTIME*BPM/60.0);
+      }
+
+      float beat(float n) {
+        return pow(beat(), n);
+      }
+
+      vec3 hsv2rgb(vec3 c) {
+        const vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+        vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+        return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+      }
+
+      #if defined PSYCHEDELIC_MIST_PLANES
+      const float planeDist = 1.0-0.25;
+      const int   furthest  = 10;
+      const int   fadeFrom  = max(furthest-4, 0);
+      const float speed     = 2.0;
+      const float off_speed = 0.5;
+      const float off_amp   = 0.075;
+      const float rdd       = 1.0;
+      #elif defined BW_PLANES
+      const float planeDist = 1.0-0.5;
+      const int   furthest  = 6;
+      const int   fadeFrom  = max(furthest-4, 0);
+      const float speed     = 0.5;
+      const float off_speed = 1.0;
+      const float off_amp   = 0.075;
+      const float rdd       = 0.5;
+      #elif defined FUNKY_PLANES
+      const float planeDist = 1.0-0.90;
+      const int   furthest  = 12;
+      const int   fadeFrom  = max(furthest-4, 0);
+      const float speed     = 0.2;
+      const float off_speed = 1.85;
+      const float off_amp   = 0.075;
+      const float rdd       = 1.0;
+      #elif defined GLOWING_STARS_PLANES
+      const float planeDist = 1.0;
+      const int   furthest  = 9;
+      const int   fadeFrom  = max(furthest-6, 0);
+      const float speed     = 1.0;
+      const float off_speed = 1.0;
+      const float off_amp   = 0.075;
+      const float rdd       = -0.5;
+      #elif defined STAR_PLANES
+      const float planeDist = 3.0;
+      const int   furthest  = 8;
+      const int   fadeFrom  = max(furthest-4, 0);
+      const float speed     = 3.0;
+      const float off_speed = 0.05;
+      const float off_amp   = 3.0;
+      const float rdd       = 0.5;
+      #else
+      const float planeDist = 1.0-0.75;
+      const int   furthest  = 11;
+      const int   fadeFrom  = max(furthest-6, 0);
+      const float speed     = 0.25;
+      const float off_speed = 1.0;
+      const float off_amp   = 0.075;
+      const float rdd       = 0.5;
+      #endif
+
+      float hash(float co) {
+        return fract(sin(co*12.9898) * 13758.5453);
+      }
+
+      float hash(vec3 co) {
+        return fract(sin(dot(co, vec3(12.9898,58.233, 12.9898+58.233))) * 13758.5453);
+      }
+
+      vec4 alphaBlend(vec4 back, vec4 front) {
+        float w = front.w + back.w*(1.0-front.w);
+        vec3 xyz = (front.xyz*front.w + back.xyz*back.w*(1.0-front.w))/w;
+        return w > 0.0 ? vec4(xyz, w) : vec4(0.0);
+      }
+
+      vec3 alphaBlend(vec3 back, vec4 front) {
+        return mix(back, front.xyz, front.w);
+      }
+
+      vec2 mod2_1(inout vec2 p) {
+        vec2 c = floor(p + 0.5);
+        p = fract(p + 0.5) - 0.5;
+        return c;
+      }
+
+      float modPolar(inout vec2 p, float repetitions) {
+        float angle = 2.0*PI/repetitions;
+        float a = atan(p.y, p.x) + angle/2.;
+        float r = length(p);
+        float c = floor(a/angle);
+        a = mod(a,angle) - angle/2.;
+        p = vec2(cos(a), sin(a))*r;
+        // For an odd number of repetitions, fix cell index of the cell in -x direction
+        // (cell index would be e.g. -5 and 5 in the two halves of the cell):
+        if (abs(c) >= (repetitions/2.0)) c = abs(c);
+        return c;
+      }
+
+      float hex(vec2 p, float r) {
+        const vec3 k = vec3(-sqrt(3.0)/2.0,1.0/2.0,sqrt(3.0)/3.0);
+        p = p.yx;
+        p = abs(p);
+        p -= 2.0*min(dot(k.xy,p),0.0)*k.xy;
+        p -= vec2(clamp(p.x, -k.z*r, k.z*r), r);
+        return length(p)*sign(p.y);
+      }
+
+      vec2 hextile(inout vec2 p) {
+        // See Art of Code: Hexagonal Tiling Explained!
+        // https://www.youtube.com/watch?v=VmrIDyYiJBA
+
+        vec2 p1 = mod(p, hexcell_sz)-hexcell_hsz;
+        vec2 p2 = mod(p - hexcell_hsz, hexcell_sz)-hexcell_hsz;
+        vec2 p3 = mix(p2, p1, vec2(dot(p1, p1) < dot(p2, p2)));
+        vec2 n = round((p3 - p + hexcell_hsz)/hexcell_hsz);
+
+        p = p3;
+
+        // Rounding to make hextile 0,0 well behaved
+        return round(n*2.0)/2.0;
+      }
+
+      float hash(in vec2 co) {
+        return fract(sin(dot(co, vec2(12.9898,58.233))) * 13758.5453);
+      }
+
+      float pmin(float a, float b, float k) {
+          float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0 );
+          return mix( b, a, h ) - k*h*(1.0-h);
+      }
+
+      float pmax(float a, float b, float k) {
+         return -pmin(-a, -b, k);
+      }
+
+      float pabs(float a, float k) {
+         return -pmin(-a, a, k);
+      }
+
+      vec2 toPolar(vec2 p) {
+        return vec2(length(p), atan(p.y, p.x));
+      }
+
+      vec2 toRect(vec2 p) {
+        return vec2(p.x*cos(p.y), p.x*sin(p.y));
+      }
+
+      float modMirror1(inout float p, float size) {
+        float halfsize = size*0.5;
+        float c = floor((p + halfsize)/size);
+        p = mod(p + halfsize,size) - halfsize;
+        p *= mod(c, 2.0)*2.0 - 1.0;
+        return c;
+      }
+
+      float smoothKaleidoscope(inout vec2 p, float sm, float rep) {
+        vec2 hp = p;
+
+        vec2 hpp = toPolar(hp);
+        float rn = modMirror1(hpp.y, TAU/rep);
+
+        float sa = PI/rep - pabs(PI/rep - abs(hpp.y), sm);
+        hpp.y = sign(hpp.y)*(sa);
+
+        hp = toRect(hpp);
+
+        p = hp;
+
+        return rn;
+      }
+
+      float circle(vec2 p, float r) {
+        return length(p) - r;
+      }
+
+      float box(vec2 p, vec2 b) {
+        vec2 d = abs(p)-b;
+        return length(max(d,0.0)) + min(max(d.x,d.y),0.0);
+      }
+
+      float starn(vec2 p, float r, int n, float m) {
+        // From IQ: https://www.shadertoy.com/view/3tSGDy
+        // https://iquilezles.org/www/articles/distfunctions2d/distfunctions2d.htm
+
+        // Minor tweak to use SABS over abs to smooth inner corners
+        // SABS: https://www.shadertoy.com/view/Ws2SDK
+
+        // next 4 lines can be precomputed for a given shape
+        float an = 3.141593/float(n);
+        float en = 3.141593/m;  // m is between 2 and n
+        vec2  acs = vec2(cos(an),sin(an));
+        vec2  ecs = vec2(cos(en),sin(en)); // ecs=vec2(0,1) for regular polygon,
+
+        float bn = mod(atan(p.x,p.y),2.0*an) - an;
+        p = length(p)*vec2(cos(bn), pabs(sin(bn), 0.15));
+        p -= r*acs;
+        p += ecs*clamp( -dot(p,ecs), 0.0, r*acs.y/ecs.y);
+        return length(p)*sign(p.x);
+      }
+
+      float unevenCapsule(vec2 p, float r1, float r2, float h) {
+        p.x = abs(p.x);
+        float b = (r1-r2)/h;
+        float a = sqrt(1.0-b*b);
+        float k = dot(p,vec2(-b,a));
+        if( k < 0.0 ) return length(p) - r1;
+        if( k > a*h ) return length(p-vec2(0.0,h)) - r2;
+        return dot(p, vec2(a,b) ) - r1;
+      }
+
+      vec2 cogwheel(vec2 p, float innerRadius, float outerRadius, float cogs, float holes) {
+        float cogWidth  = 0.25*innerRadius*TAU/cogs;
+
+        float d0 = circle(p, innerRadius);
+
+        vec2 icp = p;
+        modPolar(icp, holes);
+        icp -= vec2(innerRadius*0.55, 0.0);
+        float d1 = circle(icp, innerRadius*0.25);
+
+        vec2 cp = p;
+        modPolar(cp, cogs);
+        cp -= vec2(innerRadius, 0.0);
+        float d2 = unevenCapsule(cp.yx, cogWidth, cogWidth*0.75, (outerRadius-innerRadius));
+
+        float d3 = circle(p, innerRadius*0.20);
+
+        float hd = 1E6;
+
+        hd = min(hd, d1);
+        hd = min(hd, d3);
+
+        float d = 1E6;
+        d = min(d, d0);
+        d = pmin(d, d2, 0.5*cogWidth);
+        d = min(d, d2);
+        d = max(d, -d1);
+        d = max(d, -d3);
+
+        return vec2(hd, d);
+      }
+
+      float vnoise(vec2 x) {
+        vec2 i = floor(x);
+        vec2 w = fract(x);
+      #if defined QUINTIC
+        // quintic interpolation
+        vec2 u = w*w*w*(w*(w*6.0-15.0)+10.0);
+      #else
+        // cubic interpolation
+        vec2 u = w*w*(3.0-2.0*w);
+      #endif
+
+        float a = hash(i+vec2(0.0,0.0));
+        float b = hash(i+vec2(1.0,0.0));
+        float c = hash(i+vec2(0.0,1.0));
+        float d = hash(i+vec2(1.0,1.0));
+
+        float k0 =   a;
+        float k1 =   b - a;
+        float k2 =   c - a;
+        float k3 =   d - c + a - b;
+
+        float aa = mix(a, b, u.x);
+        float bb = mix(c, d, u.x);
+        float cc = mix(aa, bb, u.y);
+
+        return k0 + k1*u.x + k2*u.y + k3*u.x*u.y;
+      }
+
+      #if defined TRUCHET_DF
+      vec2 truchet_cell0(vec2 p, float h) {
+        float d0  = circle(p-vec2(0.5), 0.5);
+        float d1  = circle(p+vec2(0.5), 0.5);
+
+        float d = 1E6;
+        d = min(d, d0);
+        d = min(d, d1);
+        return vec2(d, 1E6); // 1E6 gives a nice looking bug, 1E4 produces a more "correct" result
+      }
+
+      vec2 truchet_cell1(vec2 p, float h) {
+        float d0  = abs(p.x);
+        float d1  = abs(p.y);
+        float d2  = circle(p, mix(0.2, 0.4, h));
+
+        float d = 1E6;
+        d = min(d, d0);
+        d = min(d, d1);
+        d = min(d, d2);
+        return vec2(d, d2+truchet_lw);
+      }
+
+      vec2 plane_df(vec2 p, float n, float nr, float dist, out vec2 np) {
+        float hd = circle(p, 0.4);
+
+        vec2 hp = p;
+        vec2 hn = mod2_1(hp);
+        float r = hash(vec3(hn, nr));
+
+        hp *= truchet_rots[int(r*4.0)];
+        float rr = fract(r*113.0);
+        vec2 cd0 = truchet_cell0(hp, rr);
+        vec2 cd1 = truchet_cell1(hp, rr);
+        vec2 d0 = mix(cd0, cd1, vec2(fract(r*113.0) > 0.5));
+
+        hd = min(hd, d0.y);
+
+        float d = 1E6;
+        d = min(d, d0.x);
+        d = abs(d) - truchet_lw;
+        d = min(d, hd - truchet_lw*2.0);
+
+        np = hn;
+
+        return vec2(hd, d);
+      }
+      #elif defined CLOCKS_DF
+      vec2 clocks_cell0(vec2 p, float r) {
+        vec2 d = vec2(1E6);
+        const float bigCount = 60.0;
+
+        vec2 cp0 = p;
+        cp0 *= ROT(-TTIME/bigCount);
+        vec2 d0 = cogwheel(cp0, 0.36, 0.38, bigCount, 5.0);
+
+        vec2 cp1 = p;
+        float nm = modPolar(cp1, 6.0);
+
+        cp1 -= vec2(0.5, 0.0);
+        cp1 *= ROT(0.2+TAU*nm/2.0 + TTIME/clocks_smallCount);
+        vec2 d1 = cogwheel(cp1, 0.11, 0.125, clocks_smallCount, 5.0);
+
+        d = min(d, d0);
+        d = min(d, d1);
+        return d;
+      }
+
+      vec2 clocks_cell1(vec2 p, float r) {
+        vec2 d = vec2(1E6);
+        vec2 cp0 = p;
+        float nm = modPolar(cp0, 6.0);
+        vec2 cp1 = cp0;
+        const float off = 0.275;
+        const float count = clocks_smallCount + 2.0;
+        cp0 -= vec2(off, 0.0);
+        cp0 *= 0.0 + ROT(TAU*nm/2.0 - TTIME/count);
+        vec2 d0 = cogwheel(cp0, 0.09, 0.105, count, 5.0);
+
+
+        cp1 -= vec2(0.5, 0.0);
+        cp1 *= ROT(0.2+TAU*nm/2.0 + TTIME/clocks_smallCount);
+        vec2 d1 = cogwheel(cp1, 0.11, 0.125, clocks_smallCount, 5.0);
+
+        float l = length(p);
+        float d2 = l - (off+0.055);
+        float d3 = d2 + 0.020;;
+
+        vec2 tp0 = p;
+        modPolar(tp0, 60.0);
+        tp0.x -= off;
+        float d4 = box(tp0, vec2(0.0125, 0.005));
+
+        float ctime = -(TIME*0.05 + r)*TAU;
+
+        vec2 tp1 = p;
+        tp1 *= ROT(ctime*12.0);
+        tp1.x -= 0.13;
+        float d5 = box(tp1, vec2(0.125, 0.005));
+
+        vec2 tp2 = p;
+        tp2 *= ROT(ctime);
+        tp2.x -= 0.13*0.5;
+        float d6 = box(tp2, vec2(0.125*0.5, 0.0075));
+
+        float d7 = l - 0.025;
+        float d8 = l - 0.0125;
+
+        d = min(d, d0);
+        d = min(d, d1);
+
+        float hd = d.x;
+        hd = max(hd, -d2);
+        hd = min(hd, d8);
+
+        d = min(d, d2);
+        d = max(d, -d3);
+        d = min(d, d4);
+        d = min(d, d5);
+        d = min(d, d6);
+        d = min(d, d7);
+        d = max(d, -d8);
+
+        return vec2(hd, d.y);
+      }
+
+      vec2 plane_df(vec2 p, float n, float nr, float dist, out vec2 np) {
+        float hd = hex(p, 0.45);
+
+        vec2 hp = p;
+      //  hp += vec2(0.1)*TIME;
+
+        vec2 hn = hextile(hp);
+        float r = hash(vec3(hn, n));
+
+        vec2 d;
+
+        if (hd <0.05) {
+          d = vec2(hd, hd-0.05);
+        } else if (r < 0.5) {
+          d = clocks_cell0(hp, r);
+        } else {
+          d = clocks_cell1(hp, r);
+        }
+
+        np = hn;
+
+        return d;
+      }
+      #else
+      vec2 plane_df(vec2 p2, float n, float nr, float dist, out vec2 np2) {
+        vec2 p = p2;
+        vec2 hp = p;
+
+        float hd = hex(hp, 0.5-truchet_lw)-truchet_lw;
+        vec2 hn = hextile(hp);
+
+        float d  = 1E6;
+        d = min(d, circle(hp, 0.44));
+        d = min(d, hd- truchet_lw);
+        d = abs(d) - truchet_lw;
+
+        np2 = hn;
+
+        return vec2(hd, d);
+      }
+      #endif
+
+
+      // -----------------------------------------------------------------------------
+      // PATH
+      // -----------------------------------------------------------------------------
+
+      // The path function
+      vec3 offset(float z) {
+        float a = z*off_speed;
+        vec2 p = -off_amp*(vec2(cos(a), sin(a*sqrt(2.0))) + vec2(cos(a*sqrt(0.75)), sin(a*sqrt(0.5))));
+        return vec3(p, z);
+      }
+
+      // The derivate of the path function
+      //  Used to generate where we are looking
+      vec3 doffset(float z) {
+        float eps = 0.1;
+        return (offset(z + eps) - offset(z - eps))/(2.0*eps);
+      }
+
+      // The second derivate of the path function
+      //  Used to generate tilt
+      vec3 ddoffset(float z) {
+        float eps = 0.1;
+        return (doffset(z + eps) - doffset(z - eps))/(2.0*eps);
+      }
+
+      #if defined PSYCHEDELIC_MIST_PLANES
+      vec3 skyColor(vec3 ro, vec3 rd) {
+        return mix(1.75*vec3(0.7, 0.7, 1.0), vec3(0.0), tanh_approx(length(2.0*rd.xy)));
+      }
+
+      float height(vec2 p, float n, out vec2 diff) {
+        const float aan = 0.45;
+        const float ppn = 2.0+0.2;
+
+        float s = 0.0;
+        float d = 0.0;
+        float an = 1.0;
+        vec2 pn = 4.0*p+n*10.0;
+        vec2 opn = pn;
+
+        const int md = 1;
+        const int mx = 4;
+
+        for (int i = 0; i < md; ++i) {
+          s += an*(vnoise(pn));
+          d += abs(an);
+          pn *= ppn*rotSome;
+          an *= aan;
+        }
+
+        for (int i = md; i < mx; ++i) {
+          s += an*(vnoise(pn));
+          d += abs(an);
+          pn *= ppn*rotSome;
+          an *= aan;
+          pn += (3.0*float(i+1))*s-TIME*5.5;     // Fake warp FBM
+        }
+
+        s /= d;
+
+        diff = (pn - opn);
+
+        return s;
+      }
+
+      vec4 plane(vec3 ro, vec3 rd, vec3 pp, vec3 off, float aa, float n, float shift) {
+        vec2 p = pp.xy;
+        float z = pp.z;
+        float nz = pp.z-ro.z;
+
+        vec2 diff;
+        vec2 hp = p;
+        hp -= nz*0.125*0.5*vec2(1.0, -0.5);
+        hp -= n;
+        float h = height(hp, n, diff);
+        float gh = (vnoise(0.25*(p+vec2(n))));
+        h *= mix(0.75, 1.0, gh);
+        h = abs(h);
+
+        vec3 col = vec3(0.0);
+        col = vec3(h);
+        float huen = fract(length(diff)/200.0);
+        float satn = mix(1.0, 1.0, h);
+        float brin = h;
+        col = hsv2rgb(vec3(huen, satn, brin));
+
+        float t = sqrt(h)*(smoothstep(0.0, 0.5, length(pp - ro)))*smoothstep(0.0, mix(0.4, 0.75, beat(4.0)), length(p));
+
+        float ga = pp.z*0.25;
+        vec3 gg = vec3(PCOS(ga), PCOS(ga*sqrt(0.5)), PCOS(ga*sqrt(3.0)));
+        vec3 gamma = mix(vec3(0.5), vec3(2.0), gg);
+        col = pow(abs(col), gamma);
+        t *= tanh_approx(dot(gamma, vec3(1.0)));
+        t *= 0.8;
+
+        return vec4(col, t);
+      }
+      #elif defined BW_PLANES
+      vec3 skyColor(vec3 ro, vec3 rd) {
+        float ld = max(dot(rd, vec3(0.0, 0.0, 1.0)), 0.0);
+        return vec3(tanh_approx(3.0*pow(ld, 100.0)));
+      }
+
+      vec4 plane(vec3 ro, vec3 rd, vec3 pp, vec3 off, float aa, float n, float shift) {
+        float dist = length(ro - pp);
+        float nr = hash(n);
+        float s = mix(0.05, 0.25, nr);
+
+        vec2 p = pp.xy-off.xy;
+        p *= ROT(TAU*nr+TIME*fract(123.0*nr)*0.5);
+        p /= s;
+
+        float kn = 0.0;
+      #ifdef KALEIDOSCOPE
+        float rep = 2.0*floor(mix(5.0, 25.0, fract(nr*127.0)));
+        float sm = mix(0.05, 0.125, fract(nr*107.0))*24.0/rep;
+        kn = smoothKaleidoscope(p, sm, rep);
+      #endif
+
+        vec2 hn;
+        vec2 dd = plane_df(p, n, nr, dist, hn)*s;
+        float d = dd.y;
+
+        float a  = smoothstep(-aa, aa, -d);
+        float ha = smoothstep(-aa, aa, dd.x);
+
+        vec4 col = vec4(mix(vec3(1.0), vec3(0.0), a), ha);
+
+        return col;
+      }
+      #elif defined FUNKY_PLANES
+      vec3 skyColor(vec3 ro, vec3 rd) {
+        float ld = max(dot(rd, vec3(0.0, .0, 1.0)), 0.0);
+        float b = beat(5.);
+        float ib = 1.0 - (b);
+        float i = tanh_approx(3.0*pow(ld, 50.0));
+        float h = i*0.1-0.075;
+        float s = mix(1.0, 0.5, i);
+        float v = max(0.0, 0.125+ib)*(i+0.125);
+        vec3 hsv = vec3(h, s, v);
+        float e = 4000.0;
+        vec3 baseCol = hsv2rgb(hsv)*e/(e-i);
+        baseCol = clamp(baseCol, 0.0, 1.0);
+        return baseCol;
+      }
+
+
+      vec2 plane_df(vec2 p2, float n, float dist, out vec3 np) {
+        float nr = hash(n);
+
+        p2 *= ROT(TAU*nr+1.0*0.5*TIME*fract(113.0*nr));
+
+        float s = mix(0.05, 0.125, fract(nr*123.0));
+        float skn = 0.0;
+      #ifdef KALEIDOSCOPE
+        float rep = 2.0*floor(mix(3.0, 20.0, fract(127.0*nr)));
+        float sm = mix(0.1, 0.025, fract(107.0*nr))*24.0/rep;
+        skn = smoothKaleidoscope(p2, sm, rep);
+      #endif
+        vec2 np2;
+        vec2 d = plane_df(p2/s, n, nr, dist, np2)*s;
+        np = vec3(np2, skn);
+
+        return d;
+      }
+
+      vec4 plane(vec3 ro, vec3 rd, vec3 pp, vec3 off, float aa, float n, float shift) {
+        vec3 hn;
+
+        shift *= shift;
+        vec2 p = pp.xy-off.xy;
+
+        float dist = length(ro - pp);
+        float dc = length(p.xy);
+
+        vec2 dd = plane_df(p, n, dist, hn);
+        float d = dd.y;
+
+        float a  = smoothstep(-aa, aa, -d);
+        float ha = smoothstep(-aa, aa, dd.x);
+
+        float hue = sin(n*0.05)+.5*sin(5.5*d+1.5*dc+(length(p.xy-vec2(0.0, -0.5)))-TTIME/13.0);
+        vec3 hsv = (vec3(hue, 1.0-shift, clamp(1.0-tanh_approx(200.0*d), 0.0, 1.0)));
+        vec3 baseCol = hsv2rgb(hsv);
+        baseCol = hsv2rgb(hsv*vec3(1.0, 0.75, 1.));
+        baseCol = mix(baseCol, vec3(1), shift);
+
+        float glow = exp(-350.0*abs(d));
+        vec4 acol = clamp(vec4(baseCol*mix(glow, 0.5*glow, a), glow), 0.0, 1.0);
+        vec4 bcol = vec4(vec3(0.0), mix(a*ha*1.0, 1.0, shift));
+        vec4 ccol = vec4(mix(baseCol, vec3(.0), a), ha*mix(0.66, 1.0, hsv.z));
+
+        vec4 col = ccol;
+      //  col.xyz = pow(col.xyz, vec3(0.25, 0.5, 0.75));
+        return col;
+      }
+      #elif defined GLOWING_STARS_PLANES
+      vec3 skyColor(vec3 ro, vec3 rd) {
+        float ld = max(dot(rd, vec3(0.0, 0.0, 1.0)), 0.0);
+        return vec3(tanh_approx(3.0*pow(ld, 100.0)));
+      }
+
+      vec4 plane(vec3 ro, vec3 rd, vec3 pp, vec3 off, float aa, float n, float shift) {
+        const float s = 0.5;
+
+        float z = pp.z;
+        vec2 p = pp.xy;
+        p -= (1.0+5.0*(pp.z - ro.z))*offset(z).xy;
+
+        p *= s;
+        float r = hash(vec3(floor(p+0.5), n));
+        p = fract(p+0.5)-0.5;
+        p *= ROT((TAU*r+n)*0.25);
+        float d = starn(p, 0.20, 3 + 2*int(3.0*r), 3.0);
+        d -= 0.06;
+        d/=s;
+
+        float ds = -d+0.03;
+        vec3 cols = hsv2rgb(vec3(337.0/360.0+0.1*sin(n*0.3), 0.85, 0.4+0.2*sin(n*0.3)));
+        float ts = 1.0 - smoothstep(-aa, 0.0, ds);
+        vec4 cs =  vec4(cols, ts*0.93);
+
+        float db = abs(d) - (0.06);
+        db = abs(db) - 0.03;
+        db = abs(db) - 0.00;
+        db = max(db, -d+0.03);
+        vec3 colb = vec3(1.0, 0.7, 0.5);
+        float tb = exp(-(db)*60.0*(1.0 - 10.0*aa));
+        vec4 cb = vec4(1.25*colb, tb);
+
+        vec4 ct = alphaBlend(cs, cb);
+
+        return ct;
+      }
+      #elif defined STAR_PLANES
+      float globalCloudDensity(vec2 p, float n) {
+        p*=0.1;
+        float gcd = vnoise(p+10.0*hash(n)+100.0);
+        return gcd;
+      }
+
+      float localCloudDensity(vec2 p, float n) {
+        p*=1.0;
+        const float aa = -0.45;
+        const mat2 pp = 2.03*rotSome;
+        float a = 0.5;
+        float s = 0.0;
+        p += 10.0*hash(n)+100.0;
+
+        s += a*vnoise(p); a *= aa; p *= pp;
+        s += a*vnoise(p); a *= aa; p *= pp;
+        s += a*vnoise(p); a *= aa; p *= pp;
+        s += a*vnoise(p); a *= aa; p *= pp;
+        s += a*vnoise(p); a *= aa; p *= pp;
+
+        return s*2.75-0.0;
+      }
+
+      vec4 plane(vec3 ro, vec3 rd, vec3 pp, vec3 off, float aa, float n, float shift) {
+        vec2 p = pp.xy;
+        float z = pp.z;
+        float nz = pp.z-ro.z;
+
+        float ds = 1E6;
+        float r = 0.0;
+
+        float gcd = globalCloudDensity(p, n);
+
+        float s = mix(1.0, 2.0, gcd);
+        vec2 ps = p;
+        ps *= s;
+        float sf = 1.0-tanh_approx(0.5*nz);
+      //  sf = 0;
+        for (int i = 0; i < 5; ++i) {
+          ps *= rotSome;
+          vec2 ips = ps;
+          vec2 ipn = mod2_1(ips);
+          float ir = hash(ipn+n*100.0+float(i)*10.0);
+          ips = ips -0.3*vec2(ir, fract(-23.0*ir));
+          float sf = mix(1.0, sqrt(100000.0*abs(ips.x*ips.y)), sf);
+          float ids = length(ips)*sf-0.0025;
+          if (ids < ds) {
+            r = ir;
+            ds = min(ds, ids);
+          }
+        }
+
+        float hues = mix(0.6, 0.8, r*r);
+        float sats = mix(0.6, 0.0, sqrt(r));
+        float bris = mix(0.5, 1.0, r);
+        float ts = pow(max(1.0-ds, 0.0), mix(200.0, 100.0, gcd)/sqrt(s));
+        vec3 cols = 2.0*hsv2rgb(vec3(hues, sats, bris));
+        vec4 cs = vec4(cols, ts);
+
+        float cd = gcd*localCloudDensity(p, n);
+        float cdo = gcd*localCloudDensity(p+vec2(0.125, 0.25), n);
+        const float level0 = 0.0;
+        const float level1 = 0.05;
+        // Some serious fake shadow & lighting of clouds
+        float cli = mix(-0.1, 1.0, 0.5 + 0.5*tanh_approx(10.0*(cd-cdo)));
+
+        float huec = (mix(-0.2, 0.05, (cd))+0.05)-0.1*PCOS(2.0*pp.z);
+        float tc = clamp(cd, 0.0, 1.0);
+        tc *= tc;
+        float satc = 0.5;
+        float bric = 1.0;
+        vec3 colc = hsv2rgb(vec3(huec, satc, bric))+cli*vec3(0.9, 0.7, 0.9);
+        vec4 cc = vec4(colc*0.66, tc);
+        cc = clamp(cc, 0.0, 1.0);
+      //  cc.xyz= sqrt(cc.xyz);
+
+        cc.w*=tanh_approx(max(0.125*0.25*n-1.0, 0.0));
+        vec4 ct = alphaBlend(cs, cc);
+        return ct;
+      }
+
+      vec3 skyColor(vec3 ro, vec3 rd) {
+        const vec3 l = normalize(vec3(0.0, 0.0, 1));
+        const vec3 baseCol = vec3(0.5, 0.66, 1.0);
+        return 1.25*baseCol*pow(max(dot(l, normalize(rd*vec3(1.0, 0.33, 1.0))), 0.0), 50.0);
+      }
+      #else
+      vec3 skyColor(vec3 ro, vec3 rd) {
+        float ld = max(dot(rd, vec3(0.0, 0.0, 1.0)), 0.0);
+        return vec3(tanh_approx(3.0*pow(ld, 100.0)));
+      }
+
+      vec4 plane(vec3 ro, vec3 rd, vec3 pp, vec3 off, float aa, float n, float shift) {
+        float h = hash(n);
+        float s = mix(0.05, 0.25, h);
+
+        vec3 hn;
+        vec2 p = (pp-off*vec3(1.0, 1.0, 0.0)).xy;
+        p *= ROT(TAU*h);
+        const float lw = 0.005;
+        float d = hex(p/s, 0.5)*s;
+        float dd = abs(d) - lw;
+
+        float a  = smoothstep(-aa, aa, -dd);
+        float ha = smoothstep(-aa, aa, d+lw*1.0);
+
+        vec4 col = vec4(mix(vec3(1.0-tanh_approx(15.0*length(p))), vec3(0.0), a), ha);
+
+        return col;
+      }
+      #endif
+
+      float computeShift(vec2 p) {
+        vec2 op = p;
+        float s = 0.125;
+        float tlp = tanh(abs(op.x*op.y));
+      //  return 1.0;
+
+        return tlp*PCOS(300.0*tlp+TTIME);
+      }
+
+      vec3 color(vec3 ww, vec3 uu, vec3 vv, vec3 ro, vec2 p) {
+        float shift = computeShift(p);
+        float lp = length(p);
+        vec2 np = p + 1.0/RESOLUTION.xy;
+        const float per = 80.0;
+        float rdd = (2.0+rdd*tanh_approx(lp));
+      //  float rdd = (2.0+0.5*lp*tanh(lp+0.9*PCOS(per*p.x)*PCOS(per*p.y)));
+      //  float rdd = (2.0+rdd*(beat(4.0))*tanh(lp));
+      //  float rdd = (2.0+1.5*sin(4.0*lp+0.125*BPM*TTIME/60.0)/(1.0+lp*lp));
+      //  float rdd = 2.0+rdd;
+
+        vec3 rd = normalize(p.x*uu + p.y*vv + rdd*ww);
+        vec3 nrd = normalize(np.x*uu + np.y*vv + rdd*ww);
+
+        const float fadeDist = planeDist*float(furthest - fadeFrom);
+        float nz = floor(ro.z / planeDist);
+
+        vec3 skyCol = skyColor(ro, rd);
+
+        // Steps from nearest to furthest plane and accumulates the color
+
+        vec4 acol = vec4(0.0);
+        const float cutOff = 0.95;
+        bool cutOut = false;
+
+        for (int i = 1; i <= furthest; ++i) {
+          float pz = planeDist*nz + planeDist*float(i);
+
+          float pd = (pz - ro.z)/rd.z;
+
+          if (pd > 0.0 && acol.w < cutOff) {
+            vec3 pp = ro + rd*pd;
+            vec3 npp = ro + nrd*pd;
+
+            float aa = 3.0*length(pp - npp);
+
+            vec3 off = offset(pp.z);
+
+            vec4 pcol = plane(ro, rd, pp, off, aa, nz+float(i), shift);
+
+            float nz = pp.z-ro.z;
+            float fadeIn = exp(-2.5*max((nz - planeDist*float(fadeFrom))/fadeDist, 0.0));
+            float fadeOut = smoothstep(0.0, planeDist*0.1, nz);
+            pcol.xyz = mix(skyCol, pcol.xyz, (fadeIn));
+            pcol.w *= fadeOut;
+
+            pcol = clamp(pcol, 0.0, 1.0);
+
+            acol = alphaBlend(pcol, acol);
+          } else {
+            cutOut = true;
+            break;
+          }
+
+        }
+
+        vec3 col = alphaBlend(skyCol, acol);
+      // To debug cutouts due to transparency
+      //  col += cutOut ? vec3(1.0, -1.0, 0.0) : vec3(0.0);
+        return col;
+      }
+
+      // Classic post processing
+      vec3 postProcess(vec3 col, vec2 q) {
+        col = clamp(col, 0.0, 1.0);
+        col = pow(col, std_gamma);
+        col = col*0.6+0.4*col*col*(3.0-2.0*col);
+        col = mix(col, vec3(dot(col, vec3(0.33))), -0.4);
+        col *=0.5+0.5*pow(19.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.7);
+        return col;
+      }
+
+      vec3 effect(vec2 p, vec2 q) {
+        float tm  = TIME*speed;
+        vec3 ro   = offset(tm);
+        vec3 dro  = doffset(tm);
+        vec3 ddro = ddoffset(tm);
+
+        vec3 ww = normalize(dro);
+        vec3 uu = normalize(cross(normalize(vec3(0.0,1.0,0.0)+ddro), ww));
+        vec3 vv = normalize(cross(ww, uu));
+
+        vec3 col = color(ww, uu, vv, ro, p);
+        return col;
+      }
+
+      void main(void) {
+        vec2 q = v_texcoord;
+        vec2 p = -1. + 2. * q;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+
+        vec3 col = effect(p, q);
+        col = postProcess(col, q);
+        col = alphaBlend(col, foreColor);
+
+        fragColor = vec4(col, 1.0);
+      }
+    </script>
+
+    <script type = "text/javascript">
+      const globalUniforms = ["foreColor"];
+
+      // List all scenes, all scenes have a vertex shader (often shared)
+      //  and a fragment shader
+      //  It's possible to reuse and tweak fragment shaders by using defines
+      //  Can also register extra uniforms
+      //  Default uniforms always includes time and resolution
+      const allScenes = {
+        blue_scene : {
+          vs: "vs-default",
+          fs: "fs-blue-scene",
+        },
+        psychedelic_mist_scene : {
+          vs: "vs-default",
+          fs: "fs-planes-scene",
+          defines: ["PSYCHEDELIC_MIST_PLANES"],
+        },
+        clocks_scene : {
+          vs: "vs-default",
+          fs: "fs-planes-scene",
+          defines: ["FUNKY_PLANES", "CLOCKS_DF", "KALEIDOSCOPE"],
+        },
+      };
+
+      const bpm = 128.0;
+      function btime(b) {
+        return b*60.0/bpm;
+      }
+
+      const b_psychdelic_mist   = btime(520.0);
+      const fi_psychdelic_mist  = btime(524.0);
+      const b_clocks            = btime(584.0);
+      const fi_clocks           = btime(588.0);
+
+      // Called after initialization of all shaders are complete
+      function onInitComplete() {
+        const label = document.getElementById("info-label");
+        label.textContent = "Ready, click play to run";
+      }
+
+      // Called after user clicked play
+      //  TODO: Support auto start and hidden audio controls
+      function onStarted() {
+        const information = document.getElementById("information");
+        information.style.display = "none";
+      }
+
+      // Called before each shader is compiled
+      function onLoadingScene(key) {
+        const label = document.getElementById("info-label");
+        label.textContent = "Compiling: " + key;
+      }
+
+      // Called each frame to select which scene to render
+      function onSelectScene(gl, time) {
+        if (time > b_clocks)          return allScenes.clocks_scene;
+        if (time > b_psychdelic_mist) return allScenes.psychedelic_mist_scene;
+        return allScenes.blue_scene;
+      }
+
+      // Called each frame to set the uniforms after the scene is selected
+      function onSetUniforms(gl, time, scene) {
+        let t = 0.0;
+        if (time > b_psychdelic_mist) t = smoothstep(fi_psychdelic_mist, b_psychdelic_mist, time);
+        if (time > b_clocks)          t = smoothstep(fi_clocks, b_clocks, time);
+        gl.uniform4f(scene.uniformLocations.foreColor, 1.0, 1.0, 1.0, t);
+      }
+    </script>
+  </head>
+
+  <body onload="runDemo()">
+    <audio id="music" style="visibility: hidden;" controls src="underworld.mp3"></audio>
+    <div id="information" style="margin-left: 16pt;">
+      <h1>demo-system-v1</h1>
+
+      <p>Simple demo system to support developing demos in webgl</p>
+
+      <p id="info-label">Please wait... </p>
+    </div>
+    <div class="center-flex">
+      <div>
+        <canvas id="glcanvas" class="gl">
+          Your browser doesn't appear to support the HTML5 <code>&lt;canvas&gt;</code> element.
+        </canvas>
+      </div>
+    </div>
+  </body>
+</html>
