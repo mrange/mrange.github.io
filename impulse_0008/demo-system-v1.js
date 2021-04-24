@@ -21,6 +21,10 @@ var verticesBuffer;
 var verticesTextureCoordBuffer;
 var verticesIndexBuffer;
 
+function mix(x, y, a) {
+  return x*(1.0 - a) + y*a;
+}
+
 function clamp(x, minVal, maxVal) {
   return Math.min(Math.max(x, minVal), maxVal);
 }
@@ -48,7 +52,7 @@ let neverPlayed = true;
 
 let startTime = now();
 
-async function runDemo() {
+async function run_demo() {
   audio = document.getElementById("music");
   audio.onplay = () => play();
   audio.onplaying = () => update();
@@ -68,7 +72,7 @@ async function runDemo() {
   canvas.width  = finalWidth;
   canvas.height = finalHeight;
 
-  initWebGL(canvas);      // Initialize the GL context
+  init_webGL(canvas);      // Initialize the GL context
 
   // Only continue if WebGL is available and working
 
@@ -81,20 +85,20 @@ async function runDemo() {
     // Initialize the shaders; this is where all the lighting for the
     // vertices and so forth is established.
 
-    await initShaders();
+    await init_shaders();
 
     // Here's where we call the routine that builds all the objects
     // we'll be drawing.
 
-    initBuffers();
+    init_buffers();
 
     initialized = true;
 
-    onInitComplete();
+    on_init_complete();
 
     audio.style.visibility = "visible";
 
-    requestAnimationFrame(drawScene);
+    requestAnimationFrame(draw_scene);
   } else {
     alert("Failed to initialize. Maybewebgl 2 is not supported on your browser");
   }
@@ -104,10 +108,10 @@ function play() {
   if (initialized&&!playing) {
     if (neverPlayed) {
       neverPlayed = false;
-      onStarted();
+      on_started();
     }
     startTime = now() - audio.currentTime*1000;
-    requestAnimationFrame(drawScene);
+    requestAnimationFrame(draw_scene);
     playing = true;
   }
 }
@@ -124,7 +128,7 @@ function stop() {
   }
 }
 
-function initWebGL() {
+function init_webGL() {
   gl = null;
 
   try {
@@ -144,7 +148,7 @@ function initWebGL() {
 //
 // initBuffers
 //
-function initBuffers() {
+function init_buffers() {
 
   verticesBuffer = gl.createBuffer();
 
@@ -198,13 +202,13 @@ function initBuffers() {
       new Uint16Array(vertexIndices), gl.STATIC_DRAW);
 }
 
-function drawScene() {
+function draw_scene() {
   if (!playing) return;
 
   const before = now();
   const time  = (before - startTime) / 1000.0;
 
-  const scene = onSelectScene(gl, time);
+  const scene = on_select_scene(gl, time);
 
   const bcr    = canvas.getBoundingClientRect();
   const width  = bcr.width;
@@ -223,17 +227,17 @@ function drawScene() {
   gl.uniform2f(scene.uniformLocations.resolution, width, height);
   gl.uniform1f(scene.uniformLocations.time, time);
 
-  onSetUniforms(gl, time, scene);
+  on_set_uniforms(gl, time, scene);
 
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, verticesIndexBuffer);
   gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
 
-  requestAnimationFrame(drawScene);
+  requestAnimationFrame(draw_scene);
 }
 
-async function initShaders() {
+async function init_shaders() {
   for (const key in allScenes) {
-    onLoadingScene(key);
+    on_loading_scene(key);
 
     // To let the UI refresh
     await sleep(20);
@@ -246,10 +250,9 @@ async function initShaders() {
       : ""
       ;
     const prelude = "#version 300 es\n" + defines;
-    console.log(prelude);
 
-    const vertexShader    = getShader(gl, prelude, scene.vs);
-    const fragmentShader  = getShader(gl, prelude, scene.fs);
+    const vertexShader    = get_shader(gl, prelude, scene.vs);
+    const fragmentShader  = get_shader(gl, prelude, scene.fs);
 
     scene.shaderProgram = gl.createProgram();
     gl.attachShader(scene.shaderProgram, vertexShader);
@@ -279,7 +282,7 @@ async function initShaders() {
   }
 }
 
-function getShader(gl, prelude, id) {
+function get_shader(gl, prelude, id) {
   const shaderScript = document.getElementById(id);
 
   if (!shaderScript) {

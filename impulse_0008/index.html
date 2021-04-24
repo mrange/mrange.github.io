@@ -1067,53 +1067,121 @@
         },
       };
 
-      const bpm = 128.0;
+      const bpm   = 128.0;
+      const beat  = 60.0/bpm;
       function btime(b) {
-        return b*60.0/bpm;
+        return b*beat;
       }
 
-      const b_psychdelic_mist   = btime(520.0);
-      const fi_psychdelic_mist  = btime(524.0);
-      const b_clocks            = btime(584.0);
-      const fi_clocks           = btime(588.0);
+      const max_time_slots  = 808;
+      const time_slots      = new Array(max_time_slots);
+
+      const script = [
+        {
+          begin       :  0                    ,
+          scene       :  allScenes.blue_scene ,
+          setUniforms : (gl, time, ltime, scene) => {
+          },
+        },
+        {
+          begin       :  520                              ,
+          scene       :  allScenes.psychedelic_mist_scene ,
+          setUniforms : (gl, time, ltime, scene) => {
+            const t = smoothstep(4.0*beat, 0.0, ltime);
+            gl.uniform4f(scene.uniformLocations.foreColor, 1.0, 1.0, 1.0, t);
+          },
+        },
+        {
+          begin       :  584                    ,
+          scene       :  allScenes.clocks_scene ,
+          setUniforms : (gl, time, ltime, scene) => {
+            const fi = smoothstep(4.0*beat, 0.0, ltime);
+            const fo = mix(0.0, 0.875, smoothstep(btime(640.0), btime(648.0), time));
+            const t  = fi + fo;
+            const ft = time > btime(640.0) ? 0.0 : 1.0;
+            gl.uniform4f(scene.uniformLocations.foreColor, ft, ft, ft, t);
+          },
+        },
+        {
+          begin       :  648                              ,
+          scene       :  allScenes.psychedelic_mist_scene ,
+          setUniforms : (gl, time, ltime, scene) => {
+            const t = smoothstep(4.0*beat, 0.0, ltime);
+            gl.uniform4f(scene.uniformLocations.foreColor, 1.0, 1.0, 1.0, t);
+          },
+        },
+        {
+          begin       :  max_time_slots       ,
+          scene       :  allScenes.blue_scene ,
+          setUniforms : (gl, time, ltime, scene) => {
+          },
+        },
+      ];
+
+      function populate_time_slots() {
+        let current_script = script[0];
+        let slot = 0;
+        for (const idx in script) {
+          const next_script = script[idx];
+          while(slot < max_time_slots && slot < next_script.begin) {
+            time_slots[slot] = current_script;
+            ++slot;
+          }
+          current_script = next_script;
+        }
+        while(slot < max_time_slots) {
+            time_slots[slot] = current_script;
+            ++slot;
+        }
+      }
+      populate_time_slots();
+
+      function get_slot(time) {
+        const i = clamp(Math.floor(time/beat), 0, max_time_slots-1);
+        return time_slots[i];
+      }
 
       // Called after initialization of all shaders are complete
-      function onInitComplete() {
+      function on_init_complete() {
         const label = document.getElementById("info-label");
         label.textContent = "Ready, click play to run";
       }
 
       // Called after user clicked play
       //  TODO: Support auto start and hidden audio controls
-      function onStarted() {
+      function on_started() {
         const information = document.getElementById("information");
         information.style.display = "none";
       }
 
       // Called before each shader is compiled
-      function onLoadingScene(key) {
+      function on_loading_scene(key) {
         const label = document.getElementById("info-label");
         label.textContent = "Compiling: " + key;
       }
 
       // Called each frame to select which scene to render
-      function onSelectScene(gl, time) {
-        if (time > b_clocks)          return allScenes.clocks_scene;
-        if (time > b_psychdelic_mist) return allScenes.psychedelic_mist_scene;
-        return allScenes.blue_scene;
+      function on_select_scene(gl, time) {
+        const slot = get_slot(time);
+        if(slot && slot.scene) {
+          return slot.scene;
+        } else {
+          return allScenes.blue_scene;
+        }
       }
 
       // Called each frame to set the uniforms after the scene is selected
-      function onSetUniforms(gl, time, scene) {
-        let t = 0.0;
-        if (time > b_psychdelic_mist) t = smoothstep(fi_psychdelic_mist, b_psychdelic_mist, time);
-        if (time > b_clocks)          t = smoothstep(fi_clocks, b_clocks, time);
-        gl.uniform4f(scene.uniformLocations.foreColor, 1.0, 1.0, 1.0, t);
+      function on_set_uniforms(gl, time, scene) {
+        const slot = get_slot(time);
+        if(slot && slot.setUniforms) {
+          const ltime = time - btime(slot.begin);
+          slot.setUniforms(gl, time, ltime, scene);
+        }
       }
     </script>
   </head>
 
-  <body onload="runDemo()">
+  <body onload="run_demo()">
     <audio id="music" style="visibility: hidden;" controls src="underworld.mp3"></audio>
     <div id="information" style="margin-left: 16pt;">
       <h1>demo-system-v1</h1>
