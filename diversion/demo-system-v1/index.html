@@ -111,12 +111,14 @@
     </script>
 
     <script type = "text/javascript">
+      const global_uniforms = [];
+
       // List all scenes, all scenes have a vertex shader (often shared)
       //  and a fragment shader
       //  It's possible to reuse and tweak fragment shaders by using defines
       //  Can also register extra uniforms
       //  Default uniforms always includes time and resolution
-      const allScenes = {
+      const all_scenes = {
         red_scene : {
           vs: "vs-default",
           fs: "fs-red-scene"
@@ -128,38 +130,38 @@
       };
 
       // Called after initialization of all shaders are complete
-      function onInitComplete() {
+      function on_init_complete() {
         const label = document.getElementById("info-label");
         label.textContent = "Ready, click play to run";
       }
 
       // Called after user clicked play
       //  TODO: Support auto start and hidden audio controls
-      function onStarted() {
+      function on_started() {
         const information = document.getElementById("information");
         information.style.display = "none";
       }
 
       // Called before each shader is compiled
-      function onLoadingScene(key) {
+      function on_loading_scene(key) {
         const label = document.getElementById("info-label");
         label.textContent = "Compiling: " + key;
       }
 
       // Called each frame to select which scene to render
-      function onSelectScene(gl, time) {
-        if (time % 4.0 < 2.0) return allScenes.red_scene;
-        else return allScenes.blue_scene;
+      function on_select_scene(gl, time) {
+        if (time % 4.0 < 2.0) return all_scenes.red_scene;
+        else return all_scenes.blue_scene;
       }
 
       // Called each frame to set the uniforms after the scene is selected
-      function onSetUniforms(gl, time, scene) {
+      function on_set_uniforms(gl, time, scene) {
       }
     </script>
   </head>
 
-  <body onload="runDemo()">
-    <audio id="music" style="visibility: hidden;" controls src="firefox-galaxy.mp3"></audio>
+  <body onload="run_demo()">
+    <audio id="music" style="visibility: hidden;" controls src="eight-bit-adventure.mp3"></audio>
     <div id="information" style="margin-left: 16pt;">
       <h1>demo-system-v1</h1>
 
