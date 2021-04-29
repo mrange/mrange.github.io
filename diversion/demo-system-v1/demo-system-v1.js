@@ -49,13 +49,17 @@ class DemoSystemV1 {
     return new Promise(resolve => setTimeout(resolve, milliseconds));
   }
 
-  createByteTexture1D(gl, size) {
-    const data = new Uint8Array(size);
-    const texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_1D, texture);
-    gl.texImage1D(gl.TEXTURE_1D, 0, gl.RGBA, size, 0, gl.LUMINANCE, gl.BYTE, data);
+  create_bins_texture() {
+    const texture = this.gl.createTexture();
+    this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR_MIPMAP_NEAREST);
+    this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, null);
 
-    return [data, texture];
+    return texture;
   }
 
   async run_demo() {
@@ -94,8 +98,8 @@ class DemoSystemV1 {
 
     // Only continue if WebGL is available and working
     if (this.gl) {
-      this.textureTimeDomainBins  = this.createByteTexture1D(this.gl, this.fftSize);
-      this.textureFrequencyBins   = this.createByteTexture1D(this.gl, this.fftSize);
+      this.textureTimeDomainBins  = this.create_bins_texture();
+      this.textureFrequencyBins   = this.create_bins_texture();
 
 
       this.gl.clearColor(0.0, 0.0, 0.0, 1.0);       // Clear to black, fully opaque
@@ -213,13 +217,19 @@ class DemoSystemV1 {
     this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(vertexIndices), this.gl.STATIC_DRAW);
   }
 
+  bind_bins_texture(texture, data) {
+    this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+    this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.LUMINANCE, 16, 16, 0, this.gl.LUMINANCE, this.gl.UNSIGNED_BYTE, data);
+  }
+
   draw_scene() {
     if (!this.playing) return;
 
     this.audioAnalyzer.getByteFrequencyData(this.audioFrequencyBins);
     this.audioAnalyzer.getByteTimeDomainData(this.audioTimeDomainBins);
 
-    console.log(this.audioTimeDomainBins);
+    this.bind_bins_texture(this.textureFrequencyBins, this.audioFrequencyBins);
+    this.bind_bins_texture(this.textureTimeDomainBins, this.audioTimeDomainBins);
 
     const before = this.now();
     const time  = (before - this.startTime) / 1000.0;
@@ -242,6 +252,18 @@ class DemoSystemV1 {
 
     this.gl.uniform2f(scene.uniformLocations.resolution, width, height);
     this.gl.uniform1f(scene.uniformLocations.time, time);
+
+    this.gl.activeTexture(this.gl.TEXTURE0);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.textureFrequencyBins);
+    this.gl.uniform1i(scene.uniformLocations.frequencyData, 0);
+
+
+  /*
+    this.gl.activeTexture(gl.TEXTURE1);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, this.textureTimeDomainBins);
+    this.gl.uniform1i(scene.uniformLocations.timeDomainData, 0);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, null);
+*/
 
     on_set_uniforms(this.gl, time, scene);
 
@@ -287,7 +309,7 @@ class DemoSystemV1 {
       this.gl.enableVertexAttribArray(scene.textureCoordAttribute);
 
       const uniformLocations = {};
-      const uniforms = ["time", "resolution"].concat(global_uniforms).concat(scene.uniforms ? scene.uniforms : []);
+      const uniforms = ["time", "resolution", "frequencyData", "timeDomainData"].concat(global_uniforms).concat(scene.uniforms ? scene.uniforms : []);
       for (const idx in uniforms) {
         const uniform = uniforms[idx];
         if (uniform) {

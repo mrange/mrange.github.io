@@ -98,13 +98,21 @@
       // PRELUDE
       // -----------------------------------------------------------------------------
       precision highp float;
+
       uniform float time;
       uniform vec2 resolution;
+      uniform sampler2D frequencyData;
+      uniform sampler2D timeDomainData;
+
       in vec2 v_texcoord;
       out vec4 fragColor;
 
       void main(void) {
         vec3 col = vec3(0.0, 0.0, 1.0);
+
+        vec4 tcol = texture(frequencyData, v_texcoord);
+
+        col = tcol.xyz;
 
         fragColor = vec4(col, 1.0);
       }
@@ -150,8 +158,7 @@
 
       // Called each frame to select which scene to render
       function on_select_scene(gl, time) {
-        if (time % 4.0 < 2.0) return all_scenes.red_scene;
-        else return all_scenes.blue_scene;
+        return all_scenes.blue_scene;
       }
 
       // Called each frame to set the uniforms after the scene is selected
