@@ -108,13 +108,12 @@
       out vec4 fragColor;
 
       void main(void) {
-        vec3 col = vec3(0.0, 0.0, 1.0);
-
-        vec4 tcol = texture(frequencyData, v_texcoord);
-
-        col = tcol.xyz;
-
-        fragColor = vec4(col, 1.0);
+        vec2 uv = v_texcoord;
+        float fft  = texture(frequencyData, vec2(uv.x*0.25, 0.0)).x;
+        float wave = texture(timeDomainData, vec2(uv.x, 0.0)).x;
+        vec3 col = vec3(fft, 4.0*fft*(1.0-fft), 1.0-fft) * fft;
+        col += 1.0 -  smoothstep( 0.0, 0.15, abs(wave - uv.y));
+        fragColor = vec4(col,1.0);
       }
     </script>
 

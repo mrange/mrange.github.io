@@ -33,7 +33,7 @@ function smoothstep(edge0, edge1, x) {
 }
 
 class DemoSystemV1 {
-  fftSize                     = 256       ;
+  fftSize                     = 512       ;
   initialized                 = false     ;
   playing                     = false     ;
   neverPlayed                 = true      ;
@@ -50,21 +50,23 @@ class DemoSystemV1 {
   }
 
   create_bins_texture() {
+    const bytes = new Uint8Array(this.fftSize);
+    for (const i in bytes) {
+      bytes[i] = i % 255;
+    }
+
     const texture = this.gl.createTexture();
     this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
-    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
-    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR_MIPMAP_NEAREST);
-    this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
+    this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.LUMINANCE, this.fftSize, 1, 0, this.gl.LUMINANCE, this.gl.UNSIGNED_BYTE, bytes);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
     this.gl.bindTexture(this.gl.TEXTURE_2D, null);
-
     return texture;
   }
 
   async run_demo() {
     this.audio                  = document.getElementById("music");
-    this.audio.crossOrigin      = "anonymous";
     this.audio.onplay           = () => this.play();
     this.audio.onplaying        = () => this.update();
     this.audio.onseeked         = () => this.update();
@@ -219,7 +221,7 @@ class DemoSystemV1 {
 
   bind_bins_texture(texture, data) {
     this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
-    this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.LUMINANCE, 16, 16, 0, this.gl.LUMINANCE, this.gl.UNSIGNED_BYTE, data);
+    this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.LUMINANCE, data.length, 1, 0, this.gl.LUMINANCE, this.gl.UNSIGNED_BYTE, data);
   }
 
   draw_scene() {
@@ -257,13 +259,9 @@ class DemoSystemV1 {
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.textureFrequencyBins);
     this.gl.uniform1i(scene.uniformLocations.frequencyData, 0);
 
-
-  /*
-    this.gl.activeTexture(gl.TEXTURE1);
+    this.gl.activeTexture(this.gl.TEXTURE1);
     this.gl.bindTexture(this.gl.TEXTURE_2D, this.textureTimeDomainBins);
-    this.gl.uniform1i(scene.uniformLocations.timeDomainData, 0);
-    this.gl.bindTexture(this.gl.TEXTURE_2D, null);
-*/
+    this.gl.uniform1i(scene.uniformLocations.timeDomainData, 1);
 
     on_set_uniforms(this.gl, time, scene);
 
