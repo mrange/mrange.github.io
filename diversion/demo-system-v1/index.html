@@ -67,9 +67,6 @@
       out vec2 v_texcoord;
 
       void main(void) {
-        // Some drivers don't like position being written here
-        // with the tessellation stages enabled also.
-        // Comment next line when Tess.Eval shader is enabled.
         gl_Position = a_position;
 
         v_texcoord = a_texcoord;
@@ -81,85 +78,114 @@
       // PRELUDE
       // -----------------------------------------------------------------------------
       precision highp float;
-      uniform float time;
-      uniform vec2 resolution;
-      in vec2 v_texcoord;
-      out vec4 fragColor;
 
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+
+      in vec2 v_texcoord  ;
+      out vec4 frag_color ;
+
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
       void main(void) {
         vec3 col = vec3(1.0, 0.0, 0.0);
 
-        fragColor = vec4(col, 1.0);
+        frag_color = vec4(col, 1.0);
       }
     </script>
 
-    <script id="fs-blue-scene" type="x-shader/x-fragment">
+    <script id="fs-equalizer-scene" type="x-shader/x-fragment">
       // -----------------------------------------------------------------------------
       // PRELUDE
       // -----------------------------------------------------------------------------
       precision highp float;
-      uniform float time;
-      uniform vec2 resolution;
-      in vec2 v_texcoord;
-      out vec4 fragColor;
 
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+
+      in vec2 v_texcoord  ;
+      out vec4 frag_color ;
+
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
       void main(void) {
-        vec3 col = vec3(0.0, 0.0, 1.0);
-
-        fragColor = vec4(col, 1.0);
+        vec2 uv     = v_texcoord;
+        float fft   = texture(frequency_data, vec2(uv.x*0.6, 0.0)).x;
+        fft         *= fft;
+        float wave  = texture(time_domain_data, vec2(uv.x, 0.0)).x;
+        vec3 col    = vec3(fft, 4.0*fft*(1.0-fft), 1.0-fft) * fft;
+        col         += 1.0 -  smoothstep( 0.0, 0.15, abs(wave - uv.y));
+        frag_color  = vec4(col,1.0);
       }
     </script>
 
     <script type = "text/javascript">
+      const analyze_audio   = true;
+      const demo_system     = new DemoSystemV1(analyze_audio);
+
+      const global_uniforms = [];
+
       // List all scenes, all scenes have a vertex shader (often shared)
       //  and a fragment shader
       //  It's possible to reuse and tweak fragment shaders by using defines
       //  Can also register extra uniforms
       //  Default uniforms always includes time and resolution
-      const allScenes = {
+      const all_scenes = {
         red_scene : {
           vs: "vs-default",
           fs: "fs-red-scene"
         },
-        blue_scene : {
+        equalizer_scene : {
           vs: "vs-default",
-          fs: "fs-blue-scene"
+          fs: "fs-equalizer-scene"
         },
       };
 
       // Called after initialization of all shaders are complete
-      function onInitComplete() {
+      function on_init_complete() {
         const label = document.getElementById("info-label");
         label.textContent = "Ready, click play to run";
+
+        const music = document.getElementById("music");
+        music.style.visibility = "visible";
       }
 
       // Called after user clicked play
-      //  TODO: Support auto start and hidden audio controls
-      function onStarted() {
+      function on_started() {
         const information = document.getElementById("information");
         information.style.display = "none";
       }
 
       // Called before each shader is compiled
-      function onLoadingScene(key) {
+      function on_loading_scene(key) {
         const label = document.getElementById("info-label");
         label.textContent = "Compiling: " + key;
       }
 
       // Called each frame to select which scene to render
-      function onSelectScene(gl, time) {
-        if (time % 4.0 < 2.0) return allScenes.red_scene;
-        else return allScenes.blue_scene;
+      function on_select_scene(gl, time) {
+        if (analyze_audio) {
+          return all_scenes.equalizer_scene;
+        }
+
+        return all_scenes.red_scene;
       }
 
       // Called each frame to set the uniforms after the scene is selected
-      function onSetUniforms(gl, time, scene) {
+      function on_set_uniforms(gl, time, scene) {
       }
+
     </script>
   </head>
 
-  <body onload="runDemo()">
-    <audio id="music" style="visibility: hidden;" controls src="firefox-galaxy.mp3"></audio>
+  <body onload="demo_system.run_demo()">
+    <audio id="music" style="visibility: hidden;" controls src="eight-bit-adventure.mp3"></audio>
     <div id="information" style="margin-left: 16pt;">
       <h1>demo-system-v1</h1>
 
