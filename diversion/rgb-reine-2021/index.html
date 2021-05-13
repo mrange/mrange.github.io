@@ -1,0 +1,301 @@
+<!--
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+-->
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>RGB Reine 2021</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <script src="demo-system-v1.js" type="text/javascript"></script>
+    <link href='https://fonts.googleapis.com/css?family=Josefin Slab' rel='stylesheet'>
+    <style>
+        body {
+            font-family: 'Josefin Slab';
+            font-size: 2vw;
+            color: white;
+            background-color: black;
+        }
+        a:link {
+          text-decoration: none;
+          color: #FF8240;
+        }
+        a:visited {
+          text-decoration: none;
+          color: #FF8240;
+        }
+        a:hover {
+          text-decoration: underline;
+          color: #DFF180;
+        }
+        a:active {
+          text-decoration: underline;
+          color: #DFF180;
+        }
+        canvas.gl {
+          position:fixed;
+          z-index:-1;
+          top:0;
+          left: 0;
+          height: 100%;
+          width: 100%;
+          background-color: black;
+        }
+        div.center-flex {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+    </style>
+
+    <script id="vs-default" type="x-shader/x-vertex">
+      precision highp float;
+
+      in vec4 a_position;
+      in vec2 a_texcoord;
+
+      out vec2 v_texcoord;
+
+      void main(void) {
+        gl_Position = a_position;
+
+        v_texcoord = a_texcoord;
+      }
+    </script>
+
+    <script id="fs-red-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+
+      in vec2 v_texcoord  ;
+      out vec4 frag_color ;
+
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+      void main(void) {
+        vec3 col = vec3(1.0, 0.0, 0.0);
+
+        frag_color = vec4(col, 1.0);
+      }
+    </script>
+
+    <script id="fs-equalizer-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+
+      in vec2 v_texcoord  ;
+      out vec4 frag_color ;
+
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+      void main(void) {
+        vec2 uv     = v_texcoord;
+        float fft   = texture(frequency_data, vec2(uv.x*0.6, 0.0)).x;
+        fft         *= fft;
+        float wave  = texture(time_domain_data, vec2(uv.x, 0.0)).x;
+        vec3 col    = vec3(fft, 4.0*fft*(1.0-fft), 1.0-fft) * fft;
+        col         += 1.0 -  smoothstep( 0.0, 0.15, abs(wave - uv.y));
+        frag_color  = vec4(col,1.0);
+      }
+    </script>
+
+    <script id="fs-very-big-hit-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+
+      uniform sampler2D young_reine       ;
+      uniform sampler2D young_reine_chat  ;
+      uniform sampler2D reine             ;
+      uniform sampler2D reine_beat        ;
+
+      in vec2 v_texcoord  ;
+      out vec4 frag_color ;
+
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+
+      bool between(float b, float e) {
+        return (time >= b) && (time < e);
+      }
+
+      vec4 image(sampler2D s, vec2 p) {
+        p *= 0.5;
+        p += 0.5;
+        p.y = 1.0-p.y;
+        return texture(s, p);
+      }
+
+      vec3 postProcess(vec3 col, vec2 q) {
+        col = clamp(col, 0.0, 1.0);
+        col = pow(col, vec3(1.0/2.2));
+        col = col*0.6+0.4*col*col*(3.0-2.0*col);
+        col = mix(col, vec3(dot(col, vec3(0.33))), -0.4);
+        col *=0.5+0.5*pow(19.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.7);
+        return col;
+      }
+
+      void main(void) {
+        vec2 q = v_texcoord;
+        vec2 p = -1.0 + 2.0*q;
+        p.x *= resolution.x/resolution.y;
+
+        vec3 col = vec3(1.0, 0.0, 0.0);
+
+        vec2 tp = p;
+        tp *= mix(1.5, 1.25, time/3.0);
+
+        bool s = false;
+        s = s || between(0.44, 0.70);
+        s = s || between(1.23, 1.50);
+        s = s || between(1.60, 2.20);
+        s = s || between(2.50, 2.66);
+        s = s || between(2.85, 3.01);
+        s = s || between(3.21, 3.37);
+
+        vec4 tcol = vec4(0.0);
+        if (s) {
+          tcol = image(young_reine_chat, tp);
+        } else {
+          tcol = image(young_reine, tp);
+        }
+
+        col = tcol.xyz*tcol.w;
+        col *= col;
+
+        col = mix(vec3(0.0), col, smoothstep(0.0, 0.4, time));
+
+        col = postProcess(col, q);
+
+        frag_color = vec4(col, 1.0);
+      }
+    </script>
+
+    <script type = "text/javascript">
+      const analyze_audio   = true;
+      const demo_system     = new DemoSystemV1(analyze_audio);
+
+      const global_uniforms = ["young_reine", "young_reine_chat"];
+
+      const all_textures = {
+        young_reine : {
+          image : () => document.getElementById("young-reine"),
+        },
+        young_reine_chat : {
+          image : () => document.getElementById("young-reine-chat"),
+        },
+      };
+
+      // List all scenes, all scenes have a vertex shader (often shared)
+      //  and a fragment shader
+      //  It's possible to reuse and tweak fragment shaders by using defines
+      //  Can also register extra uniforms
+      //  Default uniforms always includes time and resolution
+      const all_scenes = {
+        red_scene : {
+          vs: "vs-default",
+          fs: "fs-red-scene"
+        },
+        equalizer_scene : {
+          vs: "vs-default",
+          fs: "fs-equalizer-scene"
+        },
+        very_big_hit_scene : {
+          vs: "vs-default",
+          fs: "fs-very-big-hit-scene"
+        },
+      };
+
+      // Called after initialization of all shaders are complete
+      function on_init_complete() {
+        const label = document.getElementById("info-label");
+        label.textContent = "Ready, click play to run";
+
+        const music = document.getElementById("music");
+        music.style.visibility = "visible";
+      }
+
+      // Called after user clicked play
+      function on_started() {
+        const information = document.getElementById("information");
+        information.style.display = "none";
+      }
+
+      // Called before each shader is compiled
+      function on_loading_scene(key) {
+        const label = document.getElementById("info-label");
+        label.textContent = "Compiling: " + key;
+      }
+
+      // Called each frame to select which scene to render
+      function on_select_scene(gl, time) {
+        return all_scenes.very_big_hit_scene;
+      }
+
+      // Called each frame to set the uniforms after the scene is selected
+      function on_set_uniforms(gl, time, scene) {
+        gl.activeTexture(gl.TEXTURE2);
+        gl.bindTexture(gl.TEXTURE_2D, all_textures.young_reine.texture);
+        gl.uniform1i(scene.uniformLocations.young_reine, 2);
+
+        gl.activeTexture(gl.TEXTURE3);
+        gl.bindTexture(gl.TEXTURE_2D, all_textures.young_reine_chat.texture);
+        gl.uniform1i(scene.uniformLocations.young_reine_chat, 3);
+      }
+
+    </script>
+  </head>
+
+  <body onload="demo_system.run_demo()">
+    <audio id="music" style="visibility: hidden;" controls src="romeo-knight--rise-up.mp3"></audio>
+    <div id="information" style="margin-left: 16pt;">
+      <h1>RGB Reine 2021</h1>
+
+      <p>Demo party like it's 1996 again...</p>
+
+      <p id="info-label">Please wait... </p>
+    </div>
+    <div class="center-flex">
+      <div>
+        <canvas id="glcanvas" class="gl">
+          Your browser doesn't appear to support the HTML5 <code>&lt;canvas&gt;</code> element.
+        </canvas>
+      </div>
+    </div>
+    <img id="young-reine" src="young-reine.png" style="visibility: collapse"/>
+    <img id="young-reine-chat" src="young-reine-chat.png" style="visibility: collapse"/>
+  </body>
+</html>
