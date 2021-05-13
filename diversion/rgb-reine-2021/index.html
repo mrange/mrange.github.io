@@ -148,6 +148,10 @@
       // SHADER
       // -----------------------------------------------------------------------------
 
+      #define ROT(a)            mat2(cos(a), sin(a), -sin(a), cos(a))
+      #define PI                3.141592654
+      #define TAU               (2.0*PI)
+
       bool between(float b, float e) {
         return (time >= b) && (time < e);
       }
@@ -177,6 +181,7 @@
 
         vec2 tp = p;
         tp *= mix(1.5, 1.25, time/3.0);
+        tp *= ROT(0.1-time*0.05);
 
         bool s = false;
         s = s || between(0.44, 0.70);
@@ -196,7 +201,8 @@
         col = tcol.xyz*tcol.w;
         col *= col;
 
-        col = mix(vec3(0.0), col, smoothstep(0.0, 0.4, time));
+        col = mix(vec3(0.0), col, smoothstep(0.0, 0.2, time));
+        col = mix(vec3(0.0), col, smoothstep(3.6, 2.5, time));
 
         col = postProcess(col, q);
 
@@ -262,7 +268,11 @@
 
       // Called each frame to select which scene to render
       function on_select_scene(gl, time) {
-        return all_scenes.very_big_hit_scene;
+        if (time > 3.6) {
+          return all_scenes.equalizer_scene;
+        } else {
+          return all_scenes.very_big_hit_scene;
+        }
       }
 
       // Called each frame to set the uniforms after the scene is selected
@@ -295,7 +305,7 @@
         </canvas>
       </div>
     </div>
-    <img id="young-reine" src="young-reine.png" style="visibility: collapse"/>
-    <img id="young-reine-chat" src="young-reine-chat.png" style="visibility: collapse"/>
+    <img id="young-reine" src="young-reine.png" style="display: none"/>
+    <img id="young-reine-chat" src="young-reine-chat.png" style="display: none"/>
   </body>
 </html>

@@ -13,8 +13,6 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-// python3 -m http.server
-
 function mix(x, y, a) {
   return x*(1.0 - a) + y*a;
 }
