@@ -141,26 +141,19 @@
       uniform sampler2D reine             ;
       uniform sampler2D reine_beat        ;
 
-      in vec2 v_texcoord  ;
+      uniform vec4      foreground        ;
+
+      in vec2  v_texcoord  ;
       out vec4 frag_color ;
 
-      // -----------------------------------------------------------------------------
-      // SHADER
-      // -----------------------------------------------------------------------------
-
-      #define ROT(a)            mat2(cos(a), sin(a), -sin(a), cos(a))
-      #define PI                3.141592654
-      #define TAU               (2.0*PI)
-
-      bool between(float b, float e) {
-        return (time >= b) && (time < e);
+      vec4 alphaBlend(vec4 back, vec4 front) {
+        float w = front.w + back.w*(1.0-front.w);
+        vec3 xyz = (front.xyz*front.w + back.xyz*back.w*(1.0-front.w))/w;
+        return w > 0.0 ? vec4(xyz, w) : vec4(0.0);
       }
 
-      vec4 image(sampler2D s, vec2 p) {
-        p *= 0.5;
-        p += 0.5;
-        p.y = 1.0-p.y;
-        return texture(s, p);
+      vec3 alphaBlend(vec3 back, vec4 front) {
+        return mix(back, front.xyz, front.w);
       }
 
       vec3 postProcess(vec3 col, vec2 q) {
@@ -172,16 +165,30 @@
         return col;
       }
 
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+
+      vec4 image(sampler2D s, vec2 p) {
+        p *= 0.5;
+        p += 0.5;
+        p.y = 1.0-p.y;
+        return texture(s, p);
+      }
+
+      bool between(float b, float e) {
+        return (time >= b) && (time < e);
+      }
+
       void main(void) {
         vec2 q = v_texcoord;
         vec2 p = -1.0 + 2.0*q;
         p.x *= resolution.x/resolution.y;
 
-        vec3 col = vec3(1.0, 0.0, 0.0);
+        vec3 col = vec3(0.0, 0.0, 0.0);
 
         vec2 tp = p;
         tp *= mix(1.5, 1.25, time/3.0);
-        tp *= ROT(0.1-time*0.05);
 
         bool s = false;
         s = s || between(0.44, 0.70);
@@ -191,20 +198,19 @@
         s = s || between(2.85, 3.01);
         s = s || between(3.21, 3.37);
 
-        vec4 tcol = vec4(0.0);
+        vec4 tcol;
         if (s) {
           tcol = image(young_reine_chat, tp);
         } else {
           tcol = image(young_reine, tp);
         }
 
-        col = tcol.xyz*tcol.w;
-        col *= col;
-
-        col = mix(vec3(0.0), col, smoothstep(0.0, 0.2, time));
-        col = mix(vec3(0.0), col, smoothstep(3.6, 2.5, time));
+        tcol.xyz *= tcol.xyz;
+        col = alphaBlend(col, tcol);
 
         col = postProcess(col, q);
+
+        col = alphaBlend(col, foreground);
 
         frag_color = vec4(col, 1.0);
       }
@@ -214,7 +220,7 @@
       const analyze_audio   = true;
       const demo_system     = new DemoSystemV1(analyze_audio);
 
-      const global_uniforms = ["young_reine", "young_reine_chat"];
+      const global_uniforms = ["young_reine", "young_reine_chat", "foreground"];
 
       const all_textures = {
         young_reine : {
@@ -245,6 +251,58 @@
         },
       };
 
+      const bpm   = 125.0;
+      const beat  = 60.0/bpm;
+      const start = 7.5*beat;
+      function btime(b) {
+        return (b*beat-start);
+      }
+
+      const max_time_slots  = 512;
+      const time_slots      = new Array(max_time_slots);
+
+      const script = [
+        {
+          begin       :  0                          ,
+          scene       :  all_scenes.equalizer_scene ,
+        },
+        {
+          begin       :  7                          ,
+          scene       :  all_scenes.red_scene       ,
+        },
+        {
+          begin       :  16                         ,
+          scene       :  all_scenes.equalizer_scene ,
+        },
+        {
+          begin       :  max_time_slots             ,
+          scene       :  all_scenes.red_scene       ,
+        },
+      ];
+
+      function populate_time_slots() {
+        let current_script = script[0];
+        let slot = 0;
+        for (const idx in script) {
+          const next_script = script[idx];
+          while(slot < max_time_slots && slot < next_script.begin) {
+            time_slots[slot] = current_script;
+            ++slot;
+          }
+          current_script = next_script;
+        }
+        while(slot < max_time_slots) {
+            time_slots[slot] = current_script;
+            ++slot;
+        }
+      }
+      populate_time_slots();
+
+      function get_slot(time) {
+        const i = clamp(Math.floor(time/beat), 0, max_time_slots-1);
+        return time_slots[i];
+      }
+
       // Called after initialization of all shaders are complete
       function on_init_complete() {
         const label = document.getElementById("info-label");
@@ -268,8 +326,14 @@
 
       // Called each frame to select which scene to render
       function on_select_scene(gl, time) {
-        if (time > 3.6) {
-          return all_scenes.equalizer_scene;
+        if (time > start) {
+          const gtime = time - start;
+          const slot = get_slot(gtime);
+          if(slot && slot.scene) {
+            return slot.scene;
+          } else {
+            return all_scenes.red_scene;
+          }
         } else {
           return all_scenes.very_big_hit_scene;
         }
@@ -277,6 +341,19 @@
 
       // Called each frame to set the uniforms after the scene is selected
       function on_set_uniforms(gl, time, scene) {
+        if (time > start) {
+          const gtime = time - start;
+          const slot = get_slot(gtime);
+          if(slot && slot.setUniforms) {
+            const ltime = gtime - btime(slot.begin);
+            slot.setUniforms(gl, gtime, ltime, scene);
+          }
+        } else {
+          const fi = smoothstep(0.25, 0.0, time);
+          const fo = smoothstep(2.50, 3.6, time);
+          gl.uniform4f(scene.uniformLocations.foreground, 0.0, 0.0, 0.0, fi+fo);
+        }
+
         gl.activeTexture(gl.TEXTURE2);
         gl.bindTexture(gl.TEXTURE_2D, all_textures.young_reine.texture);
         gl.uniform1i(scene.uniformLocations.young_reine, 2);
