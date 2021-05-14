@@ -229,13 +229,11 @@
         young_reine_chat : {
           image : () => document.getElementById("young-reine-chat"),
         },
+        impulse : {
+          image : () => createTextImage([0.33,0.33,"impulse"], [0.67,0.67,"presents"]),
+        },
       };
 
-      // List all scenes, all scenes have a vertex shader (often shared)
-      //  and a fragment shader
-      //  It's possible to reuse and tweak fragment shaders by using defines
-      //  Can also register extra uniforms
-      //  Default uniforms always includes time and resolution
       const all_scenes = {
         red_scene : {
           vs: "vs-default",
@@ -312,19 +310,16 @@
         music.style.visibility = "visible";
       }
 
-      // Called after user clicked play
       function on_started() {
         const information = document.getElementById("information");
         information.style.display = "none";
       }
 
-      // Called before each shader is compiled
       function on_loading_scene(key) {
         const label = document.getElementById("info-label");
         label.textContent = "Compiling: " + key;
       }
 
-      // Called each frame to select which scene to render
       function on_select_scene(gl, time) {
         if (time > start) {
           const gtime = time - start;
@@ -339,7 +334,6 @@
         }
       }
 
-      // Called each frame to set the uniforms after the scene is selected
       function on_set_uniforms(gl, time, scene) {
         if (time > start) {
           const gtime = time - start;
@@ -382,6 +376,7 @@
         </canvas>
       </div>
     </div>
+    <canvas id="offscreen-canvas" width="512" height="512" style="display: none"></canvas>
     <img id="young-reine" src="young-reine.png" style="display: none"/>
     <img id="young-reine-chat" src="young-reine-chat.png" style="display: none"/>
   </body>
