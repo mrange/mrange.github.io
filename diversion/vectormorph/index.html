@@ -212,14 +212,15 @@
       vec3 rasters(vec3 col, vec2 p, vec2 q) {
         float tm = 2.0*time;
         vec2 c = 0.5*vec2(cos(tm), sin(tm*sqrt(0.5)));
-        float l = length(c);
         float wings = smoothstep(-0.125, 0.125, -cos(time*0.125));
         float funky = smoothstep(0.5, 0.75, -cos(sqrt(0.5)*time*0.125));
+        float offx  = smoothstep(-0.125, 0.125, -cos(time*sqrt(2.0)*0.125));
         p *= mix(1.0, 0.25*cos(10.0*length(p-c)), funky);
         for (int x = 0; x < 9; ++x) {
           vec2 pp = toPolar(p);
-          float a = time + 0.25*float(x);
+          float a = time + 0.25*float(x)+0.4*offx*p.x;
           pp.y += 0.25*wings*(sin(0.5*a)-p.x*0.1*sin(1.*a));
+      //    pp.x /= pabs(pp.x-0.5, 0.5)+0.0;
           vec2 rp = toRect(pp);
 
           float y = 20.0*(rp.y+0.5*cos(a));
@@ -228,7 +229,6 @@
           vec3 rcol = hsv2rgb(hsv);
           col = alphaBlend(col, vec4(rcol, smoothstep(PI/2.0, PI/2.0-0.125, abs(y))));
         }
-
         return col;
       }
 
