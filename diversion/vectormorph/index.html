@@ -158,7 +158,19 @@
         ,__,_W,_E
         ,__,_G,_O
         ,__,_A,_G,_A,_I,_N
-        ,__,__,__
+        ,__,__
+        ,__,_A,_F,_T,_E,_R
+        ,__,_A
+        ,__,_L,_O,_N,_G
+        ,__,_B,_R,_E,_A,_K
+        ,__,_L,_O,_N,_G,_S,_H,_O,_T
+        ,__,_E,_X,_P,_E,_C,_T
+        ,__,_F,_I,_R,_R,_E,_D,_E,_M,_O
+        ,__,_2,_0,_2,_1
+        ,__,_A,_N,_Y
+        ,__,_D,_A,_Y
+        ,__,_N,_O,_W
+        ,__,__
         );
 
       float mod1(inout float p, float size) {
@@ -172,7 +184,7 @@
         const float w = 32.0/256.0;
         const float h = 25.0/256.0;
 
-        float mx = p.x+time*0.25;
+        float mx = -2.0 + p.x+time*0.25;
         float nx = mod1(mx, w);
 
         int c = scroll_text[max(int(nx), 0)%scroll_text.length()];
@@ -180,7 +192,47 @@
         return character(vec2(mx, p.y), c);
       }
 
-      vec3 effect(vec2 p, vec2 q) {
+      float pmin(float a, float b, float k) {
+        float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0 );
+        return mix( b, a, h ) - k*h*(1.0-h);
+      }
+
+      float pabs(float a, float k) {
+        return -pmin(-a, a, k);
+      }
+
+      vec2 toPolar(vec2 p) {
+        return vec2(length(p), atan(p.y, p.x));
+      }
+
+      vec2 toRect(vec2 p) {
+        return p.x*vec2(cos(p.y), sin(p.y));
+      }
+
+      vec3 rasters(vec3 col, vec2 p, vec2 q) {
+        float tm = 2.0*time;
+        vec2 c = 0.5*vec2(cos(tm), sin(tm*sqrt(0.5)));
+        float l = length(c);
+        float wings = smoothstep(-0.125, 0.125, -cos(time*0.125));
+        float funky = smoothstep(0.5, 0.75, -cos(sqrt(0.5)*time*0.125));
+        p *= mix(1.0, 0.25*cos(10.0*length(p-c)), funky);
+        for (int x = 0; x < 9; ++x) {
+          vec2 pp = toPolar(p);
+          float a = time + 0.25*float(x);
+          pp.y += 0.25*wings*(sin(0.5*a)-p.x*0.1*sin(1.*a));
+          vec2 rp = toRect(pp);
+
+          float y = 20.0*(rp.y+0.5*cos(a));
+          float w = cos(clamp(y, -PI/2.0, PI/2.0));
+          vec3 hsv = vec3(float(x)*0.1, sqrt(1.0-w*0.5), w);
+          vec3 rcol = hsv2rgb(hsv);
+          col = alphaBlend(col, vec4(rcol, smoothstep(PI/2.0, PI/2.0-0.125, abs(y))));
+        }
+
+        return col;
+      }
+
+      vec3 scroller(vec3 col, vec2 p, vec2 q) {
         vec2 op = p;
         vec2 sp = p;
         sp.y += 0.5*sin(p.x+time);
@@ -192,20 +244,14 @@
         float a = time+p.y*20.0;
         vec3 rcol = hsv2rgb(vec3(fract(p.y+0.05+0.25*floor((a+PI)/TAU)), 0.5, PCOS(a)));
         ccol.xyz += smoothstep(0.25, 0.0, lum)*rcol;
+        return alphaBlend(col, ccol);
+      }
 
+      vec3 effect(vec2 p, vec2 q) {
         vec3 col = vec3(0.0);
 
-
-        for (int x = 0; x < 9; ++x) {
-          float y = 20.0*(op.y+0.5*cos(time+0.25*float(x)));
-          float w = cos(clamp(y, -PI/2.0, PI/2.0));
-          vec3 hsv = vec3(float(x)*0.1, sqrt(1.0-w*0.5), w);
-          vec3 rcol = hsv2rgb(hsv);
-          col = alphaBlend(col, vec4(rcol, step(abs(y), PI/2.0)));
-
-        }
-
-        col = alphaBlend(col, ccol);
+        col = rasters(col, p, q);
+        col = scroller(col, p, q);
 
         return col;
       }
@@ -215,7 +261,8 @@
         vec2 p = -1.0 + 2.0*q;
         p.x *= resolution.x/resolution.y;
         vec3 col = effect(p, q);
-        float aa = 2.0/resolution.y;
+        float fi = smoothstep(5.0, 0.5, time);
+        col = alphaBlend(col, vec4(vec3(0.0), fi));
         col = postProcess(col, q);
         frag_color = vec4(col, 1.0);
       }
