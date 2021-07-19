@@ -1495,7 +1495,8 @@
       const float ts_turn_e     = BTIME(216.0);
       const float ts_twirl_s    = BTIME(216.0);
       const float ts_twirl_e    = BTIME(228.0);
-      const float ts_part0_e    = BTIME(224.0);
+      const float ts_part1_b    = BTIME(224.0);
+      const float ts_part1_fi   = BTIME(225.0);
       const float ts_end        = BTIME(288.0);
 
 
@@ -1564,7 +1565,6 @@
       vec4  g_state     = vec4(0.0);
       mat2  g_rot       = ROT(0.0);
 
-//      #define PART0
       #if defined(PART0)
       #define CAM_AMP         0.0
       #define DF_ITER         3
@@ -1972,6 +1972,8 @@
       #if defined(PART0)
         col *= smoothstep(ts_start, ts_fadein, TIME);
       //  col += step(ts_part0_e, TIME);
+      #elif defined(PART1)
+        col += smoothstep(ts_part1_fi, ts_part1_b, TIME);
       #endif
         col = postProcess(col, q);
         fragColor = vec4(col,1.0);
