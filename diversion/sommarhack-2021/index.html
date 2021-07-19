@@ -1,0 +1,542 @@
+<!--
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+-->
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>RGB Reine 2021</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <script src="demo-system-v1.js" type="text/javascript"></script>
+    <link href='https://fonts.googleapis.com/css?family=Josefin Slab' rel='stylesheet'>
+    <style>
+        body {
+            font-family: 'Josefin Slab';
+            font-size: 2vw;
+            color: white;
+            background-color: black;
+        }
+        a:link {
+          text-decoration: none;
+          color: #FF8240;
+        }
+        a:visited {
+          text-decoration: none;
+          color: #FF8240;
+        }
+        a:hover {
+          text-decoration: underline;
+          color: #DFF180;
+        }
+        a:active {
+          text-decoration: underline;
+          color: #DFF180;
+        }
+        canvas.gl {
+          position:fixed;
+          z-index:-1;
+          top:0;
+          left: 0;
+          height: 100%;
+          width: 100%;
+          background-color: black;
+        }
+        div.center-flex {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+    </style>
+
+    <script id="vs-default" type="x-shader/x-vertex">
+      precision highp float;
+
+      in vec4 a_position;
+      in vec2 a_texcoord;
+
+      out vec2 v_texcoord;
+
+      void main(void) {
+        gl_Position = a_position;
+
+        v_texcoord = a_texcoord;
+      }
+    </script>
+
+    <script id="fs-red-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+
+      in vec2 v_texcoord  ;
+      out vec4 frag_color ;
+
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+      void main(void) {
+        vec3 col = vec3(1.0, 0.0, 0.0);
+
+        frag_color = vec4(col, 1.0);
+      }
+    </script>
+
+    <script id="fs-red-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+
+      in vec2 v_texcoord  ;
+      out vec4 frag_color ;
+
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+      void main(void) {
+        vec3 col = vec3(1.0, 0.0, 0.0);
+
+        frag_color = vec4(col, 1.0);
+      }
+    </script>
+
+    <script id="fs-rgb-reine" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+      uniform float time;
+      uniform vec2 resolution;
+      uniform sampler2D rgb_reine;
+      uniform sampler2D beat_dis;
+      uniform sampler2D the_return;
+      uniform sampler2D young_reine;
+      in vec2 v_texcoord;
+      out vec4 fragColor;
+
+      // -----------------------------------------------------------------------------
+
+      #define PI              3.141592654
+      #define TAU             (2.0*PI)
+      #define TIME            time
+      #define TTIME           (TAU*time)
+      #define RESOLUTION      resolution
+      #define PCOS(x)         (0.5+0.5*cos(x))
+      #define ROT(a)          mat2(cos(a), sin(a), -sin(a), cos(a))
+      #define DOT2(x)         dot(x, x)
+      #define BPM             120.0
+
+      #define BTIME(n)        ((n)*60.0/BPM)
+
+      float beat(float n) {
+        return smoothstep(BTIME(n+1.0), BTIME(n), TIME)*step(BTIME(n), TIME);
+      }
+
+      const float ts_start        = BTIME(0.0);
+      const float ts_fade_in      = BTIME(4.0);
+      const float ts_returned     = BTIME(24.0);
+      const float ts_btd_flashp   = BTIME(31.0);
+      const float ts_btd_flashb   = BTIME(32.0);
+      const float ts_btd_flashe   = BTIME(36.0);
+      const float ts_btd          = BTIME(42.0);
+      const float ts_end          = BTIME(96.0);
+
+      mat2 g_rot = ROT(0.0);
+
+      float tanh_approx(float x) {
+      //  return tanh(x);
+        float x2 = x*x;
+        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
+      }
+
+      vec3 hsv2rgb(vec3 c) {
+          vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+          vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+          return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+      }
+
+      vec3 rgb2hsv(vec3 c) {
+          vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+          vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+          vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+
+          float d = q.x - min(q.w, q.y);
+          float e = 1.0e-10;
+          return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+      }
+
+      vec4 alphaBlend(vec4 back, vec4 front) {
+        float w = front.w + back.w*(1.0-front.w);
+        vec3 xyz = (front.xyz*front.w + back.xyz*back.w*(1.0-front.w))/w;
+        return w > 0.0 ? vec4(xyz, w) : vec4(0.0);
+      }
+
+      vec3 alphaBlend(vec3 back, vec4 front) {
+        return mix(back, front.xyz, front.w);
+      }
+
+      vec4 img(sampler2D s, vec2 p) {
+        vec2 sz = vec2(textureSize(s, 0));
+        p.y /= sz.y/sz.x;
+        p *= 0.5;
+        p.y = -p.y;
+        p += 0.5;
+        return texture(s, p);
+      }
+
+      vec3 postProcess(vec3 col, vec2 q) {
+        col = clamp(col, 0.0, 1.0);
+        col = pow(col, vec3(1.0/2.2));
+        col = col*0.6+0.4*col*col*(3.0-2.0*col);
+        col = mix(col, vec3(dot(col, vec3(0.33))), -0.4);
+        col *=0.5+0.5*pow(19.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.7);
+        return col;
+      }
+
+      float box(vec2 p, vec2 b) {
+          vec2 d = abs(p)-b;
+          return length(max(d,0.0)) + min(max(d.x,d.y),0.0);
+      }
+
+      vec4 grid(vec2 p, float aa, float z) {
+        const float zz = 0.125;
+        vec2 pp = p;
+        pp /= zz;
+        pp = fract(pp + 0.5) - 0.5;
+        float d = min(abs(pp.x), abs(pp.y));
+        d*=zz;
+        d*=z;
+        d -= aa*0.5;
+        float t = smoothstep(-aa, aa, -d);
+        return vec4(vec3(0.5, 0.75, 0.8), t);
+      }
+
+      vec4 beatdisimg(vec2 p, float aa, float z) {
+        p /= z;
+        vec4 tcol = img(beat_dis, p);
+        const float hw = 0.3;
+        float d = abs(p.y)-hw;
+        float dd = abs(p.y);
+        d *= z;
+        dd *= z;
+        vec3 bhsv = vec3(0.3+0.2*smoothstep(0.0, 0.75*hw, dd), smoothstep(0.0, 0.75*hw, dd), 1.0);
+        vec3 bcol = hsv2rgb(bhsv);
+        vec4 dcol = vec4(bcol, smoothstep(1.5*hw, 0.0, dd));
+        float fi = smoothstep(ts_btd_flashb, ts_btd_flashp,TIME);
+        float fo = smoothstep(ts_btd_flashb, ts_btd_flashe, TIME);
+        fi *= fi;
+        fo *= fo;
+        float b = PCOS(TAU*TIME*BPM/60.0);
+        b *= b;
+        b *= b;
+        float g = exp(-mix(0.0, mix(10.0, 5.0, b), fi+fo)*max(dd-0., 0.0));
+        vec4 gcol = vec4(vec3(1.0), g);
+
+        vec4 col = dcol;
+        col = alphaBlend(col, tcol);
+        col.w *= step(ts_btd_flashb, TIME);
+        col = alphaBlend(col, gcol)*(1.0-fi);
+        return col;
+      }
+
+      vec3 effect0(vec2 p) {
+        float aa = 2.0/RESOLUTION.y;
+        vec3 col = vec3(0.3);
+
+        vec2 bp = p;
+        bp -= 0.6*vec2(1.0, -1.0)*RESOLUTION.xy/RESOLUTION.y;
+        bp *= ROT(atan(RESOLUTION.y, RESOLUTION.x));
+        vec2 rp = p;
+        float f = mix(0.0, 1.0, smoothstep(ts_fade_in, ts_returned, TIME));
+        float z = 1.0/(mix(3.0, 1.0, f)-0.6*length(p+vec2(sin(TIME), sin(TIME*sqrt(2.0)))));
+        rp /= z;
+
+        vec4 bkg = img(rgb_reine, p);
+        vec4 ret = img(the_return, rp);
+        vec4 btd = beatdisimg(bp, aa, 0.7);
+        vec4 grd = grid(rp, aa, z);
+
+        ret.w *= f;
+        grd.w *= f;
+        col = alphaBlend(col, bkg);
+        col = alphaBlend(col, ret);
+        col = alphaBlend(col, grd);
+        col = alphaBlend(col, btd);
+        col += smoothstep(ts_fade_in, 0.0, TIME);
+        return col;
+      }
+
+      vec4 image(vec2 p) {
+        p *= 2.0;
+        float xscale = 1.0 - smoothstep(1.0, 15.0, abs(p.x));
+        float yscale = 1.0 - smoothstep(1.0, 5.0, p.y);
+        float scale = xscale*yscale;
+        if (scale < 0.1 || p.y < 0.0) return vec4(0.0);
+        float npx = fract(0.5*p.x);
+        p.x = fract(p.x);
+        p.x = mix(p.x, 1.0-p.x, npx > 0.5);
+        const vec2 roff = vec2(0.5, 0.9);
+        p -= roff;
+        if ((p.y+-abs(0.5*p.x)) < -0.1) p *= g_rot;
+        p += roff;
+
+        vec4 col = texture(young_reine, p);
+        return vec4(col.xyz, col.w*scale);
+      }
+
+      vec3 effect1(vec2 p) {
+        float fo = 0.0;
+        fo += 1.0*beat(64.0);
+        fo += step(ts_end, TIME);
+        float tm = 1.6*(TIME-ts_btd)+44.;
+
+        const float flip = 0.75;
+        g_rot = ROT(-0.1+0.5*smoothstep(-flip, flip, sin(0.5*BPM/60.0*TAU*(TIME-ts_btd_flashb))));
+
+        p *= 1.0 - 0.25*length(p);
+
+        vec2 op = p;
+
+        float za = 0.3*sqrt(2.0)*tm;
+        float zp = PCOS(za);
+        float zp2 = sin(0.5*PI+0.5*za);
+        const float zm = 0.75;
+        p = vec2(mix(-0.5, 0.5, smoothstep(-zm, zm, zp2)), mix(0.1, -0.05, smoothstep(-zm, zm, zp2))) + p*1.1*pow(0.925, 20.0*zp);
+
+        float e = mix(1.1, 1.75, PCOS(op.x*p.y*20.0+3.0*tm)*PCOS(p.y*op.x*20.0+3.0*tm*sqrt(0.5)));
+        vec3 ss = mix(vec3(0.2, 0.2, 0.5), vec3(0.2,-0.2,1.0), 2.2 + 1.25*sin(tm/2.12345));
+        vec2 c  = vec2(-0.76, 0.20)+vec2(0.025, 0.1)*vec2(sin(tm*sqrt(2.0)*0.123), sin(tm*0.123));
+        c *= ROT(0.2*sin(tm*sqrt(3.0)/12.0));
+
+        vec2 z = p;
+
+        vec4 acc = vec4(0.0);
+        float minTrap = 1E6;
+
+        float f = 4.;
+
+        const float maxIter = 90.0;
+        for(float i=0.0; i < maxIter; ++i) {
+          float re2 = z.x*z.x;
+          float im2 = z.y*z.y;
+          if((re2 + im2>4.0) || (acc.w > 0.9)) {
+      //      acc.x += 1.0;
+            break;
+          }
+          float reim = z.x*z.y;
+          z = vec2(re2 - im2, 2.0*reim) + c;
+          minTrap = min(minTrap, DOT2(z - c));
+          f = min(f, abs(dot((z-e*p), z-p) -.004*float(i)));
+          float shade = (1.0-i/maxIter);
+          vec4 image = image(ss.xy + ss.z*z);
+          image.w *= shade;
+          acc = alphaBlend(image, acc);
+        }
+
+        f = 1.0+log(f)/15.0;
+
+        vec3 hsv = rgb2hsv(acc.xyz);
+        hsv.x += e*20.0*minTrap+tm*0.5;
+      //  hsv.y += 0.5;
+        hsv.x = fract(hsv.x);
+        hsv.y = clamp(hsv.y, 0.0, 1.0);
+        acc.xyz = hsv2rgb(hsv);
+
+        vec3 bg = 0.35*(vec3(97.0,104.0,246.0)/255.0);
+        bg += 1.0*(1.-abs(1.4*tanh(vec3(f,f*f,f*f*f))));
+        bg += 2.0*vec3(0.3, 0.25, 0.4)*max(0.5 - pow(minTrap,0.125), 0.0);
+        vec3 col = bg;
+
+        col = alphaBlend(col, acc);
+
+        return mix(col, vec3(1.0), fo);
+      }
+
+      void main(void) {
+        vec2 q = v_texcoord;
+        vec2 p = -1. + 2. * q;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+
+        const float ts_switch = 15.0;
+        float y = smoothstep(ts_btd, ts_btd+1.0, TIME);
+        y *= y;
+        y *= y;
+        float sh = mix(1.0-exp(-10.0*max(y-q.y, 0.0)), 1.0, smoothstep(0.95, 1.0, y));
+        vec3 col = y > q.y ? sh*effect1(p): effect0(p-vec2(0, 2.0*y));
+        col = postProcess(col, q);
+        fragColor = vec4(col, 1.0);
+      }
+    </script>
+
+    <script type = "text/javascript">
+      const analyze_audio   = false;
+      const demo_system     = new DemoSystemV1(analyze_audio);
+
+      const global_uniforms = [];
+
+      const all_textures = {
+        beat_dis : {
+          image : () => document.getElementById("beat-dis"),
+        },
+        rgb_reine : {
+          image : () => document.getElementById("rgb-reine"),
+        },
+        the_return : {
+          image : () => document.getElementById("the-return"),
+        },
+        young_reine : {
+          image : () => document.getElementById("young-reine"),
+        },
+      };
+
+      const all_scenes = {
+        red_scene : {
+          vs: "vs-default"  ,
+          fs: "fs-red-scene"
+        },
+        rgb_reine_scene : {
+          vs: "vs-default"  ,
+          fs: "fs-rgb-reine",
+          uniforms: ["beat_dis", "rgb_reine", "the_return", "young_reine"]
+        },
+      };
+
+      const bpm   = 120.0;
+      const beat  = 60.0/bpm;
+      const start = 0.0*beat;
+      function btime(b) {
+        return (b*beat-start);
+      }
+
+      const max_time_slots  = 200;
+      const time_slots      = new Array(max_time_slots);
+
+      const script = [
+        {
+          begin       :  0                          ,
+          scene       :  all_scenes.rgb_reine_scene ,
+        },
+      ];
+
+      function populate_time_slots() {
+        let current_script = script[0];
+        let slot = 0;
+        for (const idx in script) {
+          const next_script = script[idx];
+          while(slot < max_time_slots && slot < next_script.begin) {
+            time_slots[slot] = current_script;
+            ++slot;
+          }
+          current_script = next_script;
+        }
+        while(slot < max_time_slots) {
+            time_slots[slot] = current_script;
+            ++slot;
+        }
+      }
+      populate_time_slots();
+
+      function get_slot(time) {
+        const i = clamp(Math.floor(time/beat), 0, max_time_slots-1);
+        return time_slots[i];
+      }
+
+      // Called after initialization of all shaders are complete
+      function on_init_complete() {
+        const label = document.getElementById("info-label");
+        label.textContent = "Ready, click play to run";
+
+        const music = document.getElementById("music");
+        music.style.visibility = "visible";
+      }
+
+      function on_started() {
+        const information = document.getElementById("information");
+        information.style.display = "none";
+      }
+
+      function on_loading_scene(key) {
+        const label = document.getElementById("info-label");
+        label.textContent = "Compiling: " + key;
+      }
+
+      function on_select_scene(gl, time) {
+        if (time > start) {
+          const gtime = time - start;
+          const slot = get_slot(gtime);
+          if(slot && slot.scene) {
+            return slot.scene;
+          } else {
+            return all_scenes.red_scene;
+          }
+        } else {
+          return all_scenes.very_big_hit_scene;
+        }
+      }
+
+      function on_set_uniforms(gl, time, scene) {
+        // Texture 0 and 1 used
+        gl.activeTexture(gl.TEXTURE2);
+        gl.bindTexture(gl.TEXTURE_2D, all_textures.beat_dis.texture);
+        gl.uniform1i(scene.uniformLocations.beat_dis, 2);
+
+        gl.activeTexture(gl.TEXTURE3);
+        gl.bindTexture(gl.TEXTURE_2D, all_textures.rgb_reine.texture);
+        gl.uniform1i(scene.uniformLocations.rgb_reine, 3);
+
+        gl.activeTexture(gl.TEXTURE4);
+        gl.bindTexture(gl.TEXTURE_2D, all_textures.the_return.texture);
+        gl.uniform1i(scene.uniformLocations.the_return, 4);
+
+        gl.activeTexture(gl.TEXTURE5);
+        gl.bindTexture(gl.TEXTURE_2D, all_textures.young_reine.texture);
+        gl.uniform1i(scene.uniformLocations.young_reine, 5);
+      }
+
+    </script>
+  </head>
+
+  <body onload="demo_system.run_demo()">
+    <audio id="music" style="visibility: hidden;" controls src="neon-workout--sommerhack-2020.mp3"></audio>
+    <div id="information" style="margin-left: 16pt;">
+      <h1>Sommarhack 2021</h1>
+
+      <p>Inspired by the Sommarhack 2021 party I wanted to create a demo.</p>
+
+      <p id="info-label">Please wait... </p>
+    </div>
+    <div class="center-flex">
+      <div>
+        <canvas id="glcanvas" class="gl">
+          Your browser doesn't appear to support the HTML5 <code>&lt;canvas&gt;</code> element.
+        </canvas>
+      </div>
+    </div>
+    <canvas id="offscreen-canvas" width="512" height="512" style="display: none"></canvas>
+    <img id="beat-dis"    src="beat-dis.png"    style="display: none"/>
+    <img id="rgb-reine"   src="rgb-reine.png"   style="display: none"/>
+    <img id="the-return"  src="the-return.png"  style="display: none"/>
+    <img id="young-reine" src="young-reine.png" style="display: none"/>
+    <imy>
+</html>
