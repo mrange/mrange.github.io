@@ -395,12 +395,19 @@
 
       const global_uniforms = [];
 
+      function override_nearest(image) {
+        return [image, (gl) => {
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_NEAREST);
+        }];
+      }
+
       const all_textures = {
         beat_dis : {
           image : () => document.getElementById("beat-dis"),
         },
         rgb_reine : {
-          image : () => document.getElementById("rgb-reine"),
+          image : () => override_nearest(document.getElementById("rgb-reine")),
         },
         the_return : {
           image : () => document.getElementById("the-return"),

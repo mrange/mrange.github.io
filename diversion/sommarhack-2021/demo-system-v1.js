@@ -79,7 +79,7 @@ class DemoSystemV1 {
     return texture;
   }
 
-  create_texture_from_image(image) {
+  create_texture_from_image(image, override) {
     const texture = this.gl.createTexture();
     this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
     this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
@@ -88,6 +88,9 @@ class DemoSystemV1 {
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR_MIPMAP_NEAREST);
+    if (override) {
+      override(this.gl);
+    }
     this.gl.generateMipmap(this.gl.TEXTURE_2D);
     return texture;
   }
@@ -307,9 +310,19 @@ class DemoSystemV1 {
       const texture = all_textures[key];
       if(!texture) continue;
       if(!texture.image) continue;
-      const image = texture.image();
-      if(!image) continue;
-      texture.texture = this.create_texture_from_image(image);
+      const result = texture.image();
+      if(!result) continue;
+
+      let image     = undefined;
+      let override  = undefined;
+      if (Array.isArray(result)) {
+        image     = result[0];
+        override  = result[1];
+      } else {
+        image = result;
+      }
+
+      texture.texture = this.create_texture_from_image(image, override);
     }
   }
 
