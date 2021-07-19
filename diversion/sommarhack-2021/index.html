@@ -418,7 +418,25 @@
         rgb_reine_scene : {
           vs: "vs-default"  ,
           fs: "fs-rgb-reine",
-          uniforms: ["beat_dis", "rgb_reine", "the_return", "young_reine"]
+          uniforms: ["beat_dis", "rgb_reine", "the_return", "young_reine"],
+          set_uniforms: (gl, time, scene) => {
+            // Texture 0 and 1 used for other things
+            gl.activeTexture(gl.TEXTURE2);
+            gl.bindTexture(gl.TEXTURE_2D, all_textures.beat_dis.texture);
+            gl.uniform1i(scene.uniformLocations.beat_dis, 2);
+
+            gl.activeTexture(gl.TEXTURE3);
+            gl.bindTexture(gl.TEXTURE_2D, all_textures.rgb_reine.texture);
+            gl.uniform1i(scene.uniformLocations.rgb_reine, 3);
+
+            gl.activeTexture(gl.TEXTURE4);
+            gl.bindTexture(gl.TEXTURE_2D, all_textures.the_return.texture);
+            gl.uniform1i(scene.uniformLocations.the_return, 4);
+
+            gl.activeTexture(gl.TEXTURE5);
+            gl.bindTexture(gl.TEXTURE_2D, all_textures.young_reine.texture);
+            gl.uniform1i(scene.uniformLocations.young_reine, 5);
+          }
         },
       };
 
@@ -491,27 +509,14 @@
             return all_scenes.red_scene;
           }
         } else {
-          return all_scenes.very_big_hit_scene;
+          return all_scenes.red_scene;
         }
       }
 
       function on_set_uniforms(gl, time, scene) {
-        // Texture 0 and 1 used
-        gl.activeTexture(gl.TEXTURE2);
-        gl.bindTexture(gl.TEXTURE_2D, all_textures.beat_dis.texture);
-        gl.uniform1i(scene.uniformLocations.beat_dis, 2);
-
-        gl.activeTexture(gl.TEXTURE3);
-        gl.bindTexture(gl.TEXTURE_2D, all_textures.rgb_reine.texture);
-        gl.uniform1i(scene.uniformLocations.rgb_reine, 3);
-
-        gl.activeTexture(gl.TEXTURE4);
-        gl.bindTexture(gl.TEXTURE_2D, all_textures.the_return.texture);
-        gl.uniform1i(scene.uniformLocations.the_return, 4);
-
-        gl.activeTexture(gl.TEXTURE5);
-        gl.bindTexture(gl.TEXTURE_2D, all_textures.young_reine.texture);
-        gl.uniform1i(scene.uniformLocations.young_reine, 5);
+        if (scene.set_uniforms) {
+          scene.set_uniforms(gl, time, scene);
+        }
       }
 
     </script>
