@@ -1464,6 +1464,522 @@
       }
     </script>
 
+    <script id="fs-credits" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+      uniform float time;
+      uniform vec2 resolution;
+      uniform sampler2D retro_font;
+      in vec2 v_texcoord;
+      out vec4 fragColor;
+
+      #define TOLERANCE       0.0001
+      #define NORMTOL         0.00125
+      #define MAX_RAY_LENGTH  20.0
+      #define MAX_RAY_MARCHES 90
+      #define TIME            time
+      #define RESOLUTION      resolution
+      #define ROT(a)          mat2(cos(a), sin(a), -sin(a), cos(a))
+      #define PI              3.141592654
+      #define TAU             (2.0*PI)
+      #define PCOS(x)         (0.5+0.5*cos(x))
+
+      #define BPM             120.0
+
+      #define BTIME(n)        ((n)*60.0/BPM)
+      const float ts_start      = BTIME(160.0);
+      const float ts_fadein     = BTIME(162.0);
+      const float ts_turn_s     = BTIME(212.0);
+      const float ts_turn_e     = BTIME(216.0);
+      const float ts_twirl_s    = BTIME(216.0);
+      const float ts_twirl_e    = BTIME(228.0);
+      const float ts_part0_e    = BTIME(224.0);
+      const float ts_end        = BTIME(288.0);
+
+
+      const vec4 hsv2rgb_K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+      vec3 hsv2rgb(vec3 c) {
+        vec3 p = abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www);
+        return c.z * mix(hsv2rgb_K.xxx, clamp(p - hsv2rgb_K.xxx, 0.0, 1.0), c.y);
+      }
+      #define HSV2RGB(c)  (c.z * mix(hsv2rgb_K.xxx, clamp(abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www) - hsv2rgb_K.xxx, 0.0, 1.0), c.y))
+
+      #define __     32
+      #define _EXCL  33
+      #define _HYPH  39
+      #define _PLUS  43
+      #define _COMMA 44
+      #define _DASH  45
+
+      #define _0 48
+      #define _1 49
+      #define _2 50
+      #define _3 51
+      #define _4 52
+      #define _5 53
+      #define _6 54
+      #define _7 55
+      #define _8 56
+      #define _9 57
+      #define _A 65
+      #define _B 66
+      #define _C 67
+      #define _D 68
+      #define _E 69
+      #define _F 70
+      #define _G 71
+      #define _H 72
+      #define _I 73
+      #define _J 74
+      #define _K 75
+      #define _L 76
+      #define _M 77
+      #define _N 78
+      #define _O 79
+      #define _P 80
+      #define _Q 81
+      #define _R 82
+      #define _S 83
+      #define _T 84
+      #define _U 85
+      #define _V 86
+      #define _W 87
+      #define _X 88
+      #define _Y 89
+      #define _Z 90
+
+      const int[] scroll_text = int[](
+         __
+        ,__,__,__,_C,_O,_D,_E,__,_DASH,__,_L,_A,_N,_C,_E,__,_DASH,__
+        ,__,__,__,_M,_U,_S,_I,_C,__,_DASH,__,_N,_E,_O,_N,__,_W,_O,_R,_K,_O,_U,_T,__,_DASH,__
+        ,__,__,__,_I,_N,_S,_P,_I,_R,_A,_T,_I,_O,_N,__,_DASH,__,_S,_O,_M,_M,_A,_R,_H,_A,_C,_K,__,_2,_0,_2,_1
+        ,__,__,__,_G,_R,_E,_E,_T,_I,_N,_G,_S,__,_T,_O,__,_A,_T,_A,_R,_I,__,_D,_E,_M,_O,__,_S,_C,_E,_N,_E,__,_A,_N,_D,__,_S,_H,_A,_D,_E,_R,_T,_O,_Y,__,_R,_E,_G,_U,_L,_A,_R,_S
+        ,__,__,__,_L,_E,_T,_HYPH,_S,__,_S,_P,_I,_C,_E,__,_I,_T,__,_U,_P,_EXCL,_EXCL,_EXCL
+
+        );
+
+
+      vec4  g_state     = vec4(0.0);
+      mat2  g_rot       = ROT(0.0);
+
+//      #define PART0
+      #if defined(PART0)
+      #define CAM_AMP         0.0
+      #define DF_ITER         3
+      #define ROT_DIST        (SPEED*mix(ts_end-ts_start, 0.0, smoothstep(ts_twirl_s, ts_twirl_e, TIME)))
+      #define ROT_START       ts_end
+      #define TURN_FADE       smoothstep(ts_turn_s, ts_turn_e, TIME)
+      #define SPEED           0.5
+      #define LIGHTPOS0_OFF   (-mix(1.25, 0.5, TURN_FADE)/SPEED)
+      #define LIGHTPOS1_OFF   (mix(1.35, 6.5, TURN_FADE)/SPEED)
+      #define HASH_MUL        0.0
+      #define ROT_ANGLE(z)    rotAngle(z)
+
+      float rotAngle(float z) {
+        float zz = max(z-ROT_DIST, 0.0);
+        float a = 0.5*zz*smoothstep(0.0, 5.0, zz);
+        return a;
+      }
+
+      float scroll_offset() {
+        float off =-2.0+ 0.5*SPEED*(TIME-ts_start);
+        return off;
+      }
+
+      vec3 cam_path(float z) {
+        return vec3(0.3, 0.0, z);
+      }
+
+      vec3 dcam_path(float z) {
+        vec3 dir = vec3(0.0, 0.0, 1.0);
+        dir.xz *= ROT(mix(-PI/2.0, 0.0, TURN_FADE));
+        return dir;
+      }
+
+      vec3 ddcam_path(float z) {
+        return vec3(0.0, 0.0, 0.05*sin(0.5*TIME))*(1.0-TURN_FADE);
+      }
+      #elif defined(PART1)
+
+      #define ROT_DIST        0.0
+      #define DF_ITER         3
+      #define COMPUTE_DF_ITER 3
+      #define HASH_MUL        100.0
+      #define LIGHTPOS0_OFF   (-0.5)
+      #define LIGHTPOS1_OFF   6.5
+      #define ROT_START       0.0
+      #define SPEED           1.0
+      #define ROT_ANGLE(z)    (0.5*z)
+
+
+      #define PATHA vec2(0.1147, 0.2093)
+      #define PATHB vec2(13.0, 3.0)
+
+      vec3 cam_path(float z) {
+        return vec3(sin(z*PATHA)*PATHB, z);
+      }
+
+      vec3 dcam_path(float z) {
+        return vec3(PATHA*PATHB*cos(PATHA*z), 1.0);
+      }
+
+      vec3 ddcam_path(float z) {
+        return vec3(-PATHA*PATHA*PATHB*sin(PATHA*z), 0.0);
+      }
+
+      float scroll_offset() {
+        return 0.5*TIME;
+      }
+
+      #else
+
+      // PART0 or PART1
+
+      #endif
+
+      vec3 alphaBlend(vec3 back, vec4 front) {
+        return mix(back, front.xyz, front.w);
+      }
+
+      float tanh_approx(float x) {
+      //  return tanh(x);
+        float x2 = x*x;
+        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
+      }
+
+      float pmin(float a, float b, float k) {
+        float h = clamp(0.5+0.5*(b-a)/k, 0.0, 1.0);
+
+        return mix(b, a, h) - k*h*(1.0-h);
+      }
+
+      vec3 pmin(vec3 a, vec3 b, vec3 k) {
+        vec3 h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0);
+        return mix(b, a, h) - k*h*(1.0-h);
+      }
+
+      vec2 toPolar(vec2 p) {
+        return vec2(length(p), atan(p.y, p.x));
+      }
+
+      vec2 toRect(vec2 p) {
+        return p.x*vec2(cos(p.y), sin(p.y));
+      }
+
+      vec2 mod2(inout vec2 p, vec2 size) {
+        vec2 c = floor((p + size*0.5)/size);
+        p = mod(p + size*0.5,size) - size*0.5;
+        return c;
+      }
+
+      float smod(float x, float y) {
+        return mod(x + 0.5*y, y) - 0.5*y;
+      }
+
+      float mod1(inout float p, float size) {
+        float halfsize = size*0.5;
+        float c = floor((p + halfsize)/size);
+        p = mod(p + halfsize, size) - halfsize;
+        return c;
+      }
+
+      vec4 image(sampler2D s, vec2 p) {
+        p *= 0.5;
+        p += 0.5;
+        p.y = 1.0-p.y;
+        return texture(s, p);
+      }
+
+      vec4 character(vec2 p, int ch, out float fill) {
+        const float w = 32.0/256.0;
+        const float h = 25.0/256.0;
+        float d = abs(p.y)-00.0025;
+        ch = clamp(ch-32, 0, 70);
+        int x = ch & 0x7;
+        int y = ch >> 3;
+        p -= 0.5*vec2(-w, h);
+        vec2 op = p;
+        p.y = -p.y;
+        p.y += float(y)*h;
+        p.x += float(x)*w;
+        vec4 tcol =  texture(retro_font, p);
+        tcol.w *= step(0.0,op.x)*step(op.y, 0.0)*step(op.x, w)*step(-h, op.y);
+        float l = max(max(tcol.x, tcol.y), tcol.z);
+        const float lt = 0.2;
+        const float rp = 8.0;
+        fill = max(1.0-l/lt, 0.0)*tcol.w;
+        return tcol;
+      }
+
+      vec4 scroll(vec2 p, out float fill) {
+        const float w = 32.0/256.0;
+        const float h = 25.0/256.0;
+
+        float mx = p.x;
+        float nx = mod1(mx, w);
+
+        int c = scroll_text[max(int(nx), 0)%scroll_text.length()];
+
+        return character(vec2(mx, p.y), c, fill);
+      }
+
+      vec4 textureColor(vec4 state, out vec2 lp, out float fill) {
+        vec2 pp = toPolar(state.xy);
+        float t = state.z;
+        float cylr = state.w;
+
+        pp.y /= TAU*2.0;
+        lp = vec2(t, pp.y);
+
+        // This is random
+        const float cnt= 3.0;
+        const float zz = 1.0;
+        const float sc = 2.0/cnt;
+        float ss = cnt*cylr;
+        float m  = cylr*zz*0.5/ss;
+        float to = scroll_offset();
+        float ff = 0.1/cylr;
+        float y = pp.y+t*ss*sc;
+        vec2 spos = zz*vec2(t+to, y);
+        spos.y = smod(spos.y, m);
+        vec4 ccol = scroll(spos, fill);
+        return ccol;
+      }
+
+      float hash(float co) {
+        return fract(sin(co*12.9898) * 13758.5453);
+      }
+
+      float df(vec3 p3, out vec4 state) {
+        float cylr = 0.2;
+        vec2 p = p3.xy;
+        float t = p3.z;
+
+        p *= g_rot;
+
+        const float ss = 1.5;
+        float zz = max(p3.z-ROT_DIST, 0.0);
+        float a = ROT_ANGLE(p3.z);
+        mat2 pp = ss*ROT(a);
+
+        float s = 1.0;
+        float d = 1E6;
+        float tt = 0.0;
+
+        for (int i = 0; i < DF_ITER; ++i) {
+          tt += float(i);
+          p *= pp;
+          vec2 sp = sign(p);
+          p = abs(p);
+          tt += dot(vec2(0.25, 0.5), sp)*s;
+          p -= 1.35*s;
+          s *= 1.0/ss;
+
+          float dd = (length(p-vec2(0.0))-cylr)*s;
+          if (dd < d) {
+            d = dd;
+            float hh = hash(tt);
+            state = vec4(p, t+HASH_MUL*hh, cylr);
+          }
+
+        }
+
+        return d;
+      }
+
+      float df(vec3 p) {
+      #if defined(PART1)
+        vec3 cam = cam_path(p.z);
+        vec3 dcam = normalize(dcam_path(p.z));
+        p.xy -= cam.xy;
+        p -= dcam*dot(vec3(p.xy, 0), dcam)*0.5*vec3(1,1,-1);
+      #endif
+        vec4 state;
+        float d = df(p, state);
+
+        g_state = state;
+
+        return d;
+      }
+
+      float rayMarch(in vec3 ro, in vec3 rd, out int iter) {
+        float t = 0.0;
+        int i = 0;
+        for (i = 0; i < MAX_RAY_MARCHES; i++) {
+          float d = df(ro + rd*t);
+          if (d < TOLERANCE || t > MAX_RAY_LENGTH) break;
+          t += d;
+        }
+        iter = i;
+        return t;
+      }
+
+      vec3 normal(in vec3 pos) {
+        vec3  eps = vec3(NORMTOL,0.0,0.0);
+        vec3 nor;
+        nor.x = df(pos+eps.xyy) - df(pos-eps.xyy);
+        nor.y = df(pos+eps.yxy) - df(pos-eps.yxy);
+        nor.z = df(pos+eps.yyx) - df(pos-eps.yyx);
+        return normalize(nor);
+      }
+
+      float softShadow(in vec3 pos, in vec3 ld, in float ll, float mint, float k) {
+        const float minShadow = 0.25;
+        float res = 1.0;
+        float t = mint;
+        for (int i=0; i<25; ++i) {
+          float distance = df(pos + ld*t);
+          res = min(res, k*distance/t);
+          if (ll <= t) break;
+          if(res <= minShadow) break;
+          t += max(mint*0.2, distance);
+        }
+        return clamp(res,minShadow,1.0);
+      }
+
+      vec3 postProcess(in vec3 col, in vec2 q)  {
+        col=pow(clamp(col,0.0,1.0),vec3(1.0/2.2));
+        col=col*0.6+0.4*col*col*(3.0-2.0*col);  // contrast
+        col=mix(col, vec3(dot(col, vec3(0.33))), -0.4);  // satuation
+        col*=0.5+0.5*pow(19.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.7);  // vigneting
+        return col;
+      }
+
+      float sphered(vec3 ro, vec3 rd, vec4 sph, float dbuffer) {
+          float ndbuffer = dbuffer/sph.w;
+          vec3  rc = (ro - sph.xyz)/sph.w;
+
+          float b = dot(rd,rc);
+          float c = dot(rc,rc) - 1.0;
+          float h = b*b - c;
+          if( h<0.0 ) return 0.0;
+          h = sqrt( h );
+          float t1 = -b - h;
+          float t2 = -b + h;
+
+          if( t2<0.0 || t1>ndbuffer ) return 0.0;
+          t1 = max( t1, 0.0 );
+          t2 = min( t2, ndbuffer );
+
+          float i1 = -(c*t1 + b*t1*t1 + t1*t1*t1/3.0);
+          float i2 = -(c*t2 + b*t2*t2 + t2*t2*t2/3.0);
+          return (i2-i1)*(3.0/4.0);
+      }
+
+      vec3 render(vec3 ro, vec3 rd) {
+        vec3 lightPos0  = cam_path(ro.z+LIGHTPOS0_OFF);
+        vec3 lightPos1  = cam_path(ro.z+LIGHTPOS1_OFF);
+
+        vec3 skyCol = vec3(0.0);
+
+        int iter = 0;
+        float t = rayMarch(ro, rd, iter);
+        vec4 state = g_state;
+
+        float tt = float(iter)/float(MAX_RAY_MARCHES);
+        float bs = 1.0-tt*tt*tt*tt;
+
+
+        vec3 pos = ro + t*rd;
+
+        float lsd1  = sphered(ro, rd, vec4(lightPos1, 2.5), t);
+        float beat  = smoothstep(0.25, 1.0, cos(TAU*TIME*BPM/60.0));
+        vec3 bcol   = mix(1.5*vec3(2.25, 0.75, 0.5), 3.5*vec3(2.0, 1.0, 0.75), beat);
+        vec3 gcol   = lsd1*bcol;
+
+        if (t >= MAX_RAY_LENGTH) {
+          return skyCol+gcol;
+        }
+
+        vec3 nor    = normal(pos);
+
+        float fill  = 0.0;
+        vec2  lp2   = vec2(0.0);
+        vec4 tcol   = textureColor(state, lp2, fill);
+
+        lp2.y       += 0.4*lp2.x;
+        vec2 lpp    = lp2;
+        vec2 npp    = mod2(lpp, 2.0*vec2(0.05, 0.05));
+        float dg    = min(abs(lpp.x), abs(lpp.y));
+        const vec3 lcol = vec3(1.0, 0.8, 0.5).zyx;
+        vec3 color  = 0.025*lcol;
+        color       += lcol*exp(-600.0*(dg-0.0005));
+        color       = alphaBlend(color, tcol);
+        const float per = 20.0;
+        float h     = 0.5*floor(per*lp2.y);
+        float lpa   = PCOS(PI+TAU*fract(per*lp2.y));
+        float v     = lpa;
+        vec3 hsv    = vec3(fract(0.075+h), 0.66, 1.0*v);
+        color       += hsv2rgb(hsv)*fill;
+
+        vec3 lv0    = lightPos0 - pos;
+        float ll20  = dot(lv0, lv0);
+        float ll0   = sqrt(ll20);
+        vec3 ld0    = lv0 / ll0;
+        float dm0   = 8.0/ll20;
+        float sha0  = softShadow(pos, ld0, ll0, 0.125, 32.0);
+        float dif0  = max(dot(nor,ld0),0.0)*dm0;
+
+        vec3 lv1    = lightPos1 - pos;
+        float ll21  = dot(lv1, lv1);
+        float ll1   = sqrt(ll21);
+        vec3 ld1    = lv1 / ll1;
+        float spe1  = pow(max(dot(reflect(ld1, nor), rd), 0.), 100.)*3.0/ll21;
+
+        vec3 col = vec3(0.0);
+        col += color*dif0*sha0;
+        col += spe1*bcol*bs;
+        col += gcol;
+
+        return col;
+      }
+
+      void computeGlobals() {
+        float lt  = max(TIME - ROT_START, 0.0);
+        g_rot     = ROT(-PI/4.0-0.2*lt*smoothstep(0.0, 6.0, lt));
+      }
+
+      vec3 effect3d(vec2 p) {
+        computeGlobals ();
+
+        float tm = (TIME-ts_start)*SPEED;
+
+        vec3 cam  = cam_path(tm);
+        vec3 dcam = dcam_path(tm);
+        vec3 ddcam= ddcam_path(tm);
+
+        vec3 ro = cam;
+        vec3 ww = normalize(dcam);
+        vec3 uu = normalize(cross(vec3(0.0,1.0,0.0)+ddcam*2.0, ww));
+        vec3 vv = normalize(cross(ww,uu));
+      //  float rdd = (2.0+0.5*tanh_approx(length(p)));
+        float rdd = 2.5;
+        vec3 rd = normalize(p.x*uu + p.y*vv + rdd*ww);
+
+        vec3 col = vec3(0.0);
+        col = render(ro, rd);
+        return col;
+      }
+
+      void main() {
+        vec2 q = v_texcoord;
+        vec2 p = -1.0 + 2.0*q;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+        vec3 col = vec3(0.0);
+        col = effect3d(p);
+      #if defined(PART0)
+        col *= smoothstep(ts_start, ts_fadein, TIME);
+      //  col += step(ts_part0_e, TIME);
+      #endif
+        col = postProcess(col, q);
+        fragColor = vec4(col,1.0);
+      }
+    </script>
+
+
+
     <script type = "text/javascript">
       const analyze_audio   = false;
       const demo_system     = new DemoSystemV1(analyze_audio);
@@ -1483,6 +1999,9 @@
         },
         rgb_reine : {
           image : () => override_nearest(document.getElementById("rgb-reine")),
+        },
+        retro_font : {
+          image : () => override_nearest(document.getElementById("retro-font")),
         },
         the_return : {
           image : () => document.getElementById("the-return"),
@@ -1540,6 +2059,30 @@
           fs: "fs-bouncing-ball",
           defines: ["PART3"]
         },
+        credits_scene_0 : {
+          vs: "vs-default"        ,
+          fs: "fs-credits"        ,
+          uniforms: ["retro_font"],
+          defines: ["PART0"]      ,
+          set_uniforms: (gl, time, scene) => {
+            // Texture 0 and 1 used for other things
+            gl.activeTexture(gl.TEXTURE2);
+            gl.bindTexture(gl.TEXTURE_2D, all_textures.retro_font.texture);
+            gl.uniform1i(scene.uniformLocations.retro_font, 2);
+          }
+        },
+        credits_scene_1 : {
+          vs: "vs-default"        ,
+          fs: "fs-credits"        ,
+          uniforms: ["retro_font"],
+          defines: ["PART1"]      ,
+          set_uniforms: (gl, time, scene) => {
+            // Texture 0 and 1 used for other things
+            gl.activeTexture(gl.TEXTURE2);
+            gl.bindTexture(gl.TEXTURE_2D, all_textures.retro_font.texture);
+            gl.uniform1i(scene.uniformLocations.retro_font, 2);
+          }
+        },
       };
 
       const bpm   = 120.0;
@@ -1549,7 +2092,7 @@
         return (b*beat-start);
       }
 
-      const max_time_slots  = 200;
+      const max_time_slots  = 400;
       const time_slots      = new Array(max_time_slots);
 
       const script = [
@@ -1576,6 +2119,14 @@
         {
           begin       :  156                              ,
           scene       :  all_scenes.bouncing_ball_scene_3 ,
+        },
+        {
+          begin       :  160                              ,
+          scene       :  all_scenes.credits_scene_0       ,
+        },
+        {
+          begin       :  224                              ,
+          scene       :  all_scenes.credits_scene_1       ,
         },
       ];
 
@@ -1663,6 +2214,7 @@
     <canvas id="offscreen-canvas" width="512" height="512" style="display: none"></canvas>
     <img id="beat-dis"    src="beat-dis.png"    style="display: none"/>
     <img id="rgb-reine"   src="rgb-reine.png"   style="display: none"/>
+    <img id="retro-font"  src="retro-font.png"   style="display: none"/>
     <img id="the-return"  src="the-return.png"  style="display: none"/>
     <img id="young-reine" src="young-reine.png" style="display: none"/>
     <imy>
