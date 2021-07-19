@@ -128,8 +128,8 @@
       precision highp float;
       uniform float time;
       uniform vec2 resolution;
-      uniform sampler2D rgb_reine;
       uniform sampler2D beat_dis;
+      uniform sampler2D rgb_reine;
       uniform sampler2D the_return;
       uniform sampler2D young_reine;
       in vec2 v_texcoord;
@@ -308,7 +308,6 @@
       vec3 effect1(vec2 p) {
         float fo = 0.0;
         fo += 1.0*beat(64.0);
-        fo += step(ts_end, TIME);
         float tm = 1.6*(TIME-ts_btd)+44.;
 
         const float flip = 0.75;
@@ -378,7 +377,6 @@
         vec2 p = -1. + 2. * q;
         p.x *= RESOLUTION.x/RESOLUTION.y;
 
-        const float ts_switch = 15.0;
         float y = smoothstep(ts_btd, ts_btd+1.0, TIME);
         y *= y;
         y *= y;
