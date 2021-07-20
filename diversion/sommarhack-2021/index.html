@@ -97,31 +97,7 @@
       }
     </script>
 
-    <script id="fs-red-scene" type="x-shader/x-fragment">
-      // -----------------------------------------------------------------------------
-      // PRELUDE
-      // -----------------------------------------------------------------------------
-      precision highp float;
-
-      uniform float     time              ;
-      uniform vec2      resolution        ;
-      uniform sampler2D frequency_data    ;
-      uniform sampler2D time_domain_data  ;
-
-      in vec2 v_texcoord  ;
-      out vec4 frag_color ;
-
-      // -----------------------------------------------------------------------------
-      // SHADER
-      // -----------------------------------------------------------------------------
-      void main(void) {
-        vec3 col = vec3(1.0, 0.0, 0.0);
-
-        frag_color = vec4(col, 1.0);
-      }
-    </script>
-
-    <script id="fs-rgb-reine" type="x-shader/x-fragment">
+    <script id="fs-rgb-reine-scene" type="x-shader/x-fragment">
       // -----------------------------------------------------------------------------
       // PRELUDE
       // -----------------------------------------------------------------------------
@@ -387,7 +363,7 @@
       }
     </script>
 
-    <script id="fs-bouncing-ball" type="x-shader/x-fragment">
+    <script id="fs-bouncing-ball-scene" type="x-shader/x-fragment">
       // -----------------------------------------------------------------------------
       // PRELUDE
       // -----------------------------------------------------------------------------
@@ -1464,7 +1440,7 @@
       }
     </script>
 
-    <script id="fs-credits" type="x-shader/x-fragment">
+    <script id="fs-credits-scene" type="x-shader/x-fragment">
       // -----------------------------------------------------------------------------
       // PRELUDE
       // -----------------------------------------------------------------------------
@@ -1980,7 +1956,529 @@
       }
     </script>
 
+    <script id="fs-crystal-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+      uniform float time;
+      uniform vec2 resolution;
+      in vec2 v_texcoord;
+      out vec4 fragColor;
 
+      // -----------------------------------------------------------------------------
+
+      #define TIME              time
+      #define RESOLUTION        resolution
+      #define ROT(a)            mat2(cos(a), sin(a), -sin(a), cos(a))
+      #define PI                3.141592654
+      #define TAU               (2.0*PI)
+      #define L2(x)             dot(x, x)
+      #define SCA(x)            vec2(sin(x), cos(x))
+
+      #define RAYSHAPE(ro, rd)  raySphere4(ro, rd, 0.5)
+      #define IRAYSHAPE(ro, rd) iraySphere4(ro, rd, 0.5)
+
+      #define BPM             120.0
+      #define BTIME(n)        ((n)*60.0/BPM)
+
+      const float miss          = 1E4;
+      const float refrIndex     = 0.85;
+      const vec3  lightPos      = 2.0*vec3(1.5, 2.0, 1.0);
+      const vec3  skyCol1       = pow(vec3(0.2, 0.4, 0.6), vec3(0.25))*1.0;
+      const vec3  skyCol2       = pow(vec3(0.4, 0.7, 1.0), vec3(2.0))*1.0;
+      const vec3  sunCol        = vec3(8.0,7.0,6.0)/8.0;
+
+      const vec2 sca0           = SCA(0.0);
+
+      //#define PART0
+      #if defined(PART0)
+      const float ts_start      = BTIME(280.0);
+      const float ts_fadein     = BTIME(281.0);
+      const float ts_end        = BTIME(288.0);
+      #elif defined(PART1)
+      const float ts_start      = BTIME(352.0);
+      const float ts_fadein     = BTIME(354.0);
+      const float ts_fadebkg_s  = BTIME(358.0);
+      const float ts_fadebkg_e  = BTIME(370.0);
+      const float ts_fadefrg_s  = BTIME(366.0);
+      const float ts_fadefrg_e  = BTIME(378.0);
+      const float ts_end        = BTIME(384.0);
+      #else
+      #endif
+
+      // IQ's soft minimum: https://www.iquilezles.org/www/articles/smin/smin.htm
+      float pmin(float a, float b, float k) {
+        float h = clamp( 0.5+0.7*(b-a)/k, 0.0, 1.0);
+        return mix(b,a,h) - k*h*(1.0-h);
+      }
+
+
+      float pmax(float a, float b, float k) {
+        return -pmin(-a, -b, k);
+      }
+
+      float pabs(float a, float k) {
+        return pmax(a, -a, k);
+      }
+
+      float tanh_approx(float x) {
+      //  return tanh(x);
+        float x2 = x*x;
+        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
+      }
+
+      float hash(vec2 co) {
+        return fract(sin(dot(co, vec2(12.9898,58.233))) * 13758.5453);
+      }
+
+      float hash(float co) {
+        return fract(sin(co*12.9898) * 13758.5453);
+      }
+
+      // From: http://mercury.sexy/hg_sdf/
+      vec2 mod2(inout vec2 p, vec2 size) {
+        vec2 c = floor((p + size*0.5)/size);
+        p = mod(p + size*0.5,size) - size*0.5;
+        return c;
+      }
+
+      float circle(vec2 p, float r) {
+        return length(p) - r;
+      }
+
+      // IQ's box
+      float box(vec2 p, vec2 b) {
+        vec2 d = abs(p)-b;
+        return length(max(d,0.0)) + min(max(d.x,d.y),0.0);
+      }
+
+
+      // IQ's parabola
+      float parabola(vec2 pos, float k) {
+        pos.x = abs(pos.x);
+        float ik = 1.0/k;
+        float p = ik*(pos.y - 0.5*ik)/3.0;
+        float q = 0.25*ik*ik*pos.x;
+        float h = q*q - p*p*p;
+        float r = sqrt(abs(h));
+        float x = (h>0.0) ?
+              pow(q+r,1.0/3.0) - pow(abs(q-r),1.0/3.0)*sign(r-q) :
+              2.0*cos(atan(r,q)/3.0)*sqrt(p);
+        return length(pos-vec2(x,k*x*x)) * sign(pos.x-x);
+      }
+
+      float atari(vec2 p) {
+        p.x = abs(p.x);
+        float db = box(p, vec2(0.36, 0.32));
+
+        float dp0 = -parabola(p-vec2(0.4, -0.235), 4.0);
+        float dy0 = p.x-0.115;
+        float d0 = mix(dp0, dy0, smoothstep(-0.25, 0.125, p.y)); // Very hacky
+
+        float dp1 = -parabola(p-vec2(0.4, -0.32), 3.0);
+        float dy1 = p.x-0.07;
+        float d1 = mix(dp1, dy1, smoothstep(-0.39, 0.085, p.y)); // Very hacky
+
+        float d2 = p.x-0.035;
+        const float sm = 0.025;
+        float d = 1E6;
+        d = min(d, max(d0, -d1));;
+        d = pmin(d, d2, sm);
+        d = pmax(d, db, sm);
+
+        return d;
+      }
+
+      float horseshoe(vec2 p, vec2 c, float r, vec2 w) {
+        p.x = abs(p.x);
+        float l = length(p);
+        p = mat2(-c.x, c.y,
+                  c.y, c.x)*p;
+        p = vec2((p.y>0.0)?p.x:l*sign(-c.x),
+                 (p.x>0.0)?p.y:l );
+        p = vec2(p.x,abs(p.y-r))-w;
+        return length(max(p,0.0)) + min(0.0,max(p.x,p.y));
+      }
+
+      float lettere(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 1.05+off;
+        p -= vec2(0.5, 0.5);
+        return min(box(p, vec2(0.4, 0.1)), max(circle(p, 0.5), -circle(p, 0.3)));
+      }
+
+      float letterI(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 0.25+off;
+        p -= vec2(0.125, 0.75);
+        return box(p, vec2(0.125, 0.75));
+      }
+
+      float letterl(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 0.2+off;
+        p -= vec2(0.10, 0.5);
+        return box(p, vec2(0.1, 0.666));
+      }
+
+      float letterm(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 2.2+off;
+        p -= vec2(1.1, 0.5);
+        p.y = -p.y;
+        p.x = abs(p.x);
+        p -= vec2(0.5, 0.0);
+        float d = horseshoe(p, sca0, 0.5, vec2(0.5, 0.1));
+        return d;
+      }
+
+      float lettern(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 1.15+off;
+        p -= vec2(0.55, 0.5);
+        p.y = -p.y;
+        float l = horseshoe(p, sca0, 0.5, vec2(0.5, 0.1));
+        return l;
+      }
+
+      float letterp(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 1.05+off;
+        p -= vec2(0.55, 0.5);
+        float b = box(p - vec2(-0.45, -0.25), vec2(0.1, 0.75));
+        float c = abs(circle(p, 0.4)) - 0.1;
+        return min(b, c);
+      }
+
+      float letterr(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 0.6+off;
+        p -= vec2(0.1, 0.5);
+        float d0 = box(p-vec2(0.20, 0.4), vec2(0.3, 0.1));
+        float d1 = box(p, vec2(0.1, 0.5));
+        return min(d0, d1);
+      }
+
+      float letters(inout vec2 pp, float off) {
+        const mat2 rots1 = ROT(-PI/6.0-PI/2.0);
+        const mat2 rots2 = ROT(PI);
+        vec2 p = pp;
+        pp.x -= 0.875+off;
+        p -= vec2(0.435, 0.5);
+        p *= rots1;
+        float u = horseshoe(p - vec2(-0.25*3.0/4.0, -0.125/2.0), sca0, 0.375, vec2(0.2, 0.1));
+        p *= rots2;
+        float l = horseshoe(p - vec2(-0.25*3.0/4.0, -0.125/2.0), sca0, 0.375, vec2(0.2, 0.1));
+        return min(u,l);
+      }
+
+      float letteru(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 1.2+off;
+        p -= vec2(0.6, 0.475);
+        return horseshoe(p - vec2(0.0, 0.125), sca0, 0.5, vec2(0.4, 0.1));
+      }
+
+      float lettert(inout vec2 pp, float off) {
+        vec2 p = pp;
+        pp.x -= 0.6+off;
+        p -= vec2(0.3, 0.6);
+        float d0 = box(p-vec2(0.0, 0.3), vec2(0.3, 0.1));
+        float d1 = box(p, vec2(0.1, 0.6));
+        return min(d0, d1);
+      }
+
+      float impulse(vec2 p, float off) {
+        p += vec2(3.385+3.0*off, 0.5);
+
+        float d = 1E6;
+        d = min(d, letterI(p, off));
+        d = min(d, letterm(p, off));
+        d = min(d, letterp(p, off));
+        d = min(d, letteru(p, off));
+        d = min(d, letterl(p, off));
+        d = min(d, letters(p, off));
+        d = min(d, lettere(p, off));
+
+        return d;
+      }
+
+      float impulse(vec2 p) {
+        float di = impulse(p, 0.25);
+        float do_ = di;
+        do_ = abs(do_-0.05)-0.0075;
+        float dl = abs(abs(p.y)-0.1)-0.05;
+        float d = di;
+        d = pmax(d, -dl, 0.025);
+      //  d = min(d, do_);
+
+        float dc = circle(p, 2.6);
+        dc = abs(dc)-mix(-0.025, 0.025, tanh(abs(0.45*p.y)));
+
+        d = min(d, dc);
+        return d;
+      }
+
+      // https://stackoverflow.com/questions/15095909/from-rgb-to-hsv-in-opengl-glsl
+      vec3 hsv2rgb(vec3 c) {
+        const vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+        vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+        return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+      }
+
+      // Various ray object intersection from IQ:
+      //  https://www.iquilezles.org/www/articles/intersectors/intersectors.htm
+      float raySphere4(vec3 ro, vec3 rd, float ra) {
+          float r2 = ra*ra;
+          vec3 d2 = rd*rd; vec3 d3 = d2*rd;
+          vec3 o2 = ro*ro; vec3 o3 = o2*ro;
+          float ka = 1.0/dot(d2,d2);
+          float k3 = ka* dot(ro,d3);
+          float k2 = ka* dot(o2,d2);
+          float k1 = ka* dot(o3,rd);
+          float k0 = ka*(dot(o2,o2) - r2*r2);
+          float c2 = k2 - k3*k3;
+          float c1 = k1 + 2.0*k3*k3*k3 - 3.0*k3*k2;
+          float c0 = k0 - 3.0*k3*k3*k3*k3 + 6.0*k3*k3*k2 - 4.0*k3*k1;
+          float p = c2*c2 + c0/3.0;
+          float q = c2*c2*c2 - c2*c0 + c1*c1;
+          float h = q*q - p*p*p;
+          if (h<0.0) return miss; //no intersection
+          float sh = sqrt(h);
+          float s = sign(q+sh)*pow(abs(q+sh),1.0/3.0); // cuberoot
+          float t = sign(q-sh)*pow(abs(q-sh),1.0/3.0); // cuberoot
+          vec2  w = vec2( s+t,s-t );
+          vec2  v = vec2( w.x+c2*4.0, w.y*sqrt(3.0) )*0.5;
+          float r = length(v);
+          return -abs(v.y)/sqrt(r+v.x) - c1/r - k3;
+      }
+
+      vec3 sphere4Normal(vec3 pos) {
+        return normalize( pos*pos*pos );
+      }
+
+      float iraySphere4(vec3 ro, vec3 rd, float ra) {
+        // Computes inner intersection by intersecting a reverse outer intersection
+        vec3 rro = ro + rd*ra*4.0;
+        vec3 rrd = -rd;
+        float rt = raySphere4(rro, rrd, ra);
+
+        if (rt == miss) return miss;
+
+        vec3 rpos = rro + rrd*rt;
+        return length(rpos - ro);
+      }
+
+      float rayPlane(vec3 ro, vec3 rd, vec4 p ) {
+        return -(dot(ro,p.xyz)+p.w)/dot(rd,p.xyz);
+      }
+
+      vec3 skyColor(vec3 ro, vec3 rd) {
+        const vec3 sunDir = normalize(lightPos);
+        float sunDot = max(dot(rd, sunDir), 0.0);
+        vec3 final = vec3(0.);
+
+        final += mix(skyCol1, skyCol2, rd.y);
+        final += 0.5*sunCol*pow(sunDot, 20.0);
+        final += 4.0*sunCol*pow(sunDot, 400.0);
+
+        float tp  = rayPlane(ro, rd, vec4(vec3(0.0, 1.0, 0.0), 0.505));
+        if (tp > 0.0) {
+          vec3 pos  = ro + tp*rd;
+          vec3 ld   = normalize(lightPos - pos);
+          float ts4 = RAYSHAPE(pos, ld);
+          vec3 spos = pos + ld*ts4;
+          float its4= IRAYSHAPE(spos, ld);
+          // Extremely fake soft shadows
+          float sha = ts4 == miss ? 1.0 : (1.0-1.0*tanh_approx(its4*1.5/(0.5+.5*ts4)));
+          vec3 nor  = vec3(0.0, 1.0, 0.0);
+          vec3 icol = 1.5*skyCol1 + 4.0*sunCol*sha*dot(-rd, nor);
+          vec2 ppos = pos.xz*0.75;
+          ppos = fract(ppos+0.5)-0.5;
+          float pd  = min(abs(ppos.x), abs(ppos.y));
+          vec3  pcol= mix(vec3(0.4), vec3(0.3), exp(-60.0*pd));
+
+          vec3 col  = icol*pcol;
+          col = clamp(col, 0.0, 1.25);
+          float f   = exp(-10.0*(max(tp-10.0, 0.0) / 100.0));
+          return mix(final, col , f);
+        } else{
+          return final;
+        }
+      }
+
+      // Marble fractal from https://www.shadertoy.com/view/MtX3Ws
+      vec2 cmul(vec2 a, vec2 b) {
+        return vec2(a.x*b.x - a.y*b.y, a.x*b.y + a.y*b.x);
+      }
+
+      vec2 csqr(vec2 a) {
+        return vec2(a.x*a.x - a.y*a.y, 2.*a.x*a.y);
+      }
+
+      float marble_df(vec3 p) {
+        float res = 0.;
+
+        vec3 c = p;
+        float scale = 0.72;
+        const int max_iter = 10;
+        for (int i = 0; i < max_iter; ++i) {
+          p    = scale*abs(p)/dot(p,p) - scale;
+          p.yz = csqr(p.yz);
+          p    = p.zxy;
+          res  += exp(-19. * abs(dot(p,c)));
+        }
+        return res;
+      }
+
+      vec3 marble_march(vec3 ro, vec3 rd, vec2 tminmax) {
+        float t   = tminmax.x;
+        float dt  = 0.02;
+        vec3 col  = vec3(0.0);
+        float c   = 0.;
+        const int max_iter = 64;
+        for(int i = 0; i < max_iter; ++i) {
+            t += dt*exp(-2.0*c);
+            if(t>tminmax.y) {
+              break;
+            }
+            vec3 pos = ro+t*rd;
+
+            c = marble_df(ro+t*rd);
+            c *= 0.5;
+
+            float dist = (abs(pos.x + pos.y-0.15))*10.0;
+            vec3 dcol = vec3(c*c*c-c*dist, c*c-c, c);
+            col = col + dcol;
+        }
+        const float scale = 0.005;
+        float td = (t - tminmax.x)/(tminmax.y - tminmax.x);
+        col *= exp(-10.0*td);
+        col *= scale;
+        return col;
+      }
+
+      vec3 render1(vec3 ro, vec3 rd) {
+        vec3 ipos = ro;
+        vec3 ird  = rd;
+
+        float its4  = IRAYSHAPE(ipos, ird);
+        return marble_march(ipos, ird, vec2(0.0, its4));
+      }
+
+      vec3 render(vec3 ro, vec3 rd) {
+        vec3 skyCol = skyColor(ro, rd);
+        vec3 col = vec3(0.0);
+
+        float t   = 1E6;
+        float ts4 = RAYSHAPE(ro, rd);
+        if (ts4 < miss) {
+          t = ts4;
+          vec3 pos  = ro + ts4*rd;
+          vec3 nor  = sphere4Normal(pos);
+          vec3 refr = refract(rd, nor, refrIndex);
+          vec3 refl = reflect(rd, nor);
+          vec3 rcol = skyColor(pos, refl);
+          float fre = mix(0.0, 1.0, pow(1.0-dot(-rd, nor), 4.0));
+
+          vec3 lv   = lightPos - pos;
+          float ll2 = L2(lv);
+          float ll  = sqrt(ll2);
+          vec3 ld   = lv / ll;
+
+          float dm  = min(1.0, 40.0/ll2);
+          float dif = pow(max(dot(nor,ld),0.0), 8.0)*dm;
+          float spe = pow(max(dot(reflect(-ld, nor), -rd), 0.), 100.);
+          float l   = dif;
+
+          float lin = mix(0.0, 1.0, l);
+          const vec3 lcol = 2.0*sqrt(sunCol);
+          col = render1(pos, refr);
+          vec3 diff = hsv2rgb(vec3(0.7, fre, 0.075*lin))*lcol;
+          col += fre*rcol+diff+spe*lcol;
+          if (refr == vec3(0.0)) {
+            // Not expected to happen as the refraction index < 1.0
+            col = vec3(1.0, 0.0, 0.0);
+          }
+
+        } else {
+          // Ray intersected sky
+          return skyCol;
+        }
+
+        return col;
+      }
+
+      vec3 alphaBlend(vec3 back, vec4 front) {
+        return mix(back, front.xyz, front.w);
+      }
+
+      #if defined(PART1)
+      vec3 overlay(vec3 col, vec2 p, float bkgf) {
+        float aa = 2.0/RESOLUTION.y;
+        float z = mix(0.7, 0.1, sqrt((TIME-ts_start)/(ts_end-ts_start)));
+        float d = impulse(p/z)*z;
+        vec3 bcol = vec3(1.0);
+        vec4 dcol = vec4(bcol, smoothstep(-aa, aa, -d));
+        float frgf = smoothstep(ts_fadefrg_e, ts_fadefrg_s, TIME);
+        dcol.w *= frgf;
+        col = alphaBlend(col, dcol);
+        col += 0.2*exp(-20.0*max(d+0.02, 0.0))*bkgf;
+        return col;
+      }
+      #endif
+
+      vec3 effect(vec2 p, vec2 q) {
+        vec3 ro = 0.6*vec3(2.0, 0, 0.2)+vec3(0.0, 0.75, 0.0);
+        float tm  = 0.5*(TIME-ts_start);
+        float tm0 = tm;
+        float tm1 = tm;
+        ro.xz *= ROT(PI/2.0+sin(tm0*0.05));
+        ro.yz *= ROT(0.5+0.25*sin(tm1*0.05*sqrt(0.5))*0.5);
+
+        vec3 ww = normalize(vec3(0.0, 0.0, 0.0) - ro);
+        vec3 uu = normalize(cross( vec3(0.0,1.0,0.0), ww));
+        vec3 vv = normalize(cross(ww,uu));
+        float rdd = 2.0;
+        vec3 rd = normalize( p.x*uu + p.y*vv + rdd*ww);
+
+        vec3 col = render(ro, rd);
+      #if defined(PART1)
+        float bkgf = smoothstep(ts_fadebkg_e, ts_fadebkg_s, TIME);
+        col *= bkgf;
+        col = overlay(col, p, bkgf);
+      #endif
+        return col;
+      }
+
+      vec3 postProcess(vec3 col, vec2 q) {
+        col = clamp(col, 0.0, 1.0);
+        col = pow(col, vec3(1.0/2.2));
+        col = col*0.6+0.4*col*col*(3.0-2.0*col);
+        col = mix(col, vec3(dot(col, vec3(0.33))), -0.4);
+        col *=0.5+0.5*pow(19.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.7);
+        return col;
+      }
+
+      void main(void) {
+        vec2 q = v_texcoord;
+        vec2 p = -1. + 2. * q;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+
+        vec3 col = effect(p, q);
+      #if defined(PART0)
+        col += smoothstep(ts_fadein, ts_start, TIME);
+      //  col += step(ts_end, TIME);
+      #elif defined(PART1)
+        col += smoothstep(ts_fadein, ts_start, TIME);
+      #endif
+        col = postProcess(col, q);
+        col = mix(vec3(0.0), col, smoothstep(0.0, 3.0, TIME));
+
+        fragColor = vec4(col, 1.0);
+      }
+    </script>
 
     <script type = "text/javascript">
       const analyze_audio   = false;
@@ -2019,8 +2517,8 @@
           fs: "fs-red-scene"
         },
         rgb_reine_scene : {
-          vs: "vs-default"  ,
-          fs: "fs-rgb-reine",
+          vs: "vs-default"        ,
+          fs: "fs-rgb-reine-scene",
           uniforms: ["beat_dis", "rgb_reine", "the_return", "young_reine"],
           set_uniforms: (gl, time, scene) => {
             // Texture 0 and 1 used for other things
@@ -2042,28 +2540,28 @@
           }
         },
         bouncing_ball_scene_0 : {
-          vs: "vs-default"      ,
-          fs: "fs-bouncing-ball",
+          vs: "vs-default"            ,
+          fs: "fs-bouncing-ball-scene",
           defines: ["PART0"]
         },
         bouncing_ball_scene_1 : {
-          vs: "vs-default"      ,
-          fs: "fs-bouncing-ball",
+          vs: "vs-default"            ,
+          fs: "fs-bouncing-ball-scene",
           defines: ["PART1"]
         },
         bouncing_ball_scene_2 : {
-          vs: "vs-default"      ,
-          fs: "fs-bouncing-ball",
+          vs: "vs-default"            ,
+          fs: "fs-bouncing-ball-scene",
           defines: ["PART2"]
         },
         bouncing_ball_scene_3 : {
-          vs: "vs-default"      ,
-          fs: "fs-bouncing-ball",
+          vs: "vs-default"            ,
+          fs: "fs-bouncing-ball-scene",
           defines: ["PART3"]
         },
         credits_scene_0 : {
           vs: "vs-default"        ,
-          fs: "fs-credits"        ,
+          fs: "fs-credits-scene"  ,
           uniforms: ["retro_font"],
           defines: ["PART0"]      ,
           set_uniforms: (gl, time, scene) => {
@@ -2075,7 +2573,7 @@
         },
         credits_scene_1 : {
           vs: "vs-default"        ,
-          fs: "fs-credits"        ,
+          fs: "fs-credits-scene"  ,
           uniforms: ["retro_font"],
           defines: ["PART1"]      ,
           set_uniforms: (gl, time, scene) => {
@@ -2084,6 +2582,16 @@
             gl.bindTexture(gl.TEXTURE_2D, all_textures.retro_font.texture);
             gl.uniform1i(scene.uniformLocations.retro_font, 2);
           }
+        },
+        crystal_scene_0 : {
+          vs: "vs-default"      ,
+          fs: "fs-crystal-scene",
+          defines: ["PART0"]
+        },
+        crystal_scene_1 : {
+          vs: "vs-default"      ,
+          fs: "fs-crystal-scene",
+          defines: ["PART1"]
         },
       };
 
@@ -2129,6 +2637,22 @@
         {
           begin       :  224                              ,
           scene       :  all_scenes.credits_scene_1       ,
+        },
+        {
+          begin       :  280                              ,
+          scene       :  all_scenes.crystal_scene_0       ,
+        },
+        {
+          begin       :  288                              ,
+          scene       :  all_scenes.red_scene             ,
+        },
+        {
+          begin       :  352                              ,
+          scene       :  all_scenes.crystal_scene_1       ,
+        },
+        {
+          begin       :  384                              ,
+          scene       :  all_scenes.red_scene             ,
         },
       ];
 
