@@ -1956,6 +1956,399 @@
       }
     </script>
 
+    <script id="fs-sommarhack-scene" type="x-shader/x-fragment">
+      precision highp float;
+      uniform float time;
+      uniform vec2 resolution;
+      in vec2 v_texcoord;
+      out vec4 fragColor;
+
+      // -----------------------------------------------------------------------------
+
+      #define PI              3.141592654
+      #define TAU             (2.0*PI)
+      #define TIME            (mod(time, 3.0*60.0+12.0))
+      #define TTIME           (TAU*TIME)
+      #define RESOLUTION      resolution
+      #define ROT(a)          mat2(cos(a), sin(a), -sin(a), cos(a))
+      #define SCA(a)          vec2(sin(a), cos(a))
+      #define PCOS(x)         (0.5+0.5*cos(x))
+      #define DOT2(x)         dot(x, x)
+
+      #define BPM             120.0
+      #define BTIME(n)        ((n)*60.0/BPM)
+
+      const float ts_start      = BTIME(256.0);
+      const float ts_fadein     = BTIME(258.0);
+      const float ts_fadeeagle  = BTIME(259.0);
+      const float ts_end        = BTIME(280.0);
+
+      const vec3 std_gamma        = vec3(2.2);
+
+      float hash(float co) {
+        co += 123.4;
+        return fract(sin(co*12.9898) * 13758.5453);
+      }
+
+      // https://stackoverflow.com/questions/15095909/from-rgb-to-hsv-in-opengl-glsl
+      vec3 hsv2rgb(vec3 c) {
+          vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+          vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+          return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+      }
+
+      float pmin(float a, float b, float k) {
+        float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0 );
+        return mix( b, a, h ) - k*h*(1.0-h);
+      }
+
+      float pmax(float a, float b, float k) {
+        return -pmin(-a, -b, k);
+      }
+
+      vec3 alphaBlend(vec3 back, vec4 front) {
+        return mix(back, front.xyz, front.w);
+      }
+
+      float tanh_approx(float x) {
+      //  return tanh(x);
+        float x2 = x*x;
+        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
+      }
+
+      // http://mercury.sexy/hg_sdf/
+      float mod1(inout float p, float size) {
+        float halfsize = size*0.5;
+        float c = floor((p + halfsize)/size);
+        p = mod(p + halfsize, size) - halfsize;
+        return c;
+      }
+
+      vec2 mod2(inout vec2 p, vec2 size) {
+        vec2 c = floor((p + size*0.5)/size);
+        p = mod(p + size*0.5,size) - size*0.5;
+        return c;
+      }
+
+      // https://www.iquilezles.org/www/articles/intersectors/intersectors.htm
+      vec2 rayCylinder(vec3 ro, vec3 rd, vec3 cb, vec3 ca, float cr) {
+          vec3  oc = ro - cb;
+          float card = dot(ca,rd);
+          float caoc = dot(ca,oc);
+          float a = 1.0 - card*card;
+          float b = dot( oc, rd) - caoc*card;
+          float c = dot( oc, oc) - caoc*caoc - cr*cr;
+          float h = b*b - a*c;
+          if( h<0.0 ) return vec2(-1.0); //no intersection
+          h = sqrt(h);
+          return vec2(-b-h,-b+h)/a;
+      }
+
+      float box(vec2 p, vec2 b) {
+        vec2 d = abs(p)-b;
+        return length(max(d,0.0)) + min(max(d.x,d.y),0.0);
+      }
+
+      float circle(vec2 p, float r) {
+        return length(p) - r;
+      }
+
+      float vesica(vec2 p, vec2 sz) {
+        if (sz.x < sz.y) {
+          sz = sz.yx;
+        } else {
+          p  = p.yx;
+        }
+        vec2 sz2 = sz*sz;
+        float d  = (sz2.x-sz2.y)/(2.0*sz.y);
+        float r  = sqrt(sz2.x+d*d);
+        float b  = sz.x;
+        p = abs(p);
+        return ((p.y-b)*d>p.x*b) ? length(p-vec2(0.0,b))
+                                 : length(p-vec2(-d,0.0))-r;
+      }
+
+      float moon(vec2 p, float d, float ra, float rb ) {
+          p.y = abs(p.y);
+          float a = (ra*ra - rb*rb + d*d)/(2.0*d);
+          float b = sqrt(max(ra*ra-a*a,0.0));
+          if( d*(p.x*b-p.y*a) > d*d*max(b-p.y,0.0) )
+                return length(p-vec2(a,b));
+          return max( (length(p          )-ra),
+                     -(length(p-vec2(d,0))-rb));
+      }
+
+      // Imprecise faster version
+      float fastMoon(vec2 p, float d, float ra, float rb) {
+        float d0 = length(p) - ra;
+        float d1 = length(p-vec2(d, 0.0)) - rb;
+        return max(d0, -d1);
+      }
+
+      float roundedCross( in vec2 p, in float h )
+      {
+          float k = 0.5*(h+1.0/h); // k should be const at modeling time
+          p = abs(p);
+          return ( p.x<1.0 && p.y<p.x*(k-h)+h ) ?
+                   k-sqrt(DOT2(p-vec2(1,k)))  :
+                 sqrt(min(DOT2(p-vec2(0,h)),
+                          DOT2(p-vec2(1,0))));
+      }
+
+      float plane(vec2 p, vec3 pp) {
+        return dot(p, pp.xy) + pp.z;
+      }
+
+
+      float summerhack(vec2 p) {
+        // As the moon shapes are mostly used for cut-outs I think there is less need for exact
+        //  moon distance and therefore rely on fastMoon instead
+        vec2 op = p;
+        p.x = abs(p.x);
+        vec2 p0 = p;
+        p0 -= vec2(0.0, 0.385);
+        float d0 = circle(p0, 0.605);
+        vec2 p1 = p;
+        p1 -= vec2(0.0, -0.375);
+        float d1 = vesica(p1, vec2(0.04, 0.569))-(mix(0.005, 0.035, smoothstep(0.1, 0.2, p1.y)));
+
+        vec2 p2 = p;
+        p2 -= vec2(0.0, 0.4);
+        p2 = -p2.yx;
+        float d2 = fastMoon(p2, 0.075, 0.33, 0.275);
+
+        vec2 p3 = p;
+        p3 -= vec2(0.0, 0.65);
+        float d3 = circle(p3, 0.367);
+
+        vec2 p4 = p;
+        p4 -= vec2(0.0, 0.43);
+        float d4 = circle(p4, 0.29);
+
+        vec2 p5 = p;
+        p5 -= vec2(-0.185, 0.12);
+        float d5 = circle(p5, 0.30);
+
+        vec2 p6 = p;
+        p6 -= vec2(0.12, -0.19);
+        p6 *= ROT(0.65);
+        float d6 = vesica(p6, vec2(0.15, 0.024))-0.0175;
+
+        vec2 p7 = p;
+        p7 -= vec2(0.0, 0.735);
+        p7 = -p7.yx;
+        float d7 = fastMoon(p7, 0.13, 0.68, 0.595);
+
+        vec2 p8 = p;
+        p8 -= vec2(0.0, 0.7);
+        p8 = -p8.yx;
+        float d8 = fastMoon(p8, 0.1, 0.477, 0.4676);
+
+        vec2 p9 = p;
+        p9 -= vec2(0.25, 0.72);
+        p9.x = -p9.x;
+        float d9 = fastMoon(p9, 0.188, 0.73, 0.775);
+
+        vec2 p10 = op;
+        p10 -= vec2(0.0, 0.28);
+        p10 = p10.yx;
+        p10.x *= sign(op.x);
+        p10.x += (-sign(op.x)+1.0)*-0.0775;
+        float d10 = moon(p10, 0.045, 0.105, 0.095);
+
+        vec2 p11 = p;
+        p11 -= vec2(0.0, -0.78);
+        p11 = p11.yx;
+        float d11 = roundedCross(p11, 0.55);
+
+        vec2 p12 = p;
+        float d12 = plane(p12, vec3(normalize(vec2(-4.0, 1.0)), 0.315));
+
+        vec2 p13 = p;
+        p13 -= vec2(-0.05, -0.805);
+        float d13 = circle(p13, 0.175);
+
+        vec2 p14 = p;
+        p14 -= vec2(0.0, -0.88);
+        float d14 = p14.y;
+
+        vec2 p15 = p;
+        p15 -= vec2(0.45, -0.4);
+        p15 = p15.yx;
+        float d15 = fastMoon(p15, 0.14, 0.4, 0.4);
+
+        vec2 p16 = op;
+        p16 -= vec2(-0.095, 0.323);
+        // Cheat to remove discontinuity in distance field due to hacking on d10
+        float d16 = length(p16);
+
+        d11 = max(d11, -d12);
+        d11 = max(d11, -d13);
+        d11 = max(d11, -d14);
+        d11 = max(d11, -d15);
+
+        float dn = d3;
+        dn = min(dn, d4);
+        dn = min(dn, d2);
+        dn = min(dn, d5);
+        dn = min(dn, d6);
+        dn = min(dn, d7);
+        dn = min(dn, d8);
+        dn = min(dn, d9);
+
+        float d = d0;
+        d = max(d, -dn);
+        d = min(d, d1);
+        d = min(d, d10);
+        d = min(d, d11);
+        d = min(d, d16);
+
+
+        return d;
+      }
+
+      vec3 skyColor(vec3 ro, vec3 rd) {
+        float b  = smoothstep(0.25, 1.0, cos(TAU*TIME*BPM/60.0));
+      //  b = 1.0;
+        const vec3 l = normalize(vec3(0.0, 0.0, 1));
+        vec3 baseCol = vec3(0.5, 0.66, 1.0)+b*vec3(0.2);
+        return 1.25*baseCol*pow(max(dot(l, normalize(rd*vec3(1.0, 0.33, 1.0))), 0.0), mix(250.0, 220.0, b));
+      }
+
+      vec3 color(vec3 ww, vec3 uu, vec3 vv, vec3 ro, vec2 p) {
+        float lp = length(p);
+        vec2 np = p + 1.0/RESOLUTION.xy;
+        float rdd = (2.0+0.5*tanh_approx(lp));  // Playing around with rdd can give interesting distortions
+        vec3 rd = normalize(p.x*uu + p.y*vv + rdd*ww);
+
+        vec3 skyCol = skyColor(ro, rd);
+
+        float aa = TIME*0.125;
+        rd.yx *= ROT(aa);
+        float a = atan(rd.y, rd.x);
+
+        vec3 col = skyCol;
+        const float mm = 5.0;
+        for(float i = 0.0; i < mm; ++i) {
+          float ma = a;
+          float ii = i/(mm-1.0);
+          float sz = 31.0+i*64.0;
+          float slices = TAU/sz;
+          float na = mod1(ma, slices);
+
+          float hh = hash(na+113.0*i);
+          float h1 = hh;
+          float h2 = fract(hh*113.0);
+          float h3 = fract(hh*127.0);
+
+          float tr = mix(0.25, 2.0, h1);
+          vec2 tc = rayCylinder(ro, rd, ro, vec3(0.0, 0.0, 1.0), tr);
+          vec3 tcp = ro + tc.y*rd;
+          vec2 tcp2 = vec2(tcp.z+h2*2.0, atan(tcp.y, tcp.x));
+
+          float sx = mix(0.75, 1.5, h3);
+          vec2 tnp2 = mod2(tcp2, vec2(sx, slices));
+          tcp2.y *= tr*PI;
+          float h4 = hash(tnp2.x+hh);
+          float h5 = fract(113.0*h4);
+          tcp2.x += 0.4*sx*h4;
+          float d = length(tcp2)-0.001;
+
+          float si = exp(-(100.0+1.4*sz)*max(d, 0.0));
+
+          vec3 hsv = vec3(-0.0-0.4*h4, mix(0.4, 0.00, ii), 1.0);
+          vec3 bcol = hsv2rgb(hsv)*3.0;
+          vec4 scol = vec4(bcol*sqrt(si), sqrt(si)*exp(-0.05*tc.y*tc.y));
+
+          col = alphaBlend(col, scol);
+        }
+
+        return col;
+      }
+
+      vec3 overlay(vec3 col, vec2 p, vec2 q) {
+        vec2 op = p;
+        float aa = 2.0/RESOLUTION.y;
+
+        float dist = PCOS(50.0*(op.y-TTIME/30.0));
+        float fade = mix(0.7, 1.0, smoothstep(ts_start, ts_fadeeagle, TIME))*mix(0.945, 0.95, smoothstep(0.5, 1.0, q.y)*dist)*0.97;
+
+        vec2 pi = p;
+        float off = sqrt(p.x*p.x+p.y*p.y);
+        const float coff = PI;
+        float angle = off+mix(coff*0.42, -coff*0.42 , fade);
+        float split = angle+coff;
+        int nsplit = int(mod1(split, coff));
+        split = (nsplit & 1) == 0 ? split : -split;
+
+        const float zi = 1.0;
+        pi /= zi;
+        float di  = summerhack(pi);
+        float dii = abs(di-0.0125) - 0.0025;
+        di = min(di, dii);
+        di *= zi;
+
+        float dg = di;
+
+        const vec3 lcol2 = vec3(2.0, 1.55, 1.25).zyx*0.85;
+
+        float gmix = pow(abs(cos(angle)), 14.0);
+        float gmix2 = abs(1.0/tanh_approx(split))*0.5;
+
+        dg = abs(dg-0.025);
+        float glow = exp(-10.0*max(dg+0., 0.0));
+        vec3 glowCol = mix(lcol2.zyx*lcol2.zyx/6.0, lcol2.zyx, glow*glow)*gmix2;
+        vec3 bcol = mix(vec3(1.5), vec3(0.0), tanh_approx(2.0*length(p)));
+        col = mix(col, vec3(mix(bcol, sqrt(glowCol*0.5), gmix)), smoothstep(-aa, aa, -di));
+        col += glowCol*glow*gmix;
+
+        return col;
+      }
+
+      vec3 effect(vec2 p, vec2 q) {
+        float tm  = TIME-ts_start;
+        vec3 ro   = vec3(0.0, 0, tm);
+        vec3 dro  = normalize(vec3(0.20, 0.2, 1.0));
+        dro.xz *= ROT(0.2*sin(0.05*tm));
+        dro.yz *= ROT(0.2*sin(0.05*tm*sqrt(0.5)));
+        vec3 up = vec3(0.0,1.0,0.0);
+
+        vec3 ww = normalize(dro);
+        vec3 uu = normalize(cross(up, ww));
+        vec3 vv = normalize(cross(ww, uu));
+
+        vec3 col = color(ww, uu, vv, ro, p);
+
+        if (TIME > 16.1) {
+          col = overlay(col, p, q);
+        }
+
+        return col;
+      }
+
+      vec3 postProcess(vec3 col, vec2 q) {
+        col = clamp(col, 0.0, 1.0);
+        col = pow(col, vec3(1.0/2.2));
+        col = col*0.6+0.4*col*col*(3.0-2.0*col);
+        col = mix(col, vec3(dot(col, vec3(0.33))), -0.4);
+        col *=0.5+0.5*pow(19.0*q.x*q.y*(1.0-q.x)*(1.0-q.y),0.7);
+        return col;
+      }
+
+      void main(void) {
+        vec2 q = v_texcoord;
+        vec2 p = -1. + 2. * q;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+
+        vec3 col = effect(p, q);
+
+        col += smoothstep(ts_fadein, ts_start, TIME);
+        col = postProcess(col, q);
+
+        fragColor = vec4(col, 1.0);
+      }
+    </script>
+
     <script id="fs-crystal-scene" type="x-shader/x-fragment">
       // -----------------------------------------------------------------------------
       // PRELUDE
@@ -2583,6 +2976,10 @@
             gl.uniform1i(scene.uniformLocations.retro_font, 2);
           }
         },
+        sommarhack_scene : {
+          vs: "vs-default"          ,
+          fs: "fs-sommarhack-scene"
+        },
         crystal_scene_0 : {
           vs: "vs-default"      ,
           fs: "fs-crystal-scene",
@@ -2637,6 +3034,10 @@
         {
           begin       :  224                              ,
           scene       :  all_scenes.credits_scene_1       ,
+        },
+        {
+          begin       :  256                              ,
+          scene       :  all_scenes.sommarhack_scene      ,
         },
         {
           begin       :  280                              ,
