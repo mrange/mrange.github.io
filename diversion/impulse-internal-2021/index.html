@@ -167,6 +167,208 @@
       }
     </script>
 
+    <script id="fs-reine-metaballs-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+
+      in vec2 v_texcoord  ;
+      out vec4 frag_color ;
+
+      #define PI              3.14159265358979323846
+      #define TAU             (2.0*PI)
+      #define BPM             120.0
+      #define BTIME(n)        ((n)*60.0/BPM)
+
+      float beat(float n) {
+        return smoothstep(BTIME(n+1.0), BTIME(n), time)*step(BTIME(n), time);
+      }
+
+      float bop()
+      {
+        return smoothstep(0.5, 1.0, cos(time*TAU*BPM/60.0));
+      }
+
+      //--------------------------------------------------------
+      // Basic metaballs with distance field
+      //
+      // v1.0 - 2021-03-28 - Initial version
+      // Thanks to mrange for improvements
+      //--------------------------------------------------------
+
+
+      float circle(vec2 pos, float r) {
+        return length(pos) - r;
+      }
+
+      // Polynominal smooth min, https://www.iquilezles.org/www/articles/smin/smin.htm
+      float pmin(float a, float b, float k) {
+        float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0 );
+        return mix( b, a, h ) - k*h*(1.0-h);
+      }
+
+      float df(vec2 p) {
+        float d = 1E6;
+        for (int i = 0; i < 6; ++i) {
+          float a = 1.2*(time + 2.0*float(i));
+          float d0 = circle(p - vec2(cos(a), sin(a*sqrt(0.2))), 0.63);
+          d = pmin(d, d0, 0.15);
+        }
+        for (int i = 0; i < 4; ++i) {
+          d = abs(d) - 0.0005/d;
+        }
+        return d;
+      }
+
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+      void main(void) {
+        vec2 q = v_texcoord;
+        vec2 p = -1.0 + 2.0*q;
+        p.x *= resolution.x/resolution.y;
+        float aa = 2.0/resolution.y;
+        vec3 col = vec3(0.2,0.2,0.2);
+        float d = df(p);
+        col = mix(col, vec3(1.0,0.2,0.0), smoothstep(-aa, aa, -d));
+        frag_color = vec4(col, 1.0);
+      }
+    </script>
+
+    <script id="fs-reine-cube-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+
+      in vec2 v_texcoord  ;
+      out vec4 frag_color ;
+
+      #define PI              3.14159265358979323846
+      #define TAU             (2.0*PI)
+      #define BPM             120.0
+      #define BTIME(n)        ((n)*60.0/BPM)
+
+      float beat(float n) {
+        return smoothstep(BTIME(n+1.0), BTIME(n), time)*step(BTIME(n), time);
+      }
+
+      float bop()
+      {
+        return smoothstep(0.5, 1.0, cos(time*TAU*BPM/60.0));
+      }
+
+      //--------------------------------------------------------
+      // Plain old retro wirecube with a distance field twist
+      //
+      // v1.0 - 2021-03-21 - Initial version
+      // Thanks to mrange for improvements
+      //--------------------------------------------------------
+
+      mat4 model = mat4(1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1);
+
+      vec2 Project(vec3 p0) {
+        vec3 viewport = vec3(0.0,-2.0,0.0);
+        p0 -= viewport;
+        return length(viewport) * p0.xz / p0.y;
+      }
+
+      mat4 Scale(vec3 v) {
+        return mat4(vec4(v.x,0,0,0), vec4(0,v.y,0,0), vec4(0,0,v.z,0), vec4(0,0,0,1));
+      }
+
+      mat4 Rotate(vec3 u, float a) {
+        float c = cos(a);
+        float s = sin(a);
+        vec3 c0 = vec3(c + (u.x*u.x) * (1.0-c), (u.y*u.x) * (1.0-c) + (u.z*s), (u.z*u.x) * (1.0-c) - (u.y*s));
+        vec3 c1 = vec3((u.x*u.y) * (1.0-c) - (u.z*s), c + (u.y*u.y) * (1.0-c), (u.z*u.y) * (1.0-c) + (u.x*s));
+        vec3 c2 = vec3((u.x*u.z) * (1.0-c) + (u.y*s), (u.y*u.z) * (1.0-c) - (u.x*s), c + (u.z*u.z) * (1.0-c));
+        return mat4(mat3(c0,c1,c2));
+      }
+
+      mat4 Translate(vec3 v) {
+        return mat4(vec4(1.0,0,0,v.x), vec4(0,1.0,0,v.y), vec4(0,0,1.0,v.z), vec4(0,0,0,1.0));
+      }
+
+
+      float DistanceToLine(vec3 p0,vec3 p1,vec2 uv) {
+        p0 = (vec4(p0,1.0) * model).xyz;
+        p1 = (vec4(p1,1.0) * model).xyz;
+        p0.xy = Project(p0);
+        p1.xy = Project(p1);
+        vec2 d = normalize(p1.xy - p0.xy);
+        uv = (uv - p0.xy) * mat2(d.x, d.y, -d.y, d.x);
+        float dist = distance(uv, clamp(uv, vec2(0.0), vec2(distance(p0.xy, p1.xy), 0.0)));
+        return dist;
+      }
+
+      float pmin(float a, float b, float k) {
+        float h = clamp( 0.5+0.7*(b-a)/k, 0.0, 1.0);
+        return mix(b,a,h) - k*h*(1.0-h);
+      }
+
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+      void main(void) {
+
+        vec2 uv = v_texcoord;
+        uv.x *= resolution.x/resolution.y;
+        uv = uv - vec2(1.0, 0.5);
+        uv *= 2.5;
+        float time = time;
+
+        model *= Scale(vec3(0.3));
+        model *= Rotate(vec3(1.0, 0, 0.0), 1.2*time);
+        model *= Rotate(vec3(0.0, 1.0, 0.0), 1.2*time);
+        model *= Rotate(vec3(0.0, 0, 1.0), 1.2*time);
+        model *= Translate(vec3(0.6*sin(time), 0.2*cos(time)-0.73, 0.18*cos(time)+0.1));
+
+        vec3 cube[8];
+        cube[0] = vec3(-1,-1,-1);
+        cube[1] = vec3( 1,-1,-1);
+        cube[2] = vec3(-1, 1,-1);
+        cube[3] = vec3( 1, 1,-1);
+        cube[4] = vec3(-1,-1, 1);
+        cube[5] = vec3( 1,-1, 1);
+        cube[6] = vec3(-1, 1, 1);
+        cube[7] = vec3( 1, 1, 1);
+
+        float dist = 1E6;
+        const float sm = 0.3;
+        dist = pmin(dist, DistanceToLine(cube[0],cube[1], uv), sm);
+        dist = pmin(dist, DistanceToLine(cube[1],cube[3], uv), sm);
+        dist = pmin(dist, DistanceToLine(cube[3],cube[2], uv), sm);
+        dist = pmin(dist, DistanceToLine(cube[2],cube[0], uv), sm);
+
+        dist = pmin(dist, DistanceToLine(cube[4],cube[5], uv), sm);
+        dist = pmin(dist, DistanceToLine(cube[5],cube[7], uv), sm);
+        dist = pmin(dist, DistanceToLine(cube[7],cube[6], uv), sm);
+        dist = pmin(dist, DistanceToLine(cube[6],cube[4], uv), sm);
+
+        dist = pmin(dist, DistanceToLine(cube[0],cube[4], uv), sm);
+        dist = pmin(dist, DistanceToLine(cube[5],cube[1], uv), sm);
+        dist = pmin(dist, DistanceToLine(cube[2],cube[6], uv), sm);
+        dist = pmin(dist, DistanceToLine(cube[7],cube[3], uv), sm);
+
+        vec3 linecube = vec3(0);
+        linecube = mix(linecube, vec3(0,0,1), smoothstep(5.0/resolution.y, 0.0, dist));
+        linecube += sin(0.5*dist*vec3(290.0, 0.0, 3.0));
+        frag_color = vec4(linecube,0.0);
+      }
+    </script>
+
     <script type = "text/javascript">
       const analyze_audio   = false;
       const demo_system     = new DemoSystemV1(analyze_audio);
@@ -201,6 +403,14 @@
           vs: "vs-default"          ,
           fs: "fs-reine-bars-scene"
         },
+        reine_metaballs_scene : {
+          vs: "vs-default"          ,
+          fs: "fs-reine-metaballs-scene"
+        },
+        reine_cube_scene : {
+          vs: "vs-default"          ,
+          fs: "fs-reine-cube-scene"
+        },
       };
 
       const bpm   = 120.0;
@@ -219,8 +429,12 @@
           scene       :  all_scenes.reine_bars_scene      ,
         },
         {
+          begin       :  16                               ,
+          scene       :  all_scenes.reine_metaballs_scene ,
+        },
+        {
           begin       :  32                               ,
-          scene       :  all_scenes.red_scene             ,
+          scene       :  all_scenes.reine_cube_scene      ,
         },
       ];
 
