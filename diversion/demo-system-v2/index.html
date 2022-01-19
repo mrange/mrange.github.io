@@ -177,10 +177,10 @@
           fs: "fs_equalizer_scene",
           uniforms: ["impulse_001"],
           set_uniforms: (gl, time, scene) => {
-            // Texture 0 and 1 used for other things
-            gl.activeTexture(gl.TEXTURE2);
+            // Texture 0 - 2 are reserved
+            gl.activeTexture(gl.TEXTURE3);
             gl.bindTexture(gl.TEXTURE_2D, all_textures.impulse_001.texture);
-            gl.uniform1i(scene.uniformLocations.impulse_001, 2);
+            gl.uniform1i(scene.uniformLocations.impulse_001, 3);
           }
         },
       };
@@ -213,13 +213,6 @@
         }
 
         return all_scenes.red_scene;
-      }
-
-      // Called each frame to set the uniforms after the scene is selected
-      function on_set_uniforms(gl, time, scene) {
-        if (scene.set_uniforms) {
-          scene.set_uniforms(gl, time, scene);
-        }
       }
 
     </script>

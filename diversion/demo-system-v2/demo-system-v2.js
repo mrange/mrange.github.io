@@ -59,6 +59,9 @@ class DemoSystemV2 {
   }
 
   constructor(analyze_audio = false) {
+    this.frament_shader_type      = "x-shader/x-fragment"  ;
+    this.vertex_shader_type       = "x-shader/x-vertex"    ;
+
     this.analyze_audio            = analyze_audio          ;
     this.fft_size                 = 512                    ;
     this.initialized              = false                  ;
@@ -66,7 +69,36 @@ class DemoSystemV2 {
     this.never_played             = true                   ;
     this.start_time               = this.now()             ;
     this.on_requestAnimationFrame = () => this.draw_scene();
-  }
+
+    this.present_scene            =
+      {
+          vs_inline: `
+precision highp float;
+
+in vec4 a_position;
+in vec2 a_texcoord;
+
+out vec2 v_texcoord;
+
+void main(void) {
+  gl_Position = a_position;
+  v_texcoord = a_texcoord;
+}
+`,
+          fs_inline: `
+precision highp float;
+
+uniform sampler2D prev_pass ;
+
+in vec2 v_texcoord  ;
+out vec4 frag_color ;
+
+void main(void) {
+  frag_color = texture(prev_pass, v_texcoord);
+}
+`,
+      };
+}
 
   create_bins_texture(bytes) {
     const texture = this.gl.createTexture();
@@ -76,6 +108,7 @@ class DemoSystemV2 {
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, null);
     return texture;
   }
 
@@ -92,6 +125,20 @@ class DemoSystemV2 {
       override(this.gl);
     }
     this.gl.generateMipmap(this.gl.TEXTURE_2D);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, null);
+    return texture;
+  }
+
+  create_blank_texture(width, height) {
+    const texture = this.gl.createTexture();
+    this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+    // TODO: use this.gl.FLOAT instead
+    this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, width, height, 0, this.gl.RGBA, this.gl.UNSIGNED_BYTE, null);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, null);
     return texture;
   }
 
@@ -124,12 +171,18 @@ class DemoSystemV2 {
 
     // TODO:  Make configurable
     // Shader is a bit hungry for FLOPs so limit to 1080 in y res
-    const finalHeight = Math.round(height < 1080 ? height : 1080);
-    const finalWidth = Math.round((width/height)*finalHeight);
-    this.canvas.width  = finalWidth;
-    this.canvas.height = finalHeight;
+    this.Height = Math.round(height < 1080 ? height : 1080);
+    this.Width = Math.round((width/height)*this.Height);
+    this.canvas.width  = this.Width;
+    this.canvas.height = this.Height;
 
     this.init_webGL(this.canvas);      // Initialize the GL context
+
+    this.frame_buffer   = this.gl.createFramebuffer();
+
+    this.prev_frame_texture   = this.create_blank_texture(this.Width, this.Height);
+    this.ping_texture         = this.create_blank_texture(this.Width, this.Height);
+    this.pong_texture         = this.create_blank_texture(this.Width, this.Height);
 
     // Only continue if WebGL is available and working
     if (this.gl) {
@@ -138,7 +191,6 @@ class DemoSystemV2 {
         this.texture_time_domain_data = this.create_bins_texture(this.frequency_data);
       }
 
-
       this.gl.clearColor(0.0, 0.0, 0.0, 1.0);       // Clear to black, fully opaque
       this.gl.clearDepth(1.0);                      // Clear everything
       // TODO: We just paint a single quad, depth stuff not needed?
@@ -146,13 +198,10 @@ class DemoSystemV2 {
       // this.gl.depthFunc(this.gl.LEQUAL);            // Near things obscure far things
 
       await this.init_shaders();
-
       this.init_textures();
-
       this.init_buffers();
 
       this.initialized = true;
-
       on_init_complete();
 
       requestAnimationFrame(this.on_requestAnimationFrame);
@@ -276,35 +325,70 @@ class DemoSystemV2 {
     const width  = bcr.width;
     const height = bcr.height;
 
+    this.gl.bindFramebuffer(this.gl.DRAW_FRAMEBUFFER, this.frame_buffer);
+    this.gl.framebufferTexture2D(this.gl.DRAW_FRAMEBUFFER, this.gl.COLOR_ATTACHMENT0, this.gl.TEXTURE_2D, this.ping_texture, 0);
+
+    this.render_scene(time, width, height, null, scene);
+
+    this.gl.framebufferTexture2D(this.gl.DRAW_FRAMEBUFFER, this.gl.COLOR_ATTACHMENT0, this.gl.TEXTURE_2D, null, 0);
+    this.gl.bindFramebuffer(this.gl.DRAW_FRAMEBUFFER, null);
+
+    this.render_scene(time, width, height, this.ping_texture, this.present_scene);
+
+    const tmp               = this.ping_texture;
+    this.ping_texture       = this.prev_frame_texture;
+    this.prev_frame_texture = this.ping_texture;
+
+    requestAnimationFrame(this.on_requestAnimationFrame);
+  }
+
+  render_scene(time, width, height, prev_pass, scene) {
     this.gl.useProgram(scene.shaderProgram);
 
-    // TODO: We always paint the entire screen, not needed then
-    // this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
+    if (scene.requires_clear) {
+      this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
+    }
 
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesBuffer);
     this.gl.vertexAttribPointer(scene.vertexPositionAttribute, 3, this.gl.FLOAT, false, 0, 0);
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesTextureCoordBuffer);
     this.gl.vertexAttribPointer(scene.textureCoordAttribute, 2, this.gl.FLOAT, false, 0, 0);
 
-    this.gl.uniform2f(scene.uniformLocations.resolution, width, height);
-    this.gl.uniform1f(scene.uniformLocations.time, time);
+    if (scene.uniformLocations.resolution)
+      this.gl.uniform2f(scene.uniformLocations.resolution, width, height);
+    if (scene.uniformLocations.time)
+      this.gl.uniform1f(scene.uniformLocations.time, time);
 
-    if (this.analyze_audio) {
+    if (this.analyze_audio && scene.uniformLocations.frequency_data) {
       this.gl.activeTexture(this.gl.TEXTURE0);
       this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture_frequency_data);
       this.gl.uniform1i(scene.uniformLocations.frequency_data, 0);
+    }
 
+    if (this.analyze_audio && scene.uniformLocations.time_domain_data) {
       this.gl.activeTexture(this.gl.TEXTURE1);
       this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture_time_domain_data);
       this.gl.uniform1i(scene.uniformLocations.time_domain_data, 1);
     }
 
-    on_set_uniforms(this.gl, time, scene);
+    if (scene.uniformLocations.prev_pass) {
+      this.gl.activeTexture(this.gl.TEXTURE2);
+      this.gl.bindTexture(this.gl.TEXTURE_2D, prev_pass);
+      this.gl.uniform1i(scene.uniformLocations.prev_pass, 2);
+    }
+
+    if (scene.uniformLocations.prev_frame) {
+      this.gl.activeTexture(this.gl.TEXTURE3);
+      this.gl.bindTexture(this.gl.TEXTURE_2D, this.prev_frame_texture);
+      this.gl.uniform1i(scene.uniformLocations.prev_frame, 2);
+    }
+
+    if (scene.set_uniforms) {
+      scene.set_uniforms(this.gl, time, scene);
+    }
 
     this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.verticesIndexBuffer);
     this.gl.drawElements(this.gl.TRIANGLES, 6, this.gl.UNSIGNED_SHORT, 0);
-
-    requestAnimationFrame(this.on_requestAnimationFrame);
   }
 
   init_textures() {
@@ -329,13 +413,15 @@ class DemoSystemV2 {
   }
 
   async init_shaders() {
-    for (const key in all_scenes) {
+    const scenes = all_scenes;
+    scenes.dsv2__present_scene = this.present_scene;
+    for (const key in scenes) {
       on_loading_scene(key);
 
       // To let the UI refresh
       await this.sleep(20);
 
-      const scene = all_scenes[key];
+      const scene = scenes[key];
       if (!scene) continue;
 
       const defines = scene.defines
@@ -344,8 +430,14 @@ class DemoSystemV2 {
         ;
       const prelude = "#version 300 es\n" + defines;
 
-      const vertexShader    = this.get_shader(prelude, scene.vs);
-      const fragmentShader  = this.get_shader(prelude, scene.fs);
+      const vertexShader    = scene.vs_inline
+        ? this.compile_shader(prelude, this.vertex_shader_type, scene.vs_inline)
+        : this.get_shader(prelude, scene.vs)
+        ;
+      const fragmentShader  = scene.fs_inline
+        ? this.compile_shader(prelude, this.frament_shader_type, scene.fs_inline)
+        : this.get_shader(prelude, scene.fs)
+        ;
 
       scene.shaderProgram = this.gl.createProgram();
       this.gl.attachShader(scene.shaderProgram, vertexShader);
@@ -364,7 +456,7 @@ class DemoSystemV2 {
       this.gl.enableVertexAttribArray(scene.textureCoordAttribute);
 
       const uniformLocations = {};
-      const uniforms = ["time", "resolution", "frequency_data", "time_domain_data"].concat(global_uniforms).concat(scene.uniforms ? scene.uniforms : []);
+      const uniforms = ["time", "resolution", "prev_frame", "prev_pass", "frequency_data", "time_domain_data"].concat(global_uniforms).concat(scene.uniforms ? scene.uniforms : []);
       for (const idx in uniforms) {
         const uniform = uniforms[idx];
         if (uniform) {
@@ -372,39 +464,20 @@ class DemoSystemV2 {
         }
       }
       scene.uniformLocations = uniformLocations;
-      console.log(scene);
     }
   }
 
-  get_shader(prelude, id) {
-    const shaderScript = document.getElementById(id);
-
-    if (!shaderScript) {
-      return null;
-    }
-
-    var theSource    = prelude;
-    var currentChild = shaderScript.firstChild;
-
-    while(currentChild) {
-      if (currentChild.nodeType == 3) {
-        theSource += currentChild.textContent;
-      }
-
-      currentChild = currentChild.nextSibling;
-    }
-
-    var shader;
-
-    if (shaderScript.type == "x-shader/x-fragment") {
+  compile_shader(prelude, type, source) {
+    let shader = null;
+    if (type === this.frament_shader_type) {
       shader = this.gl.createShader(this.gl.FRAGMENT_SHADER);
-    } else if (shaderScript.type == "x-shader/x-vertex") {
+    } else if (type === this.vertex_shader_type) {
       shader = this.gl.createShader(this.gl.VERTEX_SHADER);
     } else {
       return null;  // Unknown shader type
     }
 
-    this.gl.shaderSource(shader, theSource);
+    this.gl.shaderSource(shader, prelude + source);
 
     this.gl.compileShader(shader);
 
@@ -414,6 +487,27 @@ class DemoSystemV2 {
     }
 
     return shader;
+  }
+
+  get_shader(prelude, id) {
+    const shaderScript = document.getElementById(id);
+
+    if (!shaderScript) {
+      return null;
+    }
+
+    var theSource    = "";
+    var currentChild = shaderScript.firstChild;
+
+    while(currentChild) {
+      if (currentChild.nodeType === 3) {
+        theSource += currentChild.textContent;
+      }
+
+      currentChild = currentChild.nextSibling;
+    }
+
+    return this.compile_shader(prelude, shaderScript.type, theSource);
   }
 
 }
