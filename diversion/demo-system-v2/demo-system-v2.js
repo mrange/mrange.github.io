@@ -208,9 +208,9 @@ void main(void) {
       // this.gl.enable(this.gl.DEPTH_TEST);           // Enable depth testing
       // this.gl.depthFunc(this.gl.LEQUAL);            // Near things obscure far things
 
-      await this.init_scenes();
-      this.init_textures();
       this.init_buffers();
+      this.init_textures();
+      await this.init_scenes();
 
       this.initialized = true;
       on_init_complete();
@@ -391,29 +391,10 @@ void main(void) {
       this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
     }
 
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesBuffer);
-    this.gl.vertexAttribPointer(pass.vertexPositionAttribute, 3, this.gl.FLOAT, false, 0, 0);
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesNormalBuffer);
-    this.gl.vertexAttribPointer(pass.vertexNormalAttribute, 3, this.gl.FLOAT, false, 0, 0);
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesTextureCoordBuffer);
-    this.gl.vertexAttribPointer(pass.textureCoordAttribute, 2, this.gl.FLOAT, false, 0, 0);
-
     if (pass.uniformLocations.resolution)
       this.gl.uniform2f(pass.uniformLocations.resolution, width, height);
     if (pass.uniformLocations.time)
       this.gl.uniform1f(pass.uniformLocations.time, time);
-
-    if (this.analyze_audio && pass.uniformLocations.frequency_data) {
-      this.gl.activeTexture(this.gl.TEXTURE0);
-      this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture_frequency_data);
-      this.gl.uniform1i(pass.uniformLocations.frequency_data, 0);
-    }
-
-    if (this.analyze_audio && pass.uniformLocations.time_domain_data) {
-      this.gl.activeTexture(this.gl.TEXTURE1);
-      this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture_time_domain_data);
-      this.gl.uniform1i(pass.uniformLocations.time_domain_data, 1);
-    }
 
     if (pass.uniformLocations.prev_pass) {
       this.gl.activeTexture(this.gl.TEXTURE2);
@@ -432,7 +413,6 @@ void main(void) {
     }
 
     this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.verticesIndexBuffer);
-
     this.gl.drawElements(this.gl.TRIANGLES, 6, this.gl.UNSIGNED_SHORT, 0);
   }
 
@@ -530,6 +510,26 @@ void main(void) {
       }
     }
     pass.uniformLocations = uniformLocations;
+
+    // Setup static bindings
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesBuffer);
+    this.gl.vertexAttribPointer(pass.vertexPositionAttribute, 3, this.gl.FLOAT, false, 0, 0);
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesNormalBuffer);
+    this.gl.vertexAttribPointer(pass.vertexNormalAttribute, 3, this.gl.FLOAT, false, 0, 0);
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesTextureCoordBuffer);
+    this.gl.vertexAttribPointer(pass.textureCoordAttribute, 2, this.gl.FLOAT, false, 0, 0);
+
+    if (this.analyze_audio && pass.uniformLocations.frequency_data) {
+      this.gl.activeTexture(this.gl.TEXTURE0);
+      this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture_frequency_data);
+      this.gl.uniform1i(pass.uniformLocations.frequency_data, 0);
+    }
+
+    if (this.analyze_audio && pass.uniformLocations.time_domain_data) {
+      this.gl.activeTexture(this.gl.TEXTURE1);
+      this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture_time_domain_data);
+      this.gl.uniform1i(pass.uniformLocations.time_domain_data, 1);
+    }
   }
 
   compile_shader(prelude, type, source) {
