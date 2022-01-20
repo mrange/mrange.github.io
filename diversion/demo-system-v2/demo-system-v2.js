@@ -39,8 +39,8 @@ function createTextImage(...texts) {
   ctx.fillStyle = "white";
   ctx.font = "100px Josefin Slab";
   ctx.textAlign = "center";
-  for (const key in texts) {
-    const [w, h, text] = texts[key];
+  for (const textKey in texts) {
+    const [w, h, text] = texts[textKey];
     ctx.fillText(text, w*ctx.canvas.width, h*ctx.canvas.height);
   }
   ctx.restore();
@@ -72,7 +72,9 @@ class DemoSystemV2 {
 
     this.present_scene            =
       {
-          vs_inline: `
+        passes: [
+          {
+            vs_inline: `
 precision highp float;
 
 in vec4 a_position;
@@ -85,7 +87,7 @@ void main(void) {
   v_texcoord = a_texcoord;
 }
 `,
-          fs_inline: `
+            fs_inline: `
 precision highp float;
 
 uniform sampler2D prev_pass ;
@@ -96,7 +98,9 @@ out vec4 frag_color ;
 void main(void) {
   frag_color = texture(prev_pass, v_texcoord);
 }
-`,
+`
+          }
+        ]
       };
 }
 
@@ -197,7 +201,7 @@ void main(void) {
       // this.gl.enable(this.gl.DEPTH_TEST);           // Enable depth testing
       // this.gl.depthFunc(this.gl.LEQUAL);            // Near things obscure far things
 
-      await this.init_shaders();
+      await this.init_scenes();
       this.init_textures();
       this.init_buffers();
 
@@ -216,7 +220,9 @@ void main(void) {
         this.never_played = false;
         on_started();
       }
-      this.audio_context.resume();
+      if (this.analyze_audio) {
+        this.audio_context.resume();
+      }
       this.start_time = this.now() - this.audio.currentTime*1000;
       requestAnimationFrame(this.on_requestAnimationFrame);
       this.playing = true;
@@ -231,7 +237,9 @@ void main(void) {
 
   stop() {
     if (this.initialized && this.playing) {
-      this.audio_context.suspend();
+      if (this.analyze_audio) {
+        this.audio_context.suspend();
+      }
       this.playing = false;
     }
   }
@@ -321,70 +329,101 @@ void main(void) {
 
     const scene = on_select_scene(this.gl, time);
 
-    const bcr    = this.canvas.getBoundingClientRect();
-    const width  = bcr.width;
-    const height = bcr.height;
+    const passes = scene.passes;
+    if (passes.length > 0) {
+      const bcr    = this.canvas.getBoundingClientRect();
+      const width  = bcr.width;
+      const height = bcr.height;
 
-    this.gl.bindFramebuffer(this.gl.DRAW_FRAMEBUFFER, this.frame_buffer);
-    this.gl.framebufferTexture2D(this.gl.DRAW_FRAMEBUFFER, this.gl.COLOR_ATTACHMENT0, this.gl.TEXTURE_2D, this.ping_texture, 0);
+      this.gl.bindFramebuffer(this.gl.DRAW_FRAMEBUFFER, this.frame_buffer);
 
-    this.render_scene(time, width, height, null, scene);
+      let prev_texture    = null;
+      let render_texture  = null;
 
-    this.gl.framebufferTexture2D(this.gl.DRAW_FRAMEBUFFER, this.gl.COLOR_ATTACHMENT0, this.gl.TEXTURE_2D, null, 0);
-    this.gl.bindFramebuffer(this.gl.DRAW_FRAMEBUFFER, null);
+      let flip            = undefined;
 
-    this.render_scene(time, width, height, this.ping_texture, this.present_scene);
+      for (const passKey in passes) {
+        const pass = passes[passKey];
+        if (flip === true) {
+          prev_texture    = this.ping_texture;
+          render_texture  = this.pong_texture;
+        } else if (flip === false) {
+          prev_texture    = this.pong_texture;
+          render_texture  = this.ping_texture;
+        } else {
+          prev_texture    = null;
+          render_texture  = this.ping_texture;
+        }
+        flip = !flip;
 
-    const tmp               = this.ping_texture;
-    this.ping_texture       = this.prev_frame_texture;
-    this.prev_frame_texture = this.ping_texture;
+        this.gl.framebufferTexture2D(this.gl.DRAW_FRAMEBUFFER, this.gl.COLOR_ATTACHMENT0, this.gl.TEXTURE_2D, render_texture, 0);
+        this.render_pass(time, width, height, prev_texture, scene, pass);
+      }
+
+      this.gl.framebufferTexture2D(this.gl.DRAW_FRAMEBUFFER, this.gl.COLOR_ATTACHMENT0, this.gl.TEXTURE_2D, null, 0);
+      this.gl.bindFramebuffer(this.gl.DRAW_FRAMEBUFFER, null);
+
+      // Copies the render texture to the screen
+      this.render_pass(time, width, height, render_texture, this.present_scene, this.present_scene.passes[0]);
+
+      // Sinces passes.length > 0 flip should never be undefined
+      if (flip)
+      {
+        this.ping_texture = this.prev_frame_texture;
+      }
+      else
+      {
+        this.pong_texture = this.prev_frame_texture;
+      }
+      this.prev_frame_texture = render_texture;
+    }
 
     requestAnimationFrame(this.on_requestAnimationFrame);
   }
 
-  render_scene(time, width, height, prev_pass, scene) {
-    this.gl.useProgram(scene.shaderProgram);
+  render_pass(time, width, height, prev_pass, scene, pass) {
+    this.gl.useProgram(pass.shaderProgram);
 
-    if (scene.requires_clear) {
+    if (pass.requires_clear) {
       this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
     }
 
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesBuffer);
-    this.gl.vertexAttribPointer(scene.vertexPositionAttribute, 3, this.gl.FLOAT, false, 0, 0);
+    this.gl.vertexAttribPointer(pass.vertexPositionAttribute, 3, this.gl.FLOAT, false, 0, 0);
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesTextureCoordBuffer);
-    this.gl.vertexAttribPointer(scene.textureCoordAttribute, 2, this.gl.FLOAT, false, 0, 0);
+    this.gl.vertexAttribPointer(pass.textureCoordAttribute, 2, this.gl.FLOAT, false, 0, 0);
 
-    if (scene.uniformLocations.resolution)
-      this.gl.uniform2f(scene.uniformLocations.resolution, width, height);
-    if (scene.uniformLocations.time)
-      this.gl.uniform1f(scene.uniformLocations.time, time);
+    if (pass.uniformLocations.resolution)
+      this.gl.uniform2f(pass.uniformLocations.resolution, width, height);
+    if (pass.uniformLocations.time)
+      this.gl.uniform1f(pass.uniformLocations.time, time);
 
-    if (this.analyze_audio && scene.uniformLocations.frequency_data) {
+    if (this.analyze_audio && pass.uniformLocations.frequency_data) {
       this.gl.activeTexture(this.gl.TEXTURE0);
       this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture_frequency_data);
-      this.gl.uniform1i(scene.uniformLocations.frequency_data, 0);
+      this.gl.uniform1i(pass.uniformLocations.frequency_data, 0);
     }
 
-    if (this.analyze_audio && scene.uniformLocations.time_domain_data) {
+    if (this.analyze_audio && pass.uniformLocations.time_domain_data) {
       this.gl.activeTexture(this.gl.TEXTURE1);
       this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture_time_domain_data);
-      this.gl.uniform1i(scene.uniformLocations.time_domain_data, 1);
+      this.gl.uniform1i(pass.uniformLocations.time_domain_data, 1);
     }
 
-    if (scene.uniformLocations.prev_pass) {
+    if (pass.uniformLocations.prev_pass) {
       this.gl.activeTexture(this.gl.TEXTURE2);
       this.gl.bindTexture(this.gl.TEXTURE_2D, prev_pass);
-      this.gl.uniform1i(scene.uniformLocations.prev_pass, 2);
+      this.gl.uniform1i(pass.uniformLocations.prev_pass, 2);
     }
 
-    if (scene.uniformLocations.prev_frame) {
+    if (pass.uniformLocations.prev_frame) {
       this.gl.activeTexture(this.gl.TEXTURE3);
       this.gl.bindTexture(this.gl.TEXTURE_2D, this.prev_frame_texture);
-      this.gl.uniform1i(scene.uniformLocations.prev_frame, 2);
+      this.gl.uniform1i(pass.uniformLocations.prev_frame, 2);
     }
 
     if (scene.set_uniforms) {
-      scene.set_uniforms(this.gl, time, scene);
+      scene.set_uniforms(this.gl, time, scene, pass);
     }
 
     this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.verticesIndexBuffer);
@@ -392,8 +431,8 @@ void main(void) {
   }
 
   init_textures() {
-    for (const key in all_textures) {
-      const texture = all_textures[key];
+    for (const textureKey in all_textures) {
+      const texture = all_textures[textureKey];
       if(!texture) continue;
       if(!texture.image) continue;
       const result = texture.image();
@@ -412,17 +451,22 @@ void main(void) {
     }
   }
 
-  async init_shaders() {
+  async init_scenes() {
     const scenes = all_scenes;
     scenes.dsv2__present_scene = this.present_scene;
-    for (const key in scenes) {
-      on_loading_scene(key);
+    for (const sceneKey in scenes) {
+      on_loading_scene(sceneKey);
 
       // To let the UI refresh
       await this.sleep(20);
 
-      const scene = scenes[key];
+      const scene = scenes[sceneKey];
       if (!scene) continue;
+
+      const uniforms = ["time", "resolution", "prev_frame", "prev_pass", "frequency_data", "time_domain_data"]
+        .concat(global_uniforms)
+        .concat(scene.uniforms ? scene.uniforms : [])
+        ;
 
       const defines = scene.defines
         ? (scene.defines.map(d => "#define " + d).join("\n"))
@@ -430,41 +474,48 @@ void main(void) {
         ;
       const prelude = "#version 300 es\n" + defines;
 
-      const vertexShader    = scene.vs_inline
-        ? this.compile_shader(prelude, this.vertex_shader_type, scene.vs_inline)
-        : this.get_shader(prelude, scene.vs)
-        ;
-      const fragmentShader  = scene.fs_inline
-        ? this.compile_shader(prelude, this.frament_shader_type, scene.fs_inline)
-        : this.get_shader(prelude, scene.fs)
-        ;
-
-      scene.shaderProgram = this.gl.createProgram();
-      this.gl.attachShader(scene.shaderProgram, vertexShader);
-      this.gl.attachShader(scene.shaderProgram, fragmentShader);
-      this.gl.linkProgram(scene.shaderProgram);
-
-      if (!this.gl.getProgramParameter(scene.shaderProgram, this.gl.LINK_STATUS)) {
-        alert("Unable to initialize the shader program: " + key);
+      const passes = scene.passes;
+      for (const passKey in passes) {
+        const pass = passes[passKey];
+        this.init_pass(uniforms, prelude, pass)
       }
-
-      this.gl.useProgram(scene.shaderProgram);
-      scene.vertexPositionAttribute = this.gl.getAttribLocation(scene.shaderProgram, "a_position");
-      this.gl.enableVertexAttribArray(scene.vertexPositionAttribute);
-
-      scene.textureCoordAttribute = this.gl.getAttribLocation(scene.shaderProgram, "a_texcoord");
-      this.gl.enableVertexAttribArray(scene.textureCoordAttribute);
-
-      const uniformLocations = {};
-      const uniforms = ["time", "resolution", "prev_frame", "prev_pass", "frequency_data", "time_domain_data"].concat(global_uniforms).concat(scene.uniforms ? scene.uniforms : []);
-      for (const idx in uniforms) {
-        const uniform = uniforms[idx];
-        if (uniform) {
-          uniformLocations[uniform] = this.gl.getUniformLocation(scene.shaderProgram, uniform);
-        }
-      }
-      scene.uniformLocations = uniformLocations;
     }
+  }
+
+  init_pass(uniforms, prelude, pass) {
+    const vertexShader    = pass.vs_inline
+      ? this.compile_shader(prelude, this.vertex_shader_type, pass.vs_inline)
+      : this.get_shader(prelude, pass.vs)
+      ;
+    const fragmentShader  = pass.fs_inline
+      ? this.compile_shader(prelude, this.frament_shader_type, pass.fs_inline)
+      : this.get_shader(prelude, pass.fs)
+      ;
+
+    pass.shaderProgram = this.gl.createProgram();
+    this.gl.attachShader(pass.shaderProgram, vertexShader);
+    this.gl.attachShader(pass.shaderProgram, fragmentShader);
+    this.gl.linkProgram(pass.shaderProgram);
+
+    if (!this.gl.getProgramParameter(pass.shaderProgram, this.gl.LINK_STATUS)) {
+      alert("Unable to initialize the shader program: " + sceneKey);
+    }
+
+    this.gl.useProgram(pass.shaderProgram);
+    pass.vertexPositionAttribute = this.gl.getAttribLocation(pass.shaderProgram, "a_position");
+    this.gl.enableVertexAttribArray(pass.vertexPositionAttribute);
+
+    pass.textureCoordAttribute = this.gl.getAttribLocation(pass.shaderProgram, "a_texcoord");
+    this.gl.enableVertexAttribArray(pass.textureCoordAttribute);
+
+    const uniformLocations = {};
+    for (const uniformKey in uniforms) {
+      const uniform = uniforms[uniformKey];
+      if (uniform) {
+        uniformLocations[uniform] = this.gl.getUniformLocation(pass.shaderProgram, uniform);
+      }
+    }
+    pass.uniformLocations = uniformLocations;
   }
 
   compile_shader(prelude, type, source) {

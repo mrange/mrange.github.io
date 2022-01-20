@@ -169,18 +169,26 @@
       //  Default uniforms always includes time and resolution
       const all_scenes = {
         red_scene : {
-          vs: "vs_default",
-          fs: "fs_red_scene"
+          passes:[
+            {
+              vs: "vs_default",
+              fs: "fs_red_scene"
+            }
+          ]
         },
         equalizer_scene : {
-          vs: "vs_default",
-          fs: "fs_equalizer_scene",
+          passes:[
+            {
+              vs: "vs_default",
+              fs: "fs_equalizer_scene"
+            }
+          ],
           uniforms: ["impulse_001"],
-          set_uniforms: (gl, time, scene) => {
+          set_uniforms: (gl, time, scene, pass) => {
             // Texture 0 - 2 are reserved
-            gl.activeTexture(gl.TEXTURE3);
+            gl.activeTexture(gl.TEXTURE4);
             gl.bindTexture(gl.TEXTURE_2D, all_textures.impulse_001.texture);
-            gl.uniform1i(scene.uniformLocations.impulse_001, 3);
+            gl.uniform1i(pass.uniformLocations.impulse_001, 4);
           }
         },
       };
