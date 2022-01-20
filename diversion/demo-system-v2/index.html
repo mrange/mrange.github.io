@@ -62,14 +62,18 @@
       precision highp float;
 
       in vec4 a_position;
+      in vec3 a_normal  ;
       in vec2 a_texcoord;
 
+      out vec4 v_position;
+      out vec3 v_normal  ;
       out vec2 v_texcoord;
 
       void main(void) {
         gl_Position = a_position;
-
-        v_texcoord = a_texcoord;
+        v_position  = a_position;
+        v_normal    = a_normal  ;
+        v_texcoord  = a_texcoord;
       }
     </script>
 
@@ -84,7 +88,10 @@
       uniform sampler2D frequency_data    ;
       uniform sampler2D time_domain_data  ;
 
+      in vec4 v_position  ;
+      in vec3 v_normal    ;
       in vec2 v_texcoord  ;
+
       out vec4 frag_color ;
 
       // -----------------------------------------------------------------------------
@@ -109,7 +116,10 @@
       uniform sampler2D time_domain_data  ;
       uniform sampler2D impulse_001       ;
 
+      in vec4 v_position  ;
+      in vec3 v_normal    ;
       in vec2 v_texcoord  ;
+
       out vec4 frag_color ;
 
       // -----------------------------------------------------------------------------
@@ -156,7 +166,10 @@
       uniform sampler2D prev_pass         ;
       uniform sampler2D prev_frame        ;
 
+      in vec4 v_position  ;
+      in vec3 v_normal    ;
       in vec2 v_texcoord  ;
+
       out vec4 frag_color ;
 
       // -----------------------------------------------------------------------------

@@ -78,13 +78,18 @@ class DemoSystemV2 {
 precision highp float;
 
 in vec4 a_position;
+in vec3 a_normal  ;
 in vec2 a_texcoord;
 
+out vec4 v_position;
+out vec3 v_normal  ;
 out vec2 v_texcoord;
 
 void main(void) {
   gl_Position = a_position;
-  v_texcoord = a_texcoord;
+  v_position  = a_position;
+  v_normal    = a_normal  ;
+  v_texcoord  = a_texcoord;
 }
 `,
             fs_inline: `
@@ -92,7 +97,10 @@ precision highp float;
 
 uniform sampler2D prev_pass ;
 
+in vec4 v_position  ;
+in vec3 v_normal    ;
 in vec2 v_texcoord  ;
+
 out vec4 frag_color ;
 
 void main(void) {
@@ -174,29 +182,28 @@ void main(void) {
     const height  = window.innerHeight;
 
     // TODO:  Make configurable
-    // Shader is a bit hungry for FLOPs so limit to 1080 in y res
     this.Height = Math.round(height < 1080 ? height : 1080);
     this.Width = Math.round((width/height)*this.Height);
     this.canvas.width  = this.Width;
     this.canvas.height = this.Height;
 
-    this.init_webGL(this.canvas);      // Initialize the GL context
-
-    this.frame_buffer   = this.gl.createFramebuffer();
-
-    this.prev_frame_texture   = this.create_blank_texture(this.Width, this.Height);
-    this.ping_texture         = this.create_blank_texture(this.Width, this.Height);
-    this.pong_texture         = this.create_blank_texture(this.Width, this.Height);
+    this.init_webGL(this.canvas);
 
     // Only continue if WebGL is available and working
     if (this.gl) {
+      this.frame_buffer   = this.gl.createFramebuffer();
+
+      this.prev_frame_texture   = this.create_blank_texture(this.Width, this.Height);
+      this.ping_texture         = this.create_blank_texture(this.Width, this.Height);
+      this.pong_texture         = this.create_blank_texture(this.Width, this.Height);
+
       if (this.analyze_audio) {
         this.texture_frequency_data   = this.create_bins_texture(this.time_domain_data);
         this.texture_time_domain_data = this.create_bins_texture(this.frequency_data);
       }
 
-      this.gl.clearColor(0.0, 0.0, 0.0, 1.0);       // Clear to black, fully opaque
-      this.gl.clearDepth(1.0);                      // Clear everything
+      this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
+      this.gl.clearDepth(1.0);
       // TODO: We just paint a single quad, depth stuff not needed?
       // this.gl.enable(this.gl.DEPTH_TEST);           // Enable depth testing
       // this.gl.depthFunc(this.gl.LEQUAL);            // Near things obscure far things
@@ -254,57 +261,53 @@ void main(void) {
       alert("Unable to initialize WebGL. Your browser may not support it.");
     }
 
-    // If we don't have a GL context, give up now
     if (!this.gl) {
       alert("Unable to initialize WebGL. Your browser may not support it.");
     }
   }
 
   init_buffers() {
+    // Quad vertices
     this.verticesBuffer = this.gl.createBuffer();
-
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesBuffer);
-
     const vertices = [
-      // Front face
       -1.0, -1.0,  1.0,
        1.0, -1.0,  1.0,
        1.0,  1.0,  1.0,
       -1.0,  1.0,  1.0,
     ];
-
-    // Now pass the list of vertices into WebGL to build the shape. We
-    // do this by creating a Float32Array from the JavaScript array,
-    // then use it to fill the current vertex buffer.
     this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(vertices), this.gl.STATIC_DRAW);
 
+    // Quad normals
+    this.verticesNormalBuffer = this.gl.createBuffer();
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesNormalBuffer);
+    const verticesNormal = [
+       0.0,  0.0, -1.0,
+       0.0,  0.0, -1.0,
+       0.0,  0.0, -1.0,
+       0.0,  0.0, -1.0,
+    ];
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(verticesNormal), this.gl.STATIC_DRAW);
+
+    // Quad texture coords
     this.verticesTextureCoordBuffer = this.gl.createBuffer();
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesTextureCoordBuffer);
-
     const textureCoordinates = [
-      // Front
       0.0,  0.0,
       1.0,  0.0,
       1.0,  1.0,
       0.0,  1.0,
     ];
-
     this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(textureCoordinates), this.gl.STATIC_DRAW);
 
-    // Build the element array buffer; this specifies the indices
-    // into the vertex array for each face's vertices.
+    // Quad index buffer
     this.verticesIndexBuffer = this.gl.createBuffer();
     this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.verticesIndexBuffer);
-
-    // This array defines each face as two triangles, using the
-    // indices into the vertex array to specify each triangle's
-    // position.
     const vertexIndices = [
       0,  1,  2,
-      0,  2,  3,   // front
+      0,  2,  3,
     ]
 
-    // Now send the element array to GL
     this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(vertexIndices), this.gl.STATIC_DRAW);
   }
 
@@ -366,7 +369,7 @@ void main(void) {
       // Copies the render texture to the screen
       this.render_pass(time, width, height, render_texture, this.present_scene, this.present_scene.passes[0]);
 
-      // Sinces passes.length > 0 flip should never be undefined
+      // Since passes.length > 0 flip should never be undefined
       if (flip)
       {
         this.ping_texture = this.prev_frame_texture;
@@ -390,6 +393,8 @@ void main(void) {
 
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesBuffer);
     this.gl.vertexAttribPointer(pass.vertexPositionAttribute, 3, this.gl.FLOAT, false, 0, 0);
+    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesNormalBuffer);
+    this.gl.vertexAttribPointer(pass.vertexNormalAttribute, 3, this.gl.FLOAT, false, 0, 0);
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesTextureCoordBuffer);
     this.gl.vertexAttribPointer(pass.textureCoordAttribute, 2, this.gl.FLOAT, false, 0, 0);
 
@@ -427,6 +432,7 @@ void main(void) {
     }
 
     this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.verticesIndexBuffer);
+
     this.gl.drawElements(this.gl.TRIANGLES, 6, this.gl.UNSIGNED_SHORT, 0);
   }
 
@@ -492,6 +498,11 @@ void main(void) {
       : this.get_shader(prelude, pass.fs)
       ;
 
+    if (pass.shaderProgram) {
+      // Already been initialized, can happen with shared passes
+      return;
+    }
+
     pass.shaderProgram = this.gl.createProgram();
     this.gl.attachShader(pass.shaderProgram, vertexShader);
     this.gl.attachShader(pass.shaderProgram, fragmentShader);
@@ -504,6 +515,9 @@ void main(void) {
     this.gl.useProgram(pass.shaderProgram);
     pass.vertexPositionAttribute = this.gl.getAttribLocation(pass.shaderProgram, "a_position");
     this.gl.enableVertexAttribArray(pass.vertexPositionAttribute);
+
+    pass.vertexNormalAttribute = this.gl.getAttribLocation(pass.shaderProgram, "a_normal");
+    this.gl.enableVertexAttribArray(pass.vertexNormalAttribute);
 
     pass.textureCoordAttribute = this.gl.getAttribLocation(pass.shaderProgram, "a_texcoord");
     this.gl.enableVertexAttribArray(pass.textureCoordAttribute);
@@ -525,7 +539,7 @@ void main(void) {
     } else if (type === this.vertex_shader_type) {
       shader = this.gl.createShader(this.gl.VERTEX_SHADER);
     } else {
-      return null;  // Unknown shader type
+      return null;
     }
 
     this.gl.shaderSource(shader, prelude + source);
