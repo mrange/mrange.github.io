@@ -73,7 +73,7 @@
       }
     </script>
 
-    <script id="fs_red_scene" type="x-shader/x-fragment">
+    <script id="fs_red_pass" type="x-shader/x-fragment">
       // -----------------------------------------------------------------------------
       // PRELUDE
       // -----------------------------------------------------------------------------
@@ -97,7 +97,7 @@
       }
     </script>
 
-    <script id="fs_equalizer_scene" type="x-shader/x-fragment">
+    <script id="fs_equalizer_pass" type="x-shader/x-fragment">
       // -----------------------------------------------------------------------------
       // PRELUDE
       // -----------------------------------------------------------------------------
@@ -143,6 +143,39 @@
       }
     </script>
 
+    <script id="fs_postproc_pass" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+      uniform sampler2D prev_pass         ;
+      uniform sampler2D prev_frame        ;
+
+      in vec2 v_texcoord  ;
+      out vec4 frag_color ;
+
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+
+      // License: Unknown, author: nmz (twitter: @stormoid), found: https://www.shadertoy.com/view/NdfyRM
+      float sRGB(float t) { return mix(1.055*pow(t, 1./2.4) - 0.055, 12.92*t, step(t, 0.0031308)); }
+      // License: Unknown, author: nmz (twitter: @stormoid), found: https://www.shadertoy.com/view/NdfyRM
+      vec3 sRGB(in vec3 c) { return vec3 (sRGB(c.x), sRGB(c.y), sRGB(c.z)); }
+
+      void main(void) {
+        vec4 pcol = texture(prev_pass, v_texcoord);
+        vec3 col = sRGB(pcol.xyz);
+
+        frag_color = vec4(col, pcol.w);
+      }
+    </script>
+
     <script type = "text/javascript">
       const analyze_audio   = true;
       const demo_system     = new DemoSystemV2(analyze_audio);
@@ -172,7 +205,7 @@
           passes:[
             {
               vs: "vs_default",
-              fs: "fs_red_scene"
+              fs: "fs_red_pass"
             }
           ]
         },
@@ -180,12 +213,16 @@
           passes:[
             {
               vs: "vs_default",
-              fs: "fs_equalizer_scene"
+              fs: "fs_equalizer_pass"
+            },
+            {
+              vs: "vs_default",
+              fs: "fs_postproc_pass"
             }
           ],
           uniforms: ["impulse_001"],
           set_uniforms: (gl, time, scene, pass) => {
-            // Texture 0 - 2 are reserved
+            // Texture 0 - 3 are reserved
             gl.activeTexture(gl.TEXTURE4);
             gl.bindTexture(gl.TEXTURE_2D, all_textures.impulse_001.texture);
             gl.uniform1i(pass.uniformLocations.impulse_001, 4);
