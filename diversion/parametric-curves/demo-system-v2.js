@@ -48,6 +48,161 @@ function createTextImage(...texts) {
   return image;
 }
 
+function vector3(x, y, z) {
+  return new Float32Array([
+    x,
+    y,
+    z,
+  ]);
+}
+
+function subtractVector3(a, b) {
+  return new Float32Array([
+    a[0] - b[0],
+    a[1] - b[1],
+    a[2] - b[2],
+  ]);
+}
+
+function addVector3(a, b) {
+  return new Float32Array([
+    a[0] + b[0],
+    a[1] + b[1],
+    a[2] + b[2],
+  ]);
+}
+
+function crossVector3(a, b) {
+  return new Float32Array([
+    a[1]*b[2]-a[2]*b[1],
+    a[2]*b[0]-a[0]*b[2],
+    a[0]*b[1]-a[1]*b[0],
+  ]);
+}
+
+function dotVector3(a, b) {
+  return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+}
+
+function scaleVector3(a, b) {
+  return new Float32Array([
+    a*b[0],
+    a*b[1],
+    a*b[2],
+  ]);
+}
+
+function normalizeVector3(a) {
+  const il = 1.0/Math.sqrt(dotVector3(a, a));
+  return scaleVector3(il, a);
+}
+
+function printMatrix4(a) {
+  let s = "";
+  for(let r = 0; r < 4; ++r) {
+    for(let c = 0; c < 4; ++c) {
+      s += a[c+4*r];
+      s += ","
+    }
+    s += "\n";
+  }
+  console.log(s);
+}
+
+function translateMatrix4(t) {
+  return new Float32Array([
+    1, 0, 0,t[0],
+    0, 1, 0,t[1],
+    0, 0, 1,t[2],
+    0, 0, 0, 1  ,
+  ]);
+}
+
+function transposeMatrix4(t) {
+  return new Float32Array([
+    t[0],t[4],t[8] ,t[12],
+    t[1],t[5],t[9] ,t[13],
+    t[2],t[6],t[10],t[14],
+    t[3],t[7],t[11],t[15],
+  ]);
+}
+
+function rotateXMatrix4(a) {
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return new Float32Array([
+    1, 0,0,0,
+    0, c,s,0,
+    0,-s,c,0,
+    0, 0,0,1,
+  ]);
+}
+
+function rotateYMatrix4(a) {
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return new Float32Array([
+     c,0,s,0,
+     0,1,0,0,
+    -s,0,c,0,
+     0,0,0,1,
+  ]);
+}
+
+function rotateZMatrix4(a) {
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return new Float32Array([
+     c,s,0,0,
+    -s,c,0,0,
+     0,0,1,0,
+     0,0,0,1,
+  ]);
+}
+
+function multiplyMatrix4(a, b) {
+  const m = new Float32Array(16);
+  for(let c = 0; c < 4; ++c) {
+    for(let r = 0; r < 4; ++r) {
+      let sum = 0.0;
+      for(let i = 0; i < 4; ++i) {
+        sum += a[i+4*r]*b[c+4*i];
+      }
+      m[c+4*r] = sum;
+    }
+  }
+  return m;
+}
+
+function lookAtMatrix4(eye, lookAt, up) {
+  const zz = normalizeVector3(subtractVector3(lookAt, eye));
+  const xx = normalizeVector3(crossVector3(zz, up));
+  const yy = crossVector3(xx, zz);
+  const a = new Float32Array([
+    xx[0],yy[0],-zz[0], 0,
+    xx[1],yy[1],-zz[1], 0,
+    xx[2],yy[2],-zz[2], 0,
+        0,    0,     0, 1,
+    ]);
+  const b = translateMatrix4(scaleVector3(-1.0, eye));
+  const c = transposeMatrix4(b);
+  const d = multiplyMatrix4(c, a);
+  return d;
+}
+
+function projectionMatrix4(fov, ratio, near, far) {
+  const h = 1.0/Math.tan(fov*0.5);
+  const w = h/ratio;
+  const d = far-near;
+  const zf = -(far+near)/d;
+  const zn = -2.0*far*near/d;
+  return new Float32Array([
+      w, 0, 0, 0,
+      0, h, 0, 0,
+      0, 0,zf,-1,
+      0, 0,zn, 0,
+    ]);
+}
 
 class DemoSystemV2 {
   now() {

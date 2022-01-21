@@ -61,6 +61,8 @@
     <script id="vs_default" type="x-shader/x-vertex">
       precision highp float;
 
+      uniform mat4 mvp;
+
       in vec4 a_position;
       in vec3 a_normal  ;
       in vec2 a_texcoord;
@@ -70,7 +72,7 @@
       out vec2 v_texcoord;
 
       void main(void) {
-        gl_Position = a_position;
+        gl_Position = mvp*a_position;
         v_position  = a_position;
         v_normal    = a_normal  ;
         v_texcoord  = a_texcoord;
@@ -141,13 +143,16 @@
     </script>
 
     <script type = "text/javascript">
+      const projection  = projectionMatrix4(Math.PI/3.0, 4.0/3.0, 4, 1000);
+      const view        = lookAtMatrix4(vector3(3,4,3), vector3(0,0,0), vector3(0,1,0));
+      const mvp         = multiplyMatrix4(view, projection);
+
       const analyze_audio   = false;
       const demo_system     = new DemoSystemV2(analyze_audio);
 
       const global_uniforms = [];
 
-      const all_textures = {
-      }
+      const all_textures = { }
 
       // List all scenes, all scenes have a vertex shader (often shared)
       //  and a fragment shader
@@ -160,8 +165,12 @@
             {
               vs: "vs_default",
               fs: "fs_red_pass"
-            }
-          ]
+            },
+          ],
+          uniforms: ["mvp"],
+          set_uniforms: (gl, time, scene, pass) => {
+            gl.uniformMatrix4fv(pass.uniformLocations.mvp, false, mvp);
+          }
         }
       };
 
