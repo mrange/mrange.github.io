@@ -291,8 +291,10 @@ void main(void) {
   create_blank_texture(width, height) {
     const texture = this.gl.createTexture();
     this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
-    // TODO: use this.gl.FLOAT instead
     this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, width, height, 0, this.gl.RGBA, this.gl.UNSIGNED_BYTE, null);
+    // TODO: use this.gl.FLOAT instead?
+    //  this.EXT_color_buffer_float = this.gl.getExtension('EXT_color_buffer_float');
+    //  this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA32F, width, height, 0, this.gl.RGBA, this.gl.FLOAT, null);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
@@ -549,7 +551,7 @@ void main(void) {
     if (pass.uniformLocations.prev_frame) {
       this.gl.activeTexture(this.gl.TEXTURE3);
       this.gl.bindTexture(this.gl.TEXTURE_2D, this.prev_frame_texture);
-      this.gl.uniform1i(pass.uniformLocations.prev_frame, 2);
+      this.gl.uniform1i(pass.uniformLocations.prev_frame, 3);
     }
 
     if (scene.pre_render) {

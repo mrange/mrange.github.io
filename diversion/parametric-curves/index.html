@@ -92,6 +92,8 @@
 
       #define RESOLUTION  resolution
 
+      #define BLUR
+
       // License: Unknown, author: nmz (twitter: @stormoid), found: https://www.shadertoy.com/view/NdfyRM
       float sRGB(float t) { return mix(1.055*pow(t, 1./2.4) - 0.055, 12.92*t, step(t, 0.0031308)); }
       // License: Unknown, author: nmz (twitter: @stormoid), found: https://www.shadertoy.com/view/NdfyRM
@@ -100,12 +102,14 @@
       void main(void) {
         vec2 q = v_texcoord;
         vec2 p = -1.0+2.0*q;
+
+      #ifdef BLUR
+        const int c = 3;
+
         vec2 pp = p;
         pp *= 0.9+0.0;
 
         vec2 pq = 0.5+0.5*pp;
-
-        const int c = 3;
 
         vec2 aa = 10.0/RESOLUTION.xy;
         vec2 start = pq-float(c)*aa;
@@ -126,6 +130,11 @@
         vec3 col = pcol.xyz;
         col = sRGB(col);
         col = mix(col, bcol, 0.6)*1.2;
+      #else
+        vec4 pcol = texture(prev_pass,v_texcoord);
+        vec3 col = pcol.xyz;
+        col = sRGB(col);
+      #endif
 
         fragColor = vec4(col, pcol.w);
       }
