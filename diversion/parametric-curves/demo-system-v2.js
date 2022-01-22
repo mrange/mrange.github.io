@@ -190,9 +190,9 @@ function lookAtMatrix4(eye, lookAt, up) {
   return d;
 }
 
-function projectionMatrix4(fov, ratio, near, far) {
+function projectionMatrix4(fov, aspectRatio, near, far) {
   const h = 1.0/Math.tan(fov*0.5);
-  const w = h/ratio;
+  const w = h/aspectRatio;
   const d = far-near;
   const zf = -(far+near)/d;
   const zn = -2.0*far*near/d;
@@ -233,17 +233,12 @@ class DemoSystemV2 {
 precision highp float;
 
 in vec4 a_position;
-in vec3 a_normal  ;
 in vec2 a_texcoord;
 
-out vec4 v_position;
-out vec3 v_normal  ;
 out vec2 v_texcoord;
 
 void main(void) {
   gl_Position = a_position;
-  v_position  = a_position;
-  v_normal    = a_normal  ;
   v_texcoord  = a_texcoord;
 }
 `,
@@ -252,10 +247,7 @@ precision highp float;
 
 uniform sampler2D prev_pass ;
 
-in vec4 v_position  ;
-in vec3 v_normal    ;
 in vec2 v_texcoord  ;
-
 out vec4 frag_color ;
 
 void main(void) {
@@ -337,8 +329,8 @@ void main(void) {
     const height  = window.innerHeight;
 
     // TODO:  Make configurable
-    this.Height = Math.round(height < 1080 ? height : 1080);
-    this.Width = Math.round((width/height)*this.Height);
+    this.Height = Math.round(height < 1200 ? height : 1200);
+    this.Width  = Math.round((width/height)*this.Height);
     this.canvas.width  = this.Width;
     this.canvas.height = this.Height;
 
@@ -368,7 +360,7 @@ void main(void) {
       await this.init_scenes();
 
       this.initialized = true;
-      on_init_complete();
+      on_init_complete(this.Width,this.Height);
 
       requestAnimationFrame(this.on_requestAnimationFrame);
     } else {
@@ -563,12 +555,20 @@ void main(void) {
       this.gl.uniform1i(pass.uniformLocations.prev_frame, 2);
     }
 
-    if (scene.set_uniforms) {
-      scene.set_uniforms(this.gl, time, scene, pass);
+    if (scene.pre_render) {
+      scene.pre_render(this.gl, time, scene, pass);
+    }
+
+    if (pass.pre_render) {
+      pass.pre_render(this.gl, time, scene, pass);
     }
 
     this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.verticesIndexBuffer);
-    this.gl.drawElements(this.gl.TRIANGLES, 6, this.gl.UNSIGNED_SHORT, 0);
+    if (pass.instances) {
+      this.gl.drawElementsInstanced(this.gl.TRIANGLES, 6, this.gl.UNSIGNED_SHORT, 0, pass.instances);
+    } else {
+      this.gl.drawElements(this.gl.TRIANGLES, 6, this.gl.UNSIGNED_SHORT, 0);
+    }
   }
 
   init_textures() {
@@ -649,13 +649,16 @@ void main(void) {
 
     this.gl.useProgram(pass.shaderProgram);
     pass.vertexPositionAttribute = this.gl.getAttribLocation(pass.shaderProgram, "a_position");
-    this.gl.enableVertexAttribArray(pass.vertexPositionAttribute);
+    if (pass.vertexPositionAttribute >= 0)
+      this.gl.enableVertexAttribArray(pass.vertexPositionAttribute);
 
     pass.vertexNormalAttribute = this.gl.getAttribLocation(pass.shaderProgram, "a_normal");
-    this.gl.enableVertexAttribArray(pass.vertexNormalAttribute);
+    if (pass.vertexNormalAttribute >= 0)
+      this.gl.enableVertexAttribArray(pass.vertexNormalAttribute);
 
     pass.textureCoordAttribute = this.gl.getAttribLocation(pass.shaderProgram, "a_texcoord");
-    this.gl.enableVertexAttribArray(pass.textureCoordAttribute);
+    if (pass.textureCoordAttribute >= 0)
+      this.gl.enableVertexAttribArray(pass.textureCoordAttribute);
 
     const uniformLocations = {};
     for (const uniformKey in uniforms) {
@@ -667,19 +670,23 @@ void main(void) {
     pass.uniformLocations = uniformLocations;
 
     // Setup static bindings
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesBuffer);
-    this.gl.vertexAttribPointer(pass.vertexPositionAttribute, 3, this.gl.FLOAT, false, 0, 0);
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesNormalBuffer);
-    this.gl.vertexAttribPointer(pass.vertexNormalAttribute, 3, this.gl.FLOAT, false, 0, 0);
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesTextureCoordBuffer);
+    if (pass.vertexPositionAttribute >= 0) {
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesBuffer);
+      this.gl.vertexAttribPointer(pass.vertexPositionAttribute, 3, this.gl.FLOAT, false, 0, 0);
+    }
+    if (pass.vertexNormalAttribute >= 0) {
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesNormalBuffer);
+      this.gl.vertexAttribPointer(pass.vertexNormalAttribute, 3, this.gl.FLOAT, false, 0, 0);
+    }
+    if (pass.textureCoordAttribute >= 0) {
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesTextureCoordBuffer);
     this.gl.vertexAttribPointer(pass.textureCoordAttribute, 2, this.gl.FLOAT, false, 0, 0);
-
+    }
     if (this.analyze_audio && pass.uniformLocations.frequency_data) {
       this.gl.activeTexture(this.gl.TEXTURE0);
       this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture_frequency_data);
       this.gl.uniform1i(pass.uniformLocations.frequency_data, 0);
     }
-
     if (this.analyze_audio && pass.uniformLocations.time_domain_data) {
       this.gl.activeTexture(this.gl.TEXTURE1);
       this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture_time_domain_data);
