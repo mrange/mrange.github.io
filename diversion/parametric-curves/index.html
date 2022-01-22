@@ -131,39 +131,13 @@
       }
     </script>
 
-    <script id="fs_red" type="x-shader/x-fragment">
-      precision highp float;
-
-      in vec2 v_texcoord;
-      out vec4 fragColor;
-
-      void main(void) {
-        fragColor = vec4(vec3(1.0, 0.0, 0.0), 1.0);
-      }
-    </script>
-
-    <script id="fs_circle" type="x-shader/x-fragment">
-      precision highp float;
-
-      in vec2 v_texcoord;
-      out vec4 fragColor;
-
-      void main(void) {
-        float d = length(v_texcoord) - 0.5;
-
-        fragColor = vec4(vec3(d < 0.0 ? 1.0 : 0.0, 0.0, 0.0), 1.0);
-      }
-    </script>
-
     <script id="vs_curves" type="x-shader/x-vertex">
       precision highp float;
 
       uniform float time;
-      uniform vec2 resolution;
       uniform mat4 mvp;
 
       in vec4 a_position;
-      in vec3 a_normal;
       in vec2 a_texcoord;
 
       out vec2        v_texcoord;
@@ -173,8 +147,8 @@
       #define PI          3.141592654
       #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
 
-      #define FROM_CURVE curve2
-      #define TO_CURVE   curve3
+      #define FROM_CURVE curve3
+      #define TO_CURVE   curve2
 
       const vec2 dimn = 2.0*vec2(120.0, 20.0);
       vec2 i2(float i) {
@@ -209,7 +183,6 @@
         return cp;
       }
 
-
       vec3 curve1(vec2 p) {
         p *= vec2(1.0, 4.0);
         float a = 0.5;
@@ -243,6 +216,17 @@
             r*cos(2.0*p.x)*(3.0+cos(3.0*p.x))
           , r*sin(2.0*p.x)*(3.0+cos(3.0*p.x))
           , r*sin(3.0*p.x)+PI*a*sin(p.y)
+          );
+        return cp;
+      }
+
+      vec3 curve4(vec2 p) {
+        p *= vec2(1.0, 2.0);
+        float r = 3.0;
+        vec3 cp = vec3(
+            r*cos(p.x)*sin(p.y)
+          , r*sin(p.x)*sin(p.y)
+          , r*cos(p.y)
           );
         return cp;
       }
@@ -286,7 +270,7 @@
 
         vec3 up = vec3(0.0, 0.0, -1.0);
         vec3 ww = d/l;
-        vec3 uu = cross(ww, up);
+        vec3 uu = normalize(cross(ww, up));
         vec3 vv = cross(uu, ww);
 
 
@@ -351,7 +335,8 @@
         float s = 0.25;
         vec3 gcol0 = hsv2rgb(vec3(h, 0.55, s));
         vec3 gcol1 = hsv2rgb(vec3(h, 0.95, s));
-        float ds = segmentx(p, mix(0.0, 1.0, smoothstep(0.25, 1.0, cos(2.0*PI*i2.x+time)))*r); //PCOS(4.0*PI*i2.x+time)
+        float sl = mix(0.0, 1.0, smoothstep(0.25, 1.0, cos(2.0*PI*i2.x+time)))*r;
+        float ds = segmentx(p, sl); //PCOS(4.0*PI*i2.x+time)
         col += 4.0*gcol0*exp(-9.0*ds);
         col += 2.0*gcol1*exp(-6.0*ds);
         col *= 3.0/(originalZ);
@@ -368,11 +353,6 @@
 
       const all_textures = { }
 
-      // List all scenes, all scenes have a vertex shader (often shared)
-      //  and a fragment shader
-      //  It's possible to reuse and tweak fragment shaders by using defines
-      //  Can also register extra uniforms
-      //  Default uniforms always includes time and resolution
       const all_scenes = {
         parametric_curve_scene : {
           passes:[
@@ -406,6 +386,7 @@
         globalThis.projection  = projectionMatrix4(Math.PI/3.0, width/height, 1, 1000);
         globalThis.view        = lookAtMatrix4(vector3(0,0,7), vector3(0,0,0), vector3(0,1,0));
         globalThis.mvp         = multiplyMatrix4(view, projection);
+        //printMatrix4(globalThis.mvp);
 
         const label = document.getElementById("info_label");
         label.textContent = "Ready, click play to run";

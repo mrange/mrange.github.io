@@ -351,9 +351,6 @@ void main(void) {
 
       this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
       this.gl.clearDepth(1.0);
-      // TODO: We just paint a single quad, depth stuff not needed?
-      // this.gl.enable(this.gl.DEPTH_TEST);           // Enable depth testing
-      // this.gl.depthFunc(this.gl.LEQUAL);            // Near things obscure far things
 
       this.init_buffers();
       this.init_textures();
@@ -418,10 +415,10 @@ void main(void) {
     this.verticesBuffer = this.gl.createBuffer();
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesBuffer);
     const vertices = [
-      -1.0, -1.0,  1.0,
-       1.0, -1.0,  1.0,
-       1.0,  1.0,  1.0,
-      -1.0,  1.0,  1.0,
+      -1.0, -1.0,  0.0,
+       1.0, -1.0,  0.0,
+       1.0,  1.0,  0.0,
+      -1.0,  1.0,  0.0,
     ];
     this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(vertices), this.gl.STATIC_DRAW);
 
