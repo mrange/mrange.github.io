@@ -225,11 +225,9 @@ class DemoSystemV2 {
     this.start_time               = this.now()             ;
     this.on_requestAnimationFrame = () => this.draw_scene();
 
-    this.present_scene            =
+    this.default_present_pass    =
       {
-        passes: [
-          {
-            vs_inline: `
+        vs_inline: `
 precision highp float;
 
 in vec4 a_position;
@@ -242,7 +240,7 @@ void main(void) {
   v_texcoord  = a_texcoord;
 }
 `,
-            fs_inline: `
+        fs_inline: `
 precision highp float;
 
 uniform sampler2D prev_pass ;
@@ -254,8 +252,6 @@ void main(void) {
   frag_color = texture(prev_pass, v_texcoord);
 }
 `
-          }
-        ]
       };
 }
 
@@ -336,7 +332,7 @@ void main(void) {
     this.canvas.width  = this.Width;
     this.canvas.height = this.Height;
 
-    this.init_webGL(this.canvas);
+    this.init_webGL();
 
     // Only continue if WebGL is available and working
     if (this.gl) {
@@ -512,8 +508,7 @@ void main(void) {
       this.gl.framebufferTexture2D(this.gl.DRAW_FRAMEBUFFER, this.gl.COLOR_ATTACHMENT0, this.gl.TEXTURE_2D, null, 0);
       this.gl.bindFramebuffer(this.gl.DRAW_FRAMEBUFFER, null);
 
-      // Copies the render texture to the screen
-      this.render_pass(time, width, height, render_texture, this.present_scene, this.present_scene.passes[0]);
+      this.render_pass(time, width, height, render_texture, scene, scene.present_pass);
 
       // Since passes.length > 0 flip should never be undefined
       if (flip)
@@ -525,6 +520,8 @@ void main(void) {
         this.pong_texture = this.prev_frame_texture;
       }
       this.prev_frame_texture = render_texture;
+    } else {
+      this.render_pass(time, width, height, null, scene, scene.present_pass);
     }
 
     requestAnimationFrame(this.on_requestAnimationFrame);
@@ -593,7 +590,6 @@ void main(void) {
 
   async init_scenes() {
     const scenes = all_scenes;
-    scenes.dsv2__present_scene = this.present_scene;
     for (const sceneKey in scenes) {
       on_loading_scene(sceneKey);
 
@@ -614,7 +610,11 @@ void main(void) {
         ;
       const prelude = "#version 300 es\n" + defines;
 
-      const passes = scene.passes;
+      if (!scene.present_pass) {
+        scene.present_pass = this.default_present_pass;
+      }
+
+      const passes = scene.passes.concat(scene.present_pass);
       for (const passKey in passes) {
         const pass = passes[passKey];
         this.init_pass(uniforms, prelude, pass)
