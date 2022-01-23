@@ -30,14 +30,16 @@ function smoothstep(edge0, edge1, x) {
   return t * t * (3.0 - 2.0 * t);
 }
 
-function createTextImage(...texts) {
+function create_text_image(width, height, ...texts) {
   const image = document.getElementById("offscreen_canvas");
+  image.width = width;
+  image.height= height;
   const ctx   = image.getContext("2d");
 
   ctx.beginPath();
   ctx.rect(0, 0, ctx.canvas.width, ctx.canvas.height);
   ctx.fillStyle = "white";
-  ctx.font = "100px Josefin Slab";
+  ctx.font      = "200px Faster One";
   ctx.textAlign = "center";
   for (const textKey in texts) {
     const [w, h, text] = texts[textKey];
@@ -56,7 +58,7 @@ function vector3(x, y, z) {
   ]);
 }
 
-function subtractVector3(a, b) {
+function subtract_vector3(a, b) {
   return new Float32Array([
     a[0] - b[0],
     a[1] - b[1],
@@ -64,7 +66,7 @@ function subtractVector3(a, b) {
   ]);
 }
 
-function addVector3(a, b) {
+function add_vector3(a, b) {
   return new Float32Array([
     a[0] + b[0],
     a[1] + b[1],
@@ -72,7 +74,7 @@ function addVector3(a, b) {
   ]);
 }
 
-function crossVector3(a, b) {
+function cross_vector3(a, b) {
   return new Float32Array([
     a[1]*b[2]-a[2]*b[1],
     a[2]*b[0]-a[0]*b[2],
@@ -80,11 +82,11 @@ function crossVector3(a, b) {
   ]);
 }
 
-function dotVector3(a, b) {
+function dot_vector3(a, b) {
   return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 }
 
-function scaleVector3(a, b) {
+function scale_vector3(a, b) {
   return new Float32Array([
     a*b[0],
     a*b[1],
@@ -92,12 +94,12 @@ function scaleVector3(a, b) {
   ]);
 }
 
-function normalizeVector3(a) {
-  const il = 1.0/Math.sqrt(dotVector3(a, a));
-  return scaleVector3(il, a);
+function normalize_vector3(a) {
+  const il = 1.0/Math.sqrt(dot_vector3(a, a));
+  return scale_vector3(il, a);
 }
 
-function printMatrix4(a) {
+function print_matrix4(a) {
   let s = "";
   for(let r = 0; r < 4; ++r) {
     for(let c = 0; c < 4; ++c) {
@@ -109,7 +111,7 @@ function printMatrix4(a) {
   console.log(s);
 }
 
-function translateMatrix4(t) {
+function translate_matrix4(t) {
   return new Float32Array([
     1, 0, 0,t[0],
     0, 1, 0,t[1],
@@ -118,7 +120,7 @@ function translateMatrix4(t) {
   ]);
 }
 
-function transposeMatrix4(t) {
+function transpose_matrix4(t) {
   return new Float32Array([
     t[0],t[4],t[8] ,t[12],
     t[1],t[5],t[9] ,t[13],
@@ -127,7 +129,7 @@ function transposeMatrix4(t) {
   ]);
 }
 
-function rotateXMatrix4(a) {
+function rotate_x_matrix4(a) {
   const c = Math.cos(a);
   const s = Math.sin(a);
   return new Float32Array([
@@ -138,7 +140,7 @@ function rotateXMatrix4(a) {
   ]);
 }
 
-function rotateYMatrix4(a) {
+function rotate_y_matrix4(a) {
   const c = Math.cos(a);
   const s = Math.sin(a);
   return new Float32Array([
@@ -149,7 +151,7 @@ function rotateYMatrix4(a) {
   ]);
 }
 
-function rotateZMatrix4(a) {
+function rotate_z_matrix4(a) {
   const c = Math.cos(a);
   const s = Math.sin(a);
   return new Float32Array([
@@ -160,7 +162,7 @@ function rotateZMatrix4(a) {
   ]);
 }
 
-function multiplyMatrix4(a, b) {
+function multiply_matrix4(a, b) {
   const m = new Float32Array(16);
   for(let c = 0; c < 4; ++c) {
     for(let r = 0; r < 4; ++r) {
@@ -174,25 +176,25 @@ function multiplyMatrix4(a, b) {
   return m;
 }
 
-function lookAtMatrix4(eye, lookAt, up) {
-  const zz = normalizeVector3(subtractVector3(lookAt, eye));
-  const xx = normalizeVector3(crossVector3(zz, up));
-  const yy = crossVector3(xx, zz);
+function look_at_matrix4(eye, look_at, up) {
+  const zz = normalize_vector3(subtract_vector3(look_at, eye));
+  const xx = normalize_vector3(cross_vector3(zz, up));
+  const yy = cross_vector3(xx, zz);
   const a = new Float32Array([
     xx[0],yy[0],-zz[0], 0,
     xx[1],yy[1],-zz[1], 0,
     xx[2],yy[2],-zz[2], 0,
         0,    0,     0, 1,
     ]);
-  const b = translateMatrix4(scaleVector3(-1.0, eye));
-  const c = transposeMatrix4(b);
-  const d = multiplyMatrix4(c, a);
+  const b = translate_matrix4(scale_vector3(-1.0, eye));
+  const c = transpose_matrix4(b);
+  const d = multiply_matrix4(c, a);
   return d;
 }
 
-function projectionMatrix4(fov, aspectRatio, near, far) {
+function projection_matrix4(fov, aspect_ratio, near, far) {
   const h = 1.0/Math.tan(fov*0.5);
-  const w = h/aspectRatio;
+  const w = h/aspect_ratio;
   const d = far-near;
   const zf = -(far+near)/d;
   const zn = -2.0*far*near/d;
@@ -267,19 +269,30 @@ void main(void) {
     return texture;
   }
 
+  is_power_of_2(a) {
+    const b = Math.log(a)/Math.log(2.0);
+    const c = Math.floor(b);
+    const d = Math.abs(b - c);
+    return d < 1E-6;
+  }
+
   create_texture_from_image(image, override) {
+    console.log([image.width, image.height]);
+    const useMipMap = image.width === image.height && this.is_power_of_2(image.width);
     const texture = this.gl.createTexture();
     this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
-    this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
+//    this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
     this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, image);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
-    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR_MIPMAP_NEAREST);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, useMipMap ? this.gl.LINEAR_MIPMAP_NEAREST : this.gl.LINEAR);
     if (override) {
       override(this.gl);
     }
-    this.gl.generateMipmap(this.gl.TEXTURE_2D);
+    if (useMipMap) {
+      this.gl.generateMipmap(this.gl.TEXTURE_2D);
+    }
     this.gl.bindTexture(this.gl.TEXTURE_2D, null);
     return texture;
   }
@@ -572,7 +585,7 @@ void main(void) {
       const texture = all_textures[textureKey];
       if(!texture) continue;
       if(!texture.image) continue;
-      const result = texture.image();
+      const result = texture.image(this.Width, this.Height);
       if(!result) continue;
 
       let image     = undefined;

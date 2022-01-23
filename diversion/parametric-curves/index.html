@@ -18,7 +18,10 @@
     <title>Parametric curves</title>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <script src="demo-system-v2.js" type="text/javascript"></script>
-    <link href='https://fonts.googleapis.com/css?family=Josefin Slab' rel='stylesheet'>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Josefin+Slab&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Faster+One&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: 'Josefin Slab';
@@ -58,7 +61,7 @@
         }
     </style>
 
-    <script id="vs_postproc" type="x-shader/x-vertex">
+    <script id="vs_default" type="x-shader/x-vertex">
       precision highp float;
 
       uniform float time;
@@ -71,6 +74,40 @@
       void main() {
         gl_Position = a_position;
         v_texcoord  = a_texcoord;
+      }
+    </script>
+
+    <script id="fs_present" type="x-shader/x-fragment">
+      precision highp float;
+
+      uniform vec2 resolution;
+
+      uniform sampler2D prev_pass ;
+      uniform sampler2D overlay   ;
+
+      in vec2 v_texcoord  ;
+      out vec4 frag_color ;
+
+      vec4 toverlay(vec2 p) {
+        vec2 sz = vec2(textureSize(overlay, 0));
+        p.x *= sz.y/sz.x;
+        p *= 0.5;
+        p *= resolution.y/sz.y;
+        p += 0.5;
+        p.y = 1.0-p.y;
+        return texture(overlay, p);
+      }
+
+      void main(void) {
+        vec2 q = v_texcoord;
+        vec2 p = -1. + 2. * q;
+        p.x *= resolution.x/resolution.y;
+
+        vec4 pcol = texture(prev_pass, v_texcoord);
+        vec4 ocol = toverlay(p);
+        vec3 col = pcol.xyz;
+        col = mix(col, ocol.xyz, ocol.w);
+        frag_color = vec4(col, 1.0);
       }
     </script>
 
@@ -360,7 +397,11 @@
 
       const global_uniforms = [];
 
-      const all_textures = { }
+      const all_textures = {
+        overlay : {
+          image : (width, height) => create_text_image(width, 0.25*height, [0.5, 0.5, "Impulse"]),
+        }
+      }
 
       const all_scenes = {
         parametric_curve_scene : {
@@ -376,25 +417,36 @@
                 gl.blendEquationSeparate(gl.FUNC_ADD, gl.MAX);
 
                 gl.uniformMatrix4fv(pass.uniformLocations.mvp, false, mvp);
-              }
+              },
             },
             {
-              vs: "vs_postproc",
+              vs: "vs_default",
               fs: "fs_postproc",
               pre_render: (gl, time, scene, pass) => {
                 gl.disable(gl.BLEND);
               }
             },
           ],
-          uniforms: ["mvp"],
+          present_pass: {
+            vs: "vs_default",
+            fs: "fs_present",
+            pre_render: (gl, time, scene, pass) => {
+              gl.disable(gl.BLEND);
+              // Texture 0 - 3 are reserved
+              gl.activeTexture(gl.TEXTURE4);
+              gl.bindTexture(gl.TEXTURE_2D, all_textures.overlay.texture);
+              gl.uniform1i(pass.uniformLocations.overlay, 4);
+            },
+          },
+          uniforms: ["overlay", "mvp"],
         }
       };
 
       // Called after initialization of all shaders are complete
       function on_init_complete(width, height) {
-        globalThis.projection  = projectionMatrix4(Math.PI/3.0, width/height, 1, 1000);
-        globalThis.view        = lookAtMatrix4(vector3(0,0,7), vector3(0,0,0), vector3(0,1,0));
-        globalThis.mvp         = multiplyMatrix4(view, projection);
+        globalThis.projection  = projection_matrix4(Math.PI/3.0, width/height, 1, 1000);
+        globalThis.view        = look_at_matrix4(vector3(0,0,7), vector3(0,0,0), vector3(0,1,0));
+        globalThis.mvp         = multiply_matrix4(view, projection);
         //printMatrix4(globalThis.mvp);
 
         const label = document.getElementById("info_label");
@@ -427,7 +479,7 @@
   <body onload="demo_system.run_demo()">
     <audio id="music" style="visibility: hidden;" controls src="blear-moon--these-walls-are-talking.mp3"></audio>
     <div id="information" style="margin-left: 16pt;">
-      <h1>Parametric curves</h1>
+      <h1 style="font-family: 'Faster One';" >Parametric curves</h1>
 
       <p>Music: <a target="_blank" href="https://freemusicarchive.org/music/Blear_Moon/Town_of_Two_Houses/These_Walls_Are_Talking">These walls are talking</a> by <a target="_blank" href="https://freemusicarchive.org/music/Blear_Moon">Blear Moon</a> licensed under <a target="_blank" href="https://creativecommons.org/licenses/by-nc/4.0/">CC BY-NC 4.0</a></p>
 
@@ -440,5 +492,8 @@
         </canvas>
       </div>
     </div>
+    <canvas id="offscreen_canvas" style="display: none">
+
+    </canvas>
   </body>
 </html>
