@@ -80,7 +80,8 @@
     <script id="fs_present" type="x-shader/x-fragment">
       precision highp float;
 
-      uniform vec2 resolution;
+      uniform float time;
+      uniform vec2  resolution;
 
       uniform sampler2D prev_pass ;
       uniform sampler2D overlay   ;
@@ -95,7 +96,12 @@
         p *= resolution.y/sz.y;
         p += 0.5;
         p.y = 1.0-p.y;
-        return texture(overlay, p);
+        vec2 pp = clamp(p, 0.0, 1.0);
+        if (pp == p) {
+          return texture(overlay, p);//+vec4(0.25);
+        } else {
+          return vec4(0.0);
+        }
       }
 
       void main(void) {
@@ -105,8 +111,9 @@
 
         vec4 pcol = texture(prev_pass, v_texcoord);
         vec4 ocol = toverlay(p);
-        vec3 col = pcol.xyz;
-        col = mix(col, ocol.xyz, ocol.w);
+        vec3 col = pcol.xyz*smoothstep(8.0, 12.0, time);
+        col = mix(col, ocol.xyz, ocol.w*smoothstep(0.0, 4.0, time));
+        col *= smoothstep(95.0, 90.0, time);
         frag_color = vec4(col, 1.0);
       }
     </script>
@@ -115,7 +122,7 @@
       precision highp float;
 
       uniform float time;
-      uniform vec2 resolution;
+      uniform vec2  resolution;
 
       uniform sampler2D prev_frame;
       uniform sampler2D prev_pass;
@@ -181,7 +188,7 @@
       precision highp float;
 
       uniform float time;
-      uniform mat4 mvp;
+      uniform mat4  mvp;
 
       in vec4 a_position;
       in vec2 a_texcoord;
@@ -338,7 +345,7 @@
       precision highp float;
 
       uniform float time;
-      uniform vec2 resolution;
+      uniform vec2  resolution;
 
       in vec2       v_texcoord;
       flat in float v_ratio   ;
@@ -392,14 +399,38 @@
     </script>
 
     <script type = "text/javascript">
+      function create_text_image(width, height, ...texts) {
+        const image = document.getElementById("offscreen_canvas");
+        image.width = width;
+        image.height= height;
+        const ctx   = image.getContext("2d");
+
+        ctx.beginPath();
+        ctx.rect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        ctx.fillStyle = "white";
+        ctx.textAlign = "center";
+        for (const textKey in texts) {
+          const [w, h, sz, text]= texts[textKey];
+          const fsz             = Math.round(height*sz);
+          ctx.font              = `${fsz}px Faster One`;
+          ctx.fillText(text, w*ctx.canvas.width, h*ctx.canvas.height);
+        }
+        ctx.restore();
+
+        return image;
+      }
+
       const analyze_audio   = false;
       const demo_system     = new DemoSystemV2(analyze_audio);
 
       const global_uniforms = [];
 
       const all_textures = {
-        overlay : {
-          image : (width, height) => create_text_image(width, 0.25*height, [0.5, 0.5, "Impulse"]),
+        impulse : {
+          image : (width, height) => create_text_image(0.75*width, 0.25*height, [0.5, 0.75, 1.0, "Impulse"]),
+        },
+        curves : {
+          image : (width, height) => create_text_image(width, 0.25*width, [0.5, 0.4, 0.5, "Parametric"], [0.5, 0.9, 0.5, "Curves"]),
         }
       }
 
@@ -434,7 +465,7 @@
               gl.disable(gl.BLEND);
               // Texture 0 - 3 are reserved
               gl.activeTexture(gl.TEXTURE4);
-              gl.bindTexture(gl.TEXTURE_2D, all_textures.overlay.texture);
+              gl.bindTexture(gl.TEXTURE_2D, all_textures.curves.texture);
               gl.uniform1i(pass.uniformLocations.overlay, 4);
             },
           },
