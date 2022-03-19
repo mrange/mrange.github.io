@@ -21,6 +21,7 @@ export default class TinySDF {
         fontWeight = 'normal',
         fontStyle = 'normal'
     } = {}) {
+        this.fontSize = fontSize;
         this.buffer = buffer;
         this.cutoff = cutoff;
         this.radius = radius;
@@ -28,6 +29,7 @@ export default class TinySDF {
         // make the canvas size big enough to both have the specified buffer around the glyph
         // for "halo", and account for some glyphs possibly being larger than their font size
         const size = this.size = fontSize + buffer * 4;
+        this.size  = size;
 
         const canvas = this._createCanvas(size);
         const ctx = this.ctx = canvas.getContext('2d', {willReadFrequently: true});
@@ -51,7 +53,54 @@ export default class TinySDF {
         return canvas;
     }
 
-    draw(char) {
+    drawText(text, xoff, yoff, cwidth, cheight) {
+        const bits = new Uint8ClampedArray(cwidth*cheight);
+        const size = this.fontSize+yoff;
+
+        let x = 1;
+        let y = 1;
+
+        for (let i = 0; i < text.length; ++i) {
+            if (text[i] == "\n") {
+                x = 1;
+                y += size;
+            }
+            if (y + size >= cheight) {
+                break;
+            }
+            if (text[i] < " ") {
+                continue;
+            }
+            const glyph = this.drawChar(text[i]);
+            const {data, width, height, glyphTop, glyphAdvance} = glyph;
+            const w = Math.round(glyphAdvance+xoff);
+            if (x + width >= cwidth) {
+                x = 1;
+                y += size;
+            }
+            if (y + size >= cheight) {
+                break;
+            }
+            let foff = 0;
+            const sy = y - glyphTop+size;
+            for (let yy = sy; yy < sy+height; ++yy) {
+                for (let xx = x; xx < x+width; ++xx) {
+                    const toff = xx+yy*cwidth;
+                    const curr = bits[toff];
+                    const next = data[foff];
+                    const final= Math.max(curr, next);
+                    bits[toff] = final;
+                    ++foff;
+                }
+            }
+
+            x += w;
+        }
+
+        return {data:bits, width:cwidth, height:cheight};
+      }
+
+    drawChar(char) {
         const {
             width: glyphAdvance,
             actualBoundingBoxAscent,

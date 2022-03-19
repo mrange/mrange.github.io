@@ -193,65 +193,31 @@
     </script>
 
     <script type = "module">
-      import TinySDF from './tiny-sdf.js';
-      const fontSize    = 48.0;
+      import TinySDF from "./tiny-sdf.js";
+      const fontFamily  = "Josefin Slab"
+      const fontSize    = 64.0;
       const fontWeight  = 400.0;
-      const fontStyle   = 'normal';
-      const buffer      = Math.ceil(fontSize / 4);
+      const fontStyle   = "normal";
+      const buffer      = Math.ceil(fontSize / 3);
       const radius      = Math.ceil(fontSize / 2);
-      const tinySdf     = new TinySDF({fontSize, buffer, radius, fontWeight, fontStyle});
-      const size        = fontSize + buffer * 2;
+      const tinySdf     = new TinySDF({fontFamily, fontSize, buffer, radius, fontWeight, fontStyle});
+
+      const text = "Impulse! 2022!\nImpulse! 2022!\nImpulse! 2022!";
 
       const canvas  = document.getElementById("offscreen_canvas");
       const ctx     = canvas.getContext("2d");
 
-      const cwidth  = canvas.width;
-      const cheight = canvas.height;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      ctx.clearRect(0, 0, cwidth, cheight);
+      const {data, width, height} = tinySdf.drawText(text, 4, 8, canvas.width, canvas.height);
 
-      const text = "Impulse! 2020! Impulse! 2020! Impulse! 2020!";
-
-      const bits    = new Uint8ClampedArray(cwidth*cheight);
-
-      let x = 1;
-      let y = 1;
-
-      for (let i = 0; i < text.length; ++i) {
-        const glyph = tinySdf.draw(text[i]);
-        const {data, width, height, glyphWidth, glyphTop, glyphAdvance} = glyph;
-        const w   = Math.round(glyphAdvance+8.0);
-        console.log(w);
-        if (x + w >= cwidth) {
-          x = 1;
-          y += size;
-        }
-        if (y + size >= cheight) {
-          break;
-        }
-        let foff = 0;
-        const sy = y - glyphTop+size;
-        for (let yy = sy; yy < sy+height; ++yy) {
-          for (let xx = x; xx < x+width; ++xx) {
-            const toff = xx+yy*cwidth;
-            const curr = bits[toff];
-            const next = data[foff];
-            const final= Math.max(curr, next);
-            bits[toff] = final;
-            ++foff;
-          }
-        }
-
-        x += w;
-      }
-
-      const imageData = ctx.createImageData(cwidth, cheight);
-      const data = imageData.data;
-      for (let i = 0; i < bits.length; ++i) {
-        data[4 * i + 0] = 255;
-        data[4 * i + 1] = 255;
-        data[4 * i + 2] = 255;
-        data[4 * i + 3] = bits[i];
+      const imageData = ctx.createImageData(width, height);
+      const imgBits   = imageData.data;
+      for (let i = 0; i < data.length; ++i) {
+        imgBits[4 * i + 0] = 255;
+        imgBits[4 * i + 1] = 255;
+        imgBits[4 * i + 2] = 255;
+        imgBits[4 * i + 3] = data[i];
       }
 
       ctx.putImageData(imageData, 0, 0);
