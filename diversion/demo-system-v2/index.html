@@ -18,6 +18,7 @@
     <title>demo-system-v2</title>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <script src="demo-system-v2.js" type="text/javascript"></script>
+    <script src="tiny-sdf.js" type="module"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Josefin+Slab&display=swap" rel="stylesheet">
@@ -191,6 +192,71 @@
       }
     </script>
 
+    <script type = "module">
+      import TinySDF from './tiny-sdf.js';
+      const fontSize    = 48.0;
+      const fontWeight  = 400.0;
+      const fontStyle   = 'normal';
+      const buffer      = Math.ceil(fontSize / 4);
+      const radius      = Math.ceil(fontSize / 2);
+      const tinySdf     = new TinySDF({fontSize, buffer, radius, fontWeight, fontStyle});
+      const size        = fontSize + buffer * 2;
+
+      const canvas  = document.getElementById("offscreen_canvas");
+      const ctx     = canvas.getContext("2d");
+
+      const cwidth  = canvas.width;
+      const cheight = canvas.height;
+
+      ctx.clearRect(0, 0, cwidth, cheight);
+
+      const text = "Impulse! 2020! Impulse! 2020! Impulse! 2020!";
+
+      const bits    = new Uint8ClampedArray(cwidth*cheight);
+
+      let x = 1;
+      let y = 1;
+
+      for (let i = 0; i < text.length; ++i) {
+        const glyph = tinySdf.draw(text[i]);
+        const {data, width, height, glyphWidth, glyphTop, glyphAdvance} = glyph;
+        const w   = Math.round(glyphAdvance+8.0);
+        console.log(w);
+        if (x + w >= cwidth) {
+          x = 1;
+          y += size;
+        }
+        if (y + size >= cheight) {
+          break;
+        }
+        let foff = 0;
+        const sy = y - glyphTop+size;
+        for (let yy = sy; yy < sy+height; ++yy) {
+          for (let xx = x; xx < x+width; ++xx) {
+            const toff = xx+yy*cwidth;
+            const curr = bits[toff];
+            const next = data[foff];
+            const final= Math.max(curr, next);
+            bits[toff] = final;
+            ++foff;
+          }
+        }
+
+        x += w;
+      }
+
+      const imageData = ctx.createImageData(cwidth, cheight);
+      const data = imageData.data;
+      for (let i = 0; i < bits.length; ++i) {
+        data[4 * i + 0] = 255;
+        data[4 * i + 1] = 255;
+        data[4 * i + 2] = 255;
+        data[4 * i + 3] = bits[i];
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+    </script>
+
     <script type = "text/javascript">
       const analyze_audio   = true;
       const demo_system     = new DemoSystemV2(analyze_audio);
@@ -207,6 +273,9 @@
       const all_textures = {
         impulse_001 : {
           image : () => document.getElementById("impulse_001"),
+        },
+        impulse_002 : {
+          image : () => document.getElementById("offscreen_canvas"),
         }
       }
 
@@ -239,7 +308,7 @@
           set_uniforms: (gl, time, scene, pass) => {
             // Texture 0 - 3 are reserved
             gl.activeTexture(gl.TEXTURE4);
-            gl.bindTexture(gl.TEXTURE_2D, all_textures.impulse_001.texture);
+            gl.bindTexture(gl.TEXTURE_2D, all_textures.impulse_002.texture);
             gl.uniform1i(pass.uniformLocations.impulse_001, 4);
           }
         },
@@ -294,7 +363,7 @@
         </canvas>
       </div>
     </div>
-    <canvas id="offscreen_canvas" width="512" height="512" style="display: none"></canvas>
+    <canvas id="offscreen_canvas" width="512" height="512"></canvas>
     <img id="impulse_001" src="impulse_001.png" style="display: none"/>
   </body>
 </html>

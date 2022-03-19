@@ -30,25 +30,6 @@ function smoothstep(edge0, edge1, x) {
   return t * t * (3.0 - 2.0 * t);
 }
 
-function createTextImage(...texts) {
-  const image = document.getElementById("offscreen_canvas");
-  const ctx   = image.getContext("2d");
-
-  ctx.beginPath();
-  ctx.rect(0, 0, ctx.canvas.width, ctx.canvas.height);
-  ctx.fillStyle = "white";
-  ctx.font = "100px Josefin Slab";
-  ctx.textAlign = "center";
-  for (const textKey in texts) {
-    const [w, h, text] = texts[textKey];
-    ctx.fillText(text, w*ctx.canvas.width, h*ctx.canvas.height);
-  }
-  ctx.restore();
-
-  return image;
-}
-
-
 class DemoSystemV2 {
   now() {
     return (new Date).getTime();
