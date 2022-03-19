@@ -195,7 +195,7 @@
     <script type = "module">
       import TinySDF from "./tiny-sdf.js";
       const fontFamily  = "Josefin Slab"
-      const fontSize    = 64.0;
+      const fontSize    = 128.0;
       const fontWeight  = 400.0;
       const fontStyle   = "normal";
       const buffer      = Math.ceil(fontSize / 3);
@@ -207,20 +207,49 @@
       const canvas  = document.getElementById("offscreen_canvas");
       const ctx     = canvas.getContext("2d");
 
+      function downsample2x(data, width, height) {
+        const hwidth  = Math.floor(0.5*width);
+        const hheight = Math.floor(0.5*height);
+        const hdata   = new Uint8ClampedArray(hwidth*hheight);
+        for (let hy = 0; hy < hheight; ++hy) {
+          for (let hx = 0; hx < hwidth; ++hx) {
+            let sum = 0.0;
+            for (let yy = 0; yy < 2; ++yy) {
+              for (let xx = 0; xx < 2; ++xx) {
+                const x = 2*hx+xx;
+                const y = 2*hy+yy;
+                const o = x+width*y;
+                sum += 1.0*data[o];
+              }
+            }
+            const ho = hx+hy*hwidth;
+            hdata[ho] = Math.round(0.25*sum);
+          }
+        }
+        return {hdata, hwidth, hheight};
+      }
+
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      const {data, width, height} = tinySdf.drawText(text, 4, 8, canvas.width, canvas.height);
+      const {data, width, height} = tinySdf.drawText(text, 4, 8, 2*canvas.width, 2*canvas.height);
+      const {hdata, hwidth, hheight} = downsample2x(data, width, height);
 
-      const imageData = ctx.createImageData(width, height);
+      const imageData = ctx.createImageData(hwidth, hheight);
       const imgBits   = imageData.data;
-      for (let i = 0; i < data.length; ++i) {
+      for (let i = 0; i < hdata.length; ++i) {
         imgBits[4 * i + 0] = 255;
         imgBits[4 * i + 1] = 255;
         imgBits[4 * i + 2] = 255;
-        imgBits[4 * i + 3] = data[i];
+        imgBits[4 * i + 3] = hdata[i];
       }
 
       ctx.putImageData(imageData, 0, 0);
+      window.fontBits =
+        {
+                data  : hdata       ,
+                width : hwidth      ,
+                height: hheight     ,
+        };
     </script>
 
     <script type = "text/javascript">
@@ -236,12 +265,24 @@
         }];
       }
 
+      function override_nearest(image) {
+        return [image, (gl) => {
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_NEAREST);
+        }];
+      }
+
       const all_textures = {
         impulse_001 : {
-          image : () => document.getElementById("impulse_001"),
+          image : (gl) => document.getElementById("impulse_001"),
         },
         impulse_002 : {
-          image : () => document.getElementById("offscreen_canvas"),
+          bits : (gl) =>
+            {
+              const bits = window.fontBits;
+              bits.format = gl.LUMINANCE;
+              return bits;
+            },
         }
       }
 
@@ -329,7 +370,7 @@
         </canvas>
       </div>
     </div>
-    <canvas id="offscreen_canvas" width="512" height="512"></canvas>
+    <canvas id="offscreen_canvas" width="512" height="512" style="display: none"></canvas>
     <img id="impulse_001" src="impulse_001.png" style="display: none"/>
   </body>
 </html>
