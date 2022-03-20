@@ -18,6 +18,7 @@
     <title>demo-system-v2</title>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <script src="demo-system-v2.js" type="text/javascript"></script>
+    <script src="tiny-sdf.js" type="module"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Josefin+Slab&display=swap" rel="stylesheet">
@@ -117,6 +118,7 @@
       uniform sampler2D frequency_data    ;
       uniform sampler2D time_domain_data  ;
       uniform sampler2D impulse_001       ;
+      uniform sampler2D impulse_002       ;
 
       in vec4 v_position  ;
       in vec3 v_normal    ;
@@ -127,6 +129,11 @@
       // -----------------------------------------------------------------------------
       // SHADER
       // -----------------------------------------------------------------------------
+      // License: Unknown, author: nmz (twitter: @stormoid), found: https://www.shadertoy.com/view/NdfyRM
+      float sRGB(float t) { return mix(1.055*pow(t, 1./2.4) - 0.055, 12.92*t, step(t, 0.0031308)); }
+      // License: Unknown, author: nmz (twitter: @stormoid), found: https://www.shadertoy.com/view/NdfyRM
+      vec3 sRGB(in vec3 c) { return vec3 (sRGB(c.x), sRGB(c.y), sRGB(c.z)); }
+
       void main(void) {
         vec2 uv     = v_texcoord;
         vec2 p      = -1.0+2.0*uv;
@@ -150,6 +157,23 @@
         vec4 icol   = texture(impulse_001, ip);
         icol.w      *= imin.x*imin.y*imax.x*imax.y;
         col         = mix(col, icol.xyz, icol.w);
+
+        const float faa     = 0.033;
+        const float fsaa    = faa*6.0;
+        const float fcutoff = 0.75;
+
+        float fz    = mix(1.0, 4.0, smoothstep(-1.0, 1.0, sin(time+p.y)));
+        vec2 fp     = p;
+        fp.x       += 0.5*sin(sqrt(0.5)*(p.y+time));
+        fp          /= fz;
+        fp          += 0.5;
+        fp.y        = 1.0-fp.y;
+        float fd    = (fcutoff-texture(impulse_002, fp).r)*fz;
+        float fsd   = (fcutoff-texture(impulse_002, fp-vec2(0.003)).r)*fz;
+        col = mix(col, vec3(0.005), smoothstep(fsaa, -faa, fsd-0.05));
+        col = mix(col, vec3(1.0), smoothstep(faa, -faa, fd));
+
+        col         = sRGB(col);
 
         frag_color  = vec4(col,1.0);
       }
@@ -191,6 +215,26 @@
       }
     </script>
 
+    <script type = "module">
+      import TinySDF from "./tiny-sdf.js";
+      const fontFamily  = "Josefin Slab"
+      const fontSize    = 128.0;
+      const fontWeight  = 400.0;
+      const fontStyle   = "normal";
+      const buffer      = Math.ceil(fontSize / 3);
+      const radius      = Math.ceil(fontSize / 2);
+      const tinySdf     = new TinySDF({fontFamily, fontSize, buffer, radius, fontWeight, fontStyle});
+
+      const text = "Impulse! 2022!\nGlimglam!\nJez!\nLance!\nLongshot!";
+
+      window.getFontBits = (gl) => {
+        const bits    = tinySdf.drawText(text, 8, 16, 1024, 1024);
+        const dbits   = tinySdf.downsample2x(bits);
+        dbits.format  = gl.LUMINANCE;
+        return dbits;
+      };
+    </script>
+
     <script type = "text/javascript">
       const analyze_audio   = true;
       const demo_system     = new DemoSystemV2(analyze_audio);
@@ -206,7 +250,10 @@
 
       const all_textures = {
         impulse_001 : {
-          image : () => document.getElementById("impulse_001"),
+          image : (gl) => document.getElementById("impulse_001"),
+        },
+        impulse_002 : {
+          bits : (gl) => window.getFontBits(gl),
         }
       }
 
@@ -235,12 +282,16 @@
               fs: "fs_postproc_pass"
             }
           ],
-          uniforms: ["impulse_001"],
+          uniforms: ["impulse_001","impulse_002"],
           set_uniforms: (gl, time, scene, pass) => {
             // Texture 0 - 3 are reserved
             gl.activeTexture(gl.TEXTURE4);
             gl.bindTexture(gl.TEXTURE_2D, all_textures.impulse_001.texture);
             gl.uniform1i(pass.uniformLocations.impulse_001, 4);
+
+            gl.activeTexture(gl.TEXTURE5);
+            gl.bindTexture(gl.TEXTURE_2D, all_textures.impulse_002.texture);
+            gl.uniform1i(pass.uniformLocations.impulse_002, 5);
           }
         },
       };

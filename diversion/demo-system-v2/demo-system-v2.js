@@ -30,25 +30,6 @@ function smoothstep(edge0, edge1, x) {
   return t * t * (3.0 - 2.0 * t);
 }
 
-function createTextImage(...texts) {
-  const image = document.getElementById("offscreen_canvas");
-  const ctx   = image.getContext("2d");
-
-  ctx.beginPath();
-  ctx.rect(0, 0, ctx.canvas.width, ctx.canvas.height);
-  ctx.fillStyle = "white";
-  ctx.font = "100px Josefin Slab";
-  ctx.textAlign = "center";
-  for (const textKey in texts) {
-    const [w, h, text] = texts[textKey];
-    ctx.fillText(text, w*ctx.canvas.width, h*ctx.canvas.height);
-  }
-  ctx.restore();
-
-  return image;
-}
-
-
 class DemoSystemV2 {
   now() {
     return (new Date).getTime();
@@ -129,6 +110,24 @@ void main(void) {
     this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
     this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
     this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, image);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR_MIPMAP_NEAREST);
+    if (override) {
+      override(this.gl);
+    }
+    this.gl.generateMipmap(this.gl.TEXTURE_2D);
+    this.gl.bindTexture(this.gl.TEXTURE_2D, null);
+    return texture;
+  }
+
+  create_texture_from_bits(bits, override) {
+    const {data, format, height, width} = bits;
+    const texture = this.gl.createTexture();
+    this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+    this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
+    this.gl.texImage2D(this.gl.TEXTURE_2D, 0, format, width, height, 0, format, this.gl.UNSIGNED_BYTE, data);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
@@ -417,23 +416,27 @@ void main(void) {
   }
 
   init_textures() {
+    function split(result) {
+      if (Array.isArray(result)) {
+        return [result[0], result[1]];
+      } else {
+        return [result, undefined];
+      }
+    }
     for (const textureKey in all_textures) {
       const texture = all_textures[textureKey];
       if(!texture) continue;
-      if(!texture.image) continue;
-      const result = texture.image();
-      if(!result) continue;
-
-      let image     = undefined;
-      let override  = undefined;
-      if (Array.isArray(result)) {
-        image     = result[0];
-        override  = result[1];
-      } else {
-        image = result;
+      if(texture.bits) {
+        const result = texture.bits(this.gl);
+        if(!result) continue;
+        const [bits, override] = split(result);
+        texture.texture = this.create_texture_from_bits(bits, override);
+      } else if(texture.image) {
+        const result = texture.image(this.gl);
+        if(!result) continue;
+        const [image, override] = split(result);
+        texture.texture = this.create_texture_from_image(image, override);
       }
-
-      texture.texture = this.create_texture_from_image(image, override);
     }
   }
 
