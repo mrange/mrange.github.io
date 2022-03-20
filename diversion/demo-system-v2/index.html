@@ -118,6 +118,7 @@
       uniform sampler2D frequency_data    ;
       uniform sampler2D time_domain_data  ;
       uniform sampler2D impulse_001       ;
+      uniform sampler2D impulse_002       ;
 
       in vec4 v_position  ;
       in vec3 v_normal    ;
@@ -128,6 +129,11 @@
       // -----------------------------------------------------------------------------
       // SHADER
       // -----------------------------------------------------------------------------
+      // License: Unknown, author: nmz (twitter: @stormoid), found: https://www.shadertoy.com/view/NdfyRM
+      float sRGB(float t) { return mix(1.055*pow(t, 1./2.4) - 0.055, 12.92*t, step(t, 0.0031308)); }
+      // License: Unknown, author: nmz (twitter: @stormoid), found: https://www.shadertoy.com/view/NdfyRM
+      vec3 sRGB(in vec3 c) { return vec3 (sRGB(c.x), sRGB(c.y), sRGB(c.z)); }
+
       void main(void) {
         vec2 uv     = v_texcoord;
         vec2 p      = -1.0+2.0*uv;
@@ -151,6 +157,23 @@
         vec4 icol   = texture(impulse_001, ip);
         icol.w      *= imin.x*imin.y*imax.x*imax.y;
         col         = mix(col, icol.xyz, icol.w);
+
+        const float faa     = 0.033;
+        const float fsaa    = faa*6.0;
+        const float fcutoff = 0.75;
+
+        float fz    = mix(1.0, 4.0, smoothstep(-1.0, 1.0, sin(time+p.y)));
+        vec2 fp     = p;
+        fp.x       += 0.5*sin(sqrt(0.5)*(p.y+time));
+        fp          /= fz;
+        fp          += 0.5;
+        fp.y        = 1.0-fp.y;
+        float fd    = (fcutoff-texture(impulse_002, fp).r)*fz;
+        float fsd   = (fcutoff-texture(impulse_002, fp-vec2(0.003)).r)*fz;
+        col = mix(col, vec3(0.005), smoothstep(fsaa, -faa, fsd-0.05));
+        col = mix(col, vec3(1.0), smoothstep(faa, -faa, fd));
+
+        col         = sRGB(col);
 
         frag_color  = vec4(col,1.0);
       }
@@ -202,54 +225,14 @@
       const radius      = Math.ceil(fontSize / 2);
       const tinySdf     = new TinySDF({fontFamily, fontSize, buffer, radius, fontWeight, fontStyle});
 
-      const text = "Impulse! 2022!\nImpulse! 2022!\nImpulse! 2022!";
+      const text = "Impulse! 2022!\nGlimglam!\nJez!\nLance!\nLongshot!";
 
-      const canvas  = document.getElementById("offscreen_canvas");
-      const ctx     = canvas.getContext("2d");
-
-      function downsample2x(data, width, height) {
-        const hwidth  = Math.floor(0.5*width);
-        const hheight = Math.floor(0.5*height);
-        const hdata   = new Uint8ClampedArray(hwidth*hheight);
-        for (let hy = 0; hy < hheight; ++hy) {
-          for (let hx = 0; hx < hwidth; ++hx) {
-            let sum = 0.0;
-            for (let yy = 0; yy < 2; ++yy) {
-              for (let xx = 0; xx < 2; ++xx) {
-                const x = 2*hx+xx;
-                const y = 2*hy+yy;
-                const o = x+width*y;
-                sum += 1.0*data[o];
-              }
-            }
-            const ho = hx+hy*hwidth;
-            hdata[ho] = Math.round(0.25*sum);
-          }
-        }
-        return {hdata, hwidth, hheight};
-      }
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      const {data, width, height} = tinySdf.drawText(text, 4, 8, 2*canvas.width, 2*canvas.height);
-      const {hdata, hwidth, hheight} = downsample2x(data, width, height);
-
-      const imageData = ctx.createImageData(hwidth, hheight);
-      const imgBits   = imageData.data;
-      for (let i = 0; i < hdata.length; ++i) {
-        imgBits[4 * i + 0] = 255;
-        imgBits[4 * i + 1] = 255;
-        imgBits[4 * i + 2] = 255;
-        imgBits[4 * i + 3] = hdata[i];
-      }
-
-      ctx.putImageData(imageData, 0, 0);
-      window.fontBits =
-        {
-                data  : hdata       ,
-                width : hwidth      ,
-                height: hheight     ,
-        };
+      window.getFontBits = (gl) => {
+        const bits    = tinySdf.drawText(text, 8, 16, 1024, 1024);
+        const dbits   = tinySdf.downsample2x(bits);
+        dbits.format  = gl.LUMINANCE;
+        return dbits;
+      };
     </script>
 
     <script type = "text/javascript">
@@ -265,24 +248,12 @@
         }];
       }
 
-      function override_nearest(image) {
-        return [image, (gl) => {
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_NEAREST);
-        }];
-      }
-
       const all_textures = {
         impulse_001 : {
           image : (gl) => document.getElementById("impulse_001"),
         },
         impulse_002 : {
-          bits : (gl) =>
-            {
-              const bits = window.fontBits;
-              bits.format = gl.LUMINANCE;
-              return bits;
-            },
+          bits : (gl) => window.getFontBits(gl),
         }
       }
 
@@ -311,12 +282,16 @@
               fs: "fs_postproc_pass"
             }
           ],
-          uniforms: ["impulse_001"],
+          uniforms: ["impulse_001","impulse_002"],
           set_uniforms: (gl, time, scene, pass) => {
             // Texture 0 - 3 are reserved
             gl.activeTexture(gl.TEXTURE4);
-            gl.bindTexture(gl.TEXTURE_2D, all_textures.impulse_002.texture);
+            gl.bindTexture(gl.TEXTURE_2D, all_textures.impulse_001.texture);
             gl.uniform1i(pass.uniformLocations.impulse_001, 4);
+
+            gl.activeTexture(gl.TEXTURE5);
+            gl.bindTexture(gl.TEXTURE_2D, all_textures.impulse_002.texture);
+            gl.uniform1i(pass.uniformLocations.impulse_002, 5);
           }
         },
       };

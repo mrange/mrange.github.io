@@ -53,53 +53,6 @@ export default class TinySDF {
         return canvas;
     }
 
-    drawText(text, xoff, yoff, cwidth, cheight) {
-        const bits = new Uint8ClampedArray(cwidth*cheight);
-        const size = this.fontSize+yoff;
-
-        let x = 1;
-        let y = 1;
-
-        for (let i = 0; i < text.length; ++i) {
-            if (text[i] == "\n") {
-                x = 1;
-                y += size;
-            }
-            if (y + size >= cheight) {
-                break;
-            }
-            if (text[i] < " ") {
-                continue;
-            }
-            const glyph = this.drawChar(text[i]);
-            const {data, width, height, glyphTop, glyphAdvance} = glyph;
-            const w = Math.round(glyphAdvance+xoff);
-            if (x + width >= cwidth) {
-                x = 1;
-                y += size;
-            }
-            if (y + size >= cheight) {
-                break;
-            }
-            let foff = 0;
-            const sy = y - glyphTop+size;
-            for (let yy = sy; yy < sy+height; ++yy) {
-                for (let xx = x; xx < x+width; ++xx) {
-                    const toff = xx+yy*cwidth;
-                    const curr = bits[toff];
-                    const next = data[foff];
-                    const final= Math.max(curr, next);
-                    bits[toff] = final;
-                    ++foff;
-                }
-            }
-
-            x += w;
-        }
-
-        return {data:bits, width:cwidth, height:cheight};
-      }
-
     drawChar(char) {
         const {
             width: glyphAdvance,
@@ -164,6 +117,97 @@ export default class TinySDF {
 
         return glyph;
     }
+
+    // EXTENSIONS TO tiny-sdf - BEGIN
+    drawText(text, xoff, yoff, cwidth, cheight) {
+        const bits = new Uint8ClampedArray(cwidth*cheight);
+        const size = this.fontSize+yoff;
+
+        let x = 1;
+        let y = 1;
+
+        for (let i = 0; i < text.length; ++i) {
+            if (text[i] == "\n") {
+                x = 1;
+                y += size;
+            }
+            if (y + size >= cheight) {
+                break;
+            }
+            if (text[i] < " ") {
+                continue;
+            }
+            const glyph = this.drawChar(text[i]);
+            const {data, width, height, glyphTop, glyphAdvance} = glyph;
+            const w = Math.round(glyphAdvance+xoff);
+            if (x + width >= cwidth) {
+                x = 1;
+                y += size;
+            }
+            if (y + size >= cheight) {
+                break;
+            }
+            let foff = 0;
+            const sy = y - glyphTop+size;
+            for (let yy = sy; yy < sy+height; ++yy) {
+                for (let xx = x; xx < x+width; ++xx) {
+                    const toff = xx+yy*cwidth;
+                    const curr = bits[toff];
+                    const next = data[foff];
+                    const final= Math.max(curr, next);
+                    bits[toff] = final;
+                    ++foff;
+                }
+            }
+
+            x += w;
+        }
+
+        return {data:bits, width:cwidth, height:cheight};
+    }
+
+    // TODO: Perhaps not the right place for a downsample function
+    // Halfs the x and y resolution
+    downsample2x({data, width, height}) {
+        const hwidth  = Math.floor(0.5*width);
+        const hheight = Math.floor(0.5*height);
+        const hdata   = new Uint8ClampedArray(hwidth*hheight);
+        for (let hy = 0; hy < hheight; ++hy) {
+            for (let hx = 0; hx < hwidth; ++hx) {
+                let sum = 0.0;
+                for (let yy = 0; yy < 2; ++yy) {
+                    for (let xx = 0; xx < 2; ++xx) {
+                        const x = 2*hx+xx;
+                        const y = 2*hy+yy;
+                        const o = x+width*y;
+                        sum     += data[o];
+                    }
+                }
+                const ho  = hx+hy*hwidth;
+                hdata[ho] = Math.round(0.25*sum);
+            }
+        }
+        return {data:hdata, width:hwidth, height:hheight};
+    }
+
+    writeBitsToCanvas(canvas, {data, width, height}) {
+        const ctx     = canvas.getContext("2d");
+
+        const imageData = ctx.createImageData(width, height);
+        const imgBits   = imageData.data;
+        for (let i = 0; i < data.length; ++i) {
+            imgBits[4 * i + 0] = data[i];
+            imgBits[4 * i + 1] = data[i];
+            imgBits[4 * i + 2] = data[i];
+            imgBits[4 * i + 3] = 255;
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+    }
+
+
+    // EXTENSIONS TO tiny-sdf - END
+
 }
 
 // 2D Euclidean squared distance transform by Felzenszwalb & Huttenlocher https://cs.brown.edu/~pff/papers/dt-final.pdf
