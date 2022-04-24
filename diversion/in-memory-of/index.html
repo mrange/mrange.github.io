@@ -611,6 +611,12 @@
       }
 
       const all_textures = {
+        in_memory_of : {
+          image : (gl) => document.getElementById("in_memory_of"),
+        },
+        motorbike : {
+          image : (gl) => document.getElementById("motorbike"),
+        },
       }
 
       // List all scenes, all scenes have a vertex shader (often shared)
@@ -679,5 +685,7 @@
         </canvas>
       </div>
     </div>
+    <img id="in_memory_of" src="in_memory_of.png" style="display: none"/>
+    <img id="motorbike" src="motorbike.png" style="display: none"/>
   </body>
 </html>
