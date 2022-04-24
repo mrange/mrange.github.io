@@ -257,7 +257,6 @@ void main(void) {
   }
 
   create_texture_from_image(image, override) {
-    console.log([image.width, image.height]);
     const useMipMap = image.width === image.height && this.is_power_of_2(image.width);
     const texture = this.gl.createTexture();
     this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
