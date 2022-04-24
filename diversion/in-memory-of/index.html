@@ -1521,6 +1521,13 @@
         }];
       }
 
+      function override_repeat(image) {
+        return [image, (gl) => {
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+        }];
+      }
+
       const all_textures = {
         in_memory_of : {
           image : (gl) => document.getElementById("in_memory_of"),
@@ -1530,6 +1537,12 @@
         },
         perlin : {
           image : (gl) => document.getElementById("perlin"),
+        },
+        white_noise : {
+          image : (gl) => override_repeat(document.getElementById("white_noise")),
+        },
+        blue_noise : {
+          image : (gl) => override_repeat(document.getElementById("blue_noise")),
         },
       }
 
@@ -1614,10 +1627,10 @@
           ],
         },
         clouds : {
-          uniforms: ["mvp"],
+          uniforms: ["white_noise", "blue_noise"],
           passes:[
             {
-              vs: "vs_glowing_tree",
+              vs: "vs_default",
               fs: "fs_clouds",
               pre_render: (gl, time, scene, pass) => {
 
@@ -1647,7 +1660,7 @@
       const script = [
         {
           begin       :  0                                ,
-          scene       :  all_scenes.clouds                ,
+          scene       :  all_scenes.nihon                 ,
         },
         {
           begin       :  48                               ,
