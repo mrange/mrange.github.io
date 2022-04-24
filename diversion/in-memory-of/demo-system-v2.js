@@ -30,6 +30,162 @@ function smoothstep(edge0, edge1, x) {
   return t * t * (3.0 - 2.0 * t);
 }
 
+function vector3(x, y, z) {
+  return new Float32Array([
+    x,
+    y,
+    z,
+  ]);
+}
+
+function subtract_vector3(a, b) {
+  return new Float32Array([
+    a[0] - b[0],
+    a[1] - b[1],
+    a[2] - b[2],
+  ]);
+}
+
+function add_vector3(a, b) {
+  return new Float32Array([
+    a[0] + b[0],
+    a[1] + b[1],
+    a[2] + b[2],
+  ]);
+}
+
+function cross_vector3(a, b) {
+  return new Float32Array([
+    a[1]*b[2]-a[2]*b[1],
+    a[2]*b[0]-a[0]*b[2],
+    a[0]*b[1]-a[1]*b[0],
+  ]);
+}
+
+function dot_vector3(a, b) {
+  return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+}
+
+function scale_vector3(a, b) {
+  return new Float32Array([
+    a*b[0],
+    a*b[1],
+    a*b[2],
+  ]);
+}
+
+function normalize_vector3(a) {
+  const il = 1.0/Math.sqrt(dot_vector3(a, a));
+  return scale_vector3(il, a);
+}
+
+function print_matrix4(a) {
+  let s = "";
+  for(let r = 0; r < 4; ++r) {
+    for(let c = 0; c < 4; ++c) {
+      s += a[c+4*r];
+      s += ","
+    }
+    s += "\n";
+  }
+  console.log(s);
+}
+
+function translate_matrix4(t) {
+  return new Float32Array([
+    1, 0, 0,t[0],
+    0, 1, 0,t[1],
+    0, 0, 1,t[2],
+    0, 0, 0, 1  ,
+  ]);
+}
+
+function transpose_matrix4(t) {
+  return new Float32Array([
+    t[0],t[4],t[8] ,t[12],
+    t[1],t[5],t[9] ,t[13],
+    t[2],t[6],t[10],t[14],
+    t[3],t[7],t[11],t[15],
+  ]);
+}
+
+function rotate_x_matrix4(a) {
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return new Float32Array([
+    1, 0,0,0,
+    0, c,s,0,
+    0,-s,c,0,
+    0, 0,0,1,
+  ]);
+}
+
+function rotate_y_matrix4(a) {
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return new Float32Array([
+     c,0,s,0,
+     0,1,0,0,
+    -s,0,c,0,
+     0,0,0,1,
+  ]);
+}
+
+function rotate_z_matrix4(a) {
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return new Float32Array([
+     c,s,0,0,
+    -s,c,0,0,
+     0,0,1,0,
+     0,0,0,1,
+  ]);
+}
+
+function multiply_matrix4(a, b) {
+  const m = new Float32Array(16);
+  for(let c = 0; c < 4; ++c) {
+    for(let r = 0; r < 4; ++r) {
+      let sum = 0.0;
+      for(let i = 0; i < 4; ++i) {
+        sum += a[i+4*r]*b[c+4*i];
+      }
+      m[c+4*r] = sum;
+    }
+  }
+  return m;
+}
+
+function look_at_matrix4(eye, look_at, up) {
+  const zz = normalize_vector3(subtract_vector3(look_at, eye));
+  const xx = normalize_vector3(cross_vector3(zz, up));
+  const yy = cross_vector3(xx, zz);
+  const a = new Float32Array([
+    xx[0],yy[0],-zz[0], 0,
+    xx[1],yy[1],-zz[1], 0,
+    xx[2],yy[2],-zz[2], 0,
+        0,    0,     0, 1,
+    ]);
+  const b = translate_matrix4(scale_vector3(-1.0, eye));
+  const c = transpose_matrix4(b);
+  const d = multiply_matrix4(c, a);
+  return d;
+}
+
+function projection_matrix4(fov, aspect_ratio, near, far) {
+  const h = 1.0/Math.tan(fov*0.5);
+  const w = h/aspect_ratio;
+  const d = far-near;
+  const zf = -(far+near)/d;
+  const zn = -2.0*far*near/d;
+  return new Float32Array([
+      w, 0, 0, 0,
+      0, h, 0, 0,
+      0, 0,zf,-1,
+      0, 0,zn, 0,
+    ]);
+}
+
 class DemoSystemV2 {
   now() {
     return (new Date).getTime();
@@ -51,45 +207,33 @@ class DemoSystemV2 {
     this.start_time               = this.now()             ;
     this.on_requestAnimationFrame = () => this.draw_scene();
 
-    this.present_scene            =
+    this.default_present_pass    =
       {
-        passes: [
-          {
-            vs_inline: `
+        vs_inline: `
 precision highp float;
 
 in vec4 a_position;
-in vec3 a_normal  ;
 in vec2 a_texcoord;
 
-out vec4 v_position;
-out vec3 v_normal  ;
 out vec2 v_texcoord;
 
 void main(void) {
   gl_Position = a_position;
-  v_position  = a_position;
-  v_normal    = a_normal  ;
   v_texcoord  = a_texcoord;
 }
 `,
-            fs_inline: `
+        fs_inline: `
 precision highp float;
 
 uniform sampler2D prev_pass ;
 
-in vec4 v_position  ;
-in vec3 v_normal    ;
 in vec2 v_texcoord  ;
-
 out vec4 frag_color ;
 
 void main(void) {
   frag_color = texture(prev_pass, v_texcoord);
 }
 `
-          }
-        ]
       };
 }
 
@@ -105,37 +249,30 @@ void main(void) {
     return texture;
   }
 
+  is_power_of_2(a) {
+    const b = Math.log(a)/Math.log(2.0);
+    const c = Math.floor(b);
+    const d = Math.abs(b - c);
+    return d < 1E-6;
+  }
+
   create_texture_from_image(image, override) {
+    console.log([image.width, image.height]);
+    const useMipMap = image.width === image.height && this.is_power_of_2(image.width);
     const texture = this.gl.createTexture();
     this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
-    this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
+//    this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true);
     this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, image);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
-    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR_MIPMAP_NEAREST);
+    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, useMipMap ? this.gl.LINEAR_MIPMAP_NEAREST : this.gl.LINEAR);
     if (override) {
       override(this.gl);
     }
-    this.gl.generateMipmap(this.gl.TEXTURE_2D);
-    this.gl.bindTexture(this.gl.TEXTURE_2D, null);
-    return texture;
-  }
-
-  create_texture_from_bits(bits, override) {
-    const {data, format, height, width} = bits;
-    const texture = this.gl.createTexture();
-    this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
-    this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
-    this.gl.texImage2D(this.gl.TEXTURE_2D, 0, format, width, height, 0, format, this.gl.UNSIGNED_BYTE, data);
-    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
-    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
-    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
-    this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR_MIPMAP_NEAREST);
-    if (override) {
-      override(this.gl);
+    if (useMipMap) {
+      this.gl.generateMipmap(this.gl.TEXTURE_2D);
     }
-    this.gl.generateMipmap(this.gl.TEXTURE_2D);
     this.gl.bindTexture(this.gl.TEXTURE_2D, null);
     return texture;
   }
@@ -143,8 +280,10 @@ void main(void) {
   create_blank_texture(width, height) {
     const texture = this.gl.createTexture();
     this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
-    // TODO: use this.gl.FLOAT instead
     this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, width, height, 0, this.gl.RGBA, this.gl.UNSIGNED_BYTE, null);
+    // TODO: use this.gl.FLOAT instead?
+    //  this.EXT_color_buffer_float = this.gl.getExtension('EXT_color_buffer_float');
+    //  this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA32F, width, height, 0, this.gl.RGBA, this.gl.FLOAT, null);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
@@ -181,12 +320,12 @@ void main(void) {
     const height  = window.innerHeight;
 
     // TODO:  Make configurable
-    this.Height = Math.round(height < 1080 ? height : 1080);
-    this.Width = Math.round((width/height)*this.Height);
+    this.Height = Math.round(height < 1200 ? height : 1200);
+    this.Width  = Math.round((width/height)*this.Height);
     this.canvas.width  = this.Width;
     this.canvas.height = this.Height;
 
-    this.init_webGL(this.canvas);
+    this.init_webGL();
 
     // Only continue if WebGL is available and working
     if (this.gl) {
@@ -203,16 +342,13 @@ void main(void) {
 
       this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
       this.gl.clearDepth(1.0);
-      // TODO: We just paint a single quad, depth stuff not needed?
-      // this.gl.enable(this.gl.DEPTH_TEST);           // Enable depth testing
-      // this.gl.depthFunc(this.gl.LEQUAL);            // Near things obscure far things
 
       this.init_buffers();
       this.init_textures();
       await this.init_scenes();
 
       this.initialized = true;
-      on_init_complete();
+      on_init_complete(this.Width,this.Height);
 
       requestAnimationFrame(this.on_requestAnimationFrame);
     } else {
@@ -270,10 +406,10 @@ void main(void) {
     this.verticesBuffer = this.gl.createBuffer();
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesBuffer);
     const vertices = [
-      -1.0, -1.0,  1.0,
-       1.0, -1.0,  1.0,
-       1.0,  1.0,  1.0,
-      -1.0,  1.0,  1.0,
+      -1.0, -1.0,  0.0,
+       1.0, -1.0,  0.0,
+       1.0,  1.0,  0.0,
+      -1.0,  1.0,  0.0,
     ];
     this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(vertices), this.gl.STATIC_DRAW);
 
@@ -365,8 +501,7 @@ void main(void) {
       this.gl.framebufferTexture2D(this.gl.DRAW_FRAMEBUFFER, this.gl.COLOR_ATTACHMENT0, this.gl.TEXTURE_2D, null, 0);
       this.gl.bindFramebuffer(this.gl.DRAW_FRAMEBUFFER, null);
 
-      // Copies the render texture to the screen
-      this.render_pass(time, width, height, render_texture, this.present_scene, this.present_scene.passes[0]);
+      this.render_pass(time, width, height, render_texture, scene, scene.present_pass);
 
       // Since passes.length > 0 flip should never be undefined
       if (flip)
@@ -378,6 +513,8 @@ void main(void) {
         this.pong_texture = this.prev_frame_texture;
       }
       this.prev_frame_texture = render_texture;
+    } else {
+      this.render_pass(time, width, height, null, scene, scene.present_pass);
     }
 
     requestAnimationFrame(this.on_requestAnimationFrame);
@@ -404,45 +541,48 @@ void main(void) {
     if (pass.uniformLocations.prev_frame) {
       this.gl.activeTexture(this.gl.TEXTURE3);
       this.gl.bindTexture(this.gl.TEXTURE_2D, this.prev_frame_texture);
-      this.gl.uniform1i(pass.uniformLocations.prev_frame, 2);
+      this.gl.uniform1i(pass.uniformLocations.prev_frame, 3);
     }
 
-    if (scene.set_uniforms) {
-      scene.set_uniforms(this.gl, time, scene, pass);
+    if (scene.pre_render) {
+      scene.pre_render(this.gl, time, scene, pass);
+    }
+
+    if (pass.pre_render) {
+      pass.pre_render(this.gl, time, scene, pass);
     }
 
     this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.verticesIndexBuffer);
-    this.gl.drawElements(this.gl.TRIANGLES, 6, this.gl.UNSIGNED_SHORT, 0);
+    if (pass.instances) {
+      this.gl.drawElementsInstanced(this.gl.TRIANGLES, 6, this.gl.UNSIGNED_SHORT, 0, pass.instances);
+    } else {
+      this.gl.drawElements(this.gl.TRIANGLES, 6, this.gl.UNSIGNED_SHORT, 0);
+    }
   }
 
   init_textures() {
-    function split(result) {
-      if (Array.isArray(result)) {
-        return [result[0], result[1]];
-      } else {
-        return [result, undefined];
-      }
-    }
     for (const textureKey in all_textures) {
       const texture = all_textures[textureKey];
       if(!texture) continue;
-      if(texture.bits) {
-        const result = texture.bits(this.gl);
-        if(!result) continue;
-        const [bits, override] = split(result);
-        texture.texture = this.create_texture_from_bits(bits, override);
-      } else if(texture.image) {
-        const result = texture.image(this.gl);
-        if(!result) continue;
-        const [image, override] = split(result);
-        texture.texture = this.create_texture_from_image(image, override);
+      if(!texture.image) continue;
+      const result = texture.image(this.Width, this.Height);
+      if(!result) continue;
+
+      let image     = undefined;
+      let override  = undefined;
+      if (Array.isArray(result)) {
+        image     = result[0];
+        override  = result[1];
+      } else {
+        image = result;
       }
+
+      texture.texture = this.create_texture_from_image(image, override);
     }
   }
 
   async init_scenes() {
     const scenes = all_scenes;
-    scenes.dsv2__present_scene = this.present_scene;
     for (const sceneKey in scenes) {
       on_loading_scene(sceneKey);
 
@@ -463,7 +603,11 @@ void main(void) {
         ;
       const prelude = "#version 300 es\n" + defines;
 
-      const passes = scene.passes;
+      if (!scene.present_pass) {
+        scene.present_pass = this.default_present_pass;
+      }
+
+      const passes = scene.passes.concat(scene.present_pass);
       for (const passKey in passes) {
         const pass = passes[passKey];
         this.init_pass(uniforms, prelude, pass)
@@ -497,13 +641,16 @@ void main(void) {
 
     this.gl.useProgram(pass.shaderProgram);
     pass.vertexPositionAttribute = this.gl.getAttribLocation(pass.shaderProgram, "a_position");
-    this.gl.enableVertexAttribArray(pass.vertexPositionAttribute);
+    if (pass.vertexPositionAttribute >= 0)
+      this.gl.enableVertexAttribArray(pass.vertexPositionAttribute);
 
     pass.vertexNormalAttribute = this.gl.getAttribLocation(pass.shaderProgram, "a_normal");
-    this.gl.enableVertexAttribArray(pass.vertexNormalAttribute);
+    if (pass.vertexNormalAttribute >= 0)
+      this.gl.enableVertexAttribArray(pass.vertexNormalAttribute);
 
     pass.textureCoordAttribute = this.gl.getAttribLocation(pass.shaderProgram, "a_texcoord");
-    this.gl.enableVertexAttribArray(pass.textureCoordAttribute);
+    if (pass.textureCoordAttribute >= 0)
+      this.gl.enableVertexAttribArray(pass.textureCoordAttribute);
 
     const uniformLocations = {};
     for (const uniformKey in uniforms) {
@@ -515,19 +662,23 @@ void main(void) {
     pass.uniformLocations = uniformLocations;
 
     // Setup static bindings
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesBuffer);
-    this.gl.vertexAttribPointer(pass.vertexPositionAttribute, 3, this.gl.FLOAT, false, 0, 0);
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesNormalBuffer);
-    this.gl.vertexAttribPointer(pass.vertexNormalAttribute, 3, this.gl.FLOAT, false, 0, 0);
-    this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesTextureCoordBuffer);
+    if (pass.vertexPositionAttribute >= 0) {
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesBuffer);
+      this.gl.vertexAttribPointer(pass.vertexPositionAttribute, 3, this.gl.FLOAT, false, 0, 0);
+    }
+    if (pass.vertexNormalAttribute >= 0) {
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesNormalBuffer);
+      this.gl.vertexAttribPointer(pass.vertexNormalAttribute, 3, this.gl.FLOAT, false, 0, 0);
+    }
+    if (pass.textureCoordAttribute >= 0) {
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesTextureCoordBuffer);
     this.gl.vertexAttribPointer(pass.textureCoordAttribute, 2, this.gl.FLOAT, false, 0, 0);
-
+    }
     if (this.analyze_audio && pass.uniformLocations.frequency_data) {
       this.gl.activeTexture(this.gl.TEXTURE0);
       this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture_frequency_data);
       this.gl.uniform1i(pass.uniformLocations.frequency_data, 0);
     }
-
     if (this.analyze_audio && pass.uniformLocations.time_domain_data) {
       this.gl.activeTexture(this.gl.TEXTURE1);
       this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture_time_domain_data);

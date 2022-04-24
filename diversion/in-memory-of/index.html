@@ -634,14 +634,71 @@
           ]
         },
         night_sky : {
+          uniforms: ["in_memory_of", "motorbike"],
           passes:[
             {
               vs: "vs_default",
-              fs: "fs_night_sky"
+              fs: "fs_night_sky",
+              pre_render: (gl, time, scene, pass) => {
+                // Texture 0 - 3 are reserved
+
+                gl.activeTexture(gl.TEXTURE4);
+                console.log(all_textures);
+                gl.bindTexture(gl.TEXTURE_2D, all_textures.in_memory_of.texture);
+                gl.uniform1i(pass.uniformLocations.in_memory_of, 4);
+
+                gl.activeTexture(gl.TEXTURE5);
+                gl.bindTexture(gl.TEXTURE_2D, all_textures.motorbike.texture);
+                gl.uniform1i(pass.uniformLocations.motorbike, 5);
+              },
             }
-          ]
+          ],
         },
       };
+
+      const bpm   = 120.0;
+      const beat  = 60.0/bpm;
+      const start = 0.0*beat;
+      function btime(b) {
+        return (b*beat-start);
+      }
+
+      const max_time_slots  = 400;
+      const time_slots      = new Array(max_time_slots);
+
+      const script = [
+        {
+          begin       :  0                                ,
+          scene       :  all_scenes.night_sky             ,
+        },
+        {
+          begin       :  48                               ,
+          scene       :  all_scenes.red_scene             ,
+        },
+      ];
+
+      function populate_time_slots() {
+        let current_script = script[0];
+        let slot = 0;
+        for (const idx in script) {
+          const next_script = script[idx];
+          while(slot < max_time_slots && slot < next_script.begin) {
+            time_slots[slot] = current_script;
+            ++slot;
+          }
+          current_script = next_script;
+        }
+        while(slot < max_time_slots) {
+            time_slots[slot] = current_script;
+            ++slot;
+        }
+      }
+      populate_time_slots();
+
+      function get_slot(time) {
+        const i = clamp(Math.floor(time/beat), 0, max_time_slots-1);
+        return time_slots[i];
+      }
 
       // Called after initialization of all shaders are complete
       function on_init_complete() {
@@ -665,7 +722,18 @@
 
       // Called each frame to select which scene to render
       function on_select_scene(gl, time) {
-        return all_scenes.night_sky;
+        if (time > start) {
+          const gtime = time - start;
+          const slot = get_slot(gtime);
+          if(slot && slot.scene) {
+            return slot.scene;
+          } else {
+            return all_scenes.red_scene;
+          }
+        } else {
+          return all_scenes.red_scene;
+        }
+//        return all_scenes.night_sky;
       }
 
     </script>
