@@ -1731,11 +1731,15 @@
       // SHADER
       // -----------------------------------------------------------------------------
 
-      uniform sampler2D prev_frame        ;
-      uniform sampler2D prev_pass         ;
+      uniform sampler2D prev_frame         ;
+      uniform sampler2D prev_pass          ;
 
       const float effect_start  = BTIME(9.0);
       const float effect_fadein = BTIME(9.0+0.5);
+
+      const float logo_fadein_b = BTIME(10.0);
+      const float logo_fadein_e = BTIME(10.0+0.125);
+
       const float effect_fadeout= BTIME(13.0-0.25);
       const float effect_end    = BTIME(13.0);
 
@@ -1784,9 +1788,11 @@
         vec3 col = pcol.xyz;
         col += vec3(0.9, .8, 1.2)*mix(0.5, 0.8, length(p))*(vec3(0.05)+bcol);
 
+        float fo = smoothstep(effect_fadeout, effect_end, TIME);
+
         vec2 lp = p;
         lp.x *= RESOLUTION.x/RESOLUTION.y;
-        lp -= vec2(-0.75, -0.66);
+        lp -= vec2(-0.75, -0.66)+vec2(0.0, -1.0)*(smoothstep(logo_fadein_e, logo_fadein_b, TIME)+fo);
         lp *= 0.33;
         float b = beat(TIME);
         lp *= ROT(0.1*b*(1.0+lp.x*-6.0));
@@ -1796,8 +1802,8 @@
         float pp = dot(p, p);
         col += b*pp*fcol;
         col = mix(col, lcol.xyz, lcol.w);
-        col += smoothstep(effect_fadein, effect_start, TIME-0.5*pp);
-        col += smoothstep(effect_fadeout, effect_end, TIME);
+        col += smoothstep(effect_fadein, effect_start, TIME+0.5*pp);
+        col += fo;
         col = sRGB(col);
 
         frag_color = vec4(col, 1.0);
