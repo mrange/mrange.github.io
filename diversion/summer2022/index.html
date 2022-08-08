@@ -633,7 +633,10 @@
       // SHADER
       // -----------------------------------------------------------------------------
 
+
       /*
+      #define REPEAT
+
       #define GLIMGLAM
       #define JEZ
       #define LANCE
@@ -665,12 +668,21 @@
       #define TOLERANCE       0.001
       #define NORM_OFF        0.005
 
+      #if defined(REPEAT)
+      const float effect_start  = BTIME(16.0);
+      const float effect_fadein = BTIME(16.0+0.125);
+      const float effect_oops_fi= BTIME(17.0+3.0*0.125);
+      const float effect_oops_fo= BTIME(17.0+4.0*0.125);
+      const float effect_fadeout= BTIME(18.0-0.25);
+      const float effect_end    = BTIME(18.0);
+      const float effect_period = BTIME(18.0)-BTIME(16.0);
+      #else
       const float effect_start  = BTIME(1.0);
       const float effect_fadein = BTIME(1.0+0.125);
-      const float effect_fadeout= BTIME(1.0+2.0*4.0-0.25);
-      const float effect_end    = BTIME(1.0+2.0*4.0);
+      const float effect_fadeout= BTIME(9.0-0.5);
+      const float effect_end    = BTIME(9.0);
       const float effect_period = BTIME(3.0)-BTIME(1.0);
-
+      #endif
 
       int g_hit     = 0;
 
@@ -1205,6 +1217,8 @@
         return df_bars3(p);
       #elif defined(LANCE)
         return df_bars1(p);
+      #elif defined(REPEAT)
+        return df_bars3(p);
       #else
         return length(p) - 0.5;
       #endif
@@ -1290,6 +1304,16 @@
       #endif
         }
 
+      #if defined(REPEAT)
+        vec2 tp = p;
+        float fi = smoothstep(effect_oops_fo, effect_oops_fi, TIME);
+        tp.y += 4.0*sign(p.x)*fi;
+        tp *= 0.2;
+        vec4 tcol = impulseText(tp, 3);
+        col = mix(col, vec3(fi), step(effect_oops_fi, TIME));
+        col = mix(col, mix(vec3(0.5, 0.5, 0.5), vec3(1.0), tcol.xyz), tcol.w);
+
+      #else
         float aa = 2.0/RESOLUTION.y;
       #if defined(GLIMGLAM)
         float ld = glimglam(p);
@@ -1304,6 +1328,7 @@
       #endif
 
         col = mix(col, vec3(1.0), smoothstep(aa, -aa, ld));
+      #endif
 
         return col;
       }
@@ -1321,8 +1346,13 @@
         col -= vec3(0.2, 0.3, 0.2);
       #endif
         col += smoothstep(effect_fadein, effect_start, TIME);
+      #if defined(REPEAT)
+        col *= smoothstep(effect_end, effect_fadeout, TIME);
+        col = aces_approx(col);
+      #else
         col = aces_approx(col);
         col += smoothstep(effect_fadeout, effect_end, TIME);
+      #endif
         col = sRGB(col);
         frag_color = vec4(col, 1.0);
       }
@@ -1735,7 +1765,7 @@
       uniform sampler2D prev_pass          ;
 
       const float effect_start  = BTIME(9.0);
-      const float effect_fadein = BTIME(9.0+0.5);
+      const float effect_fadein = BTIME(9.0+0.375);
 
       const float logo_fadein_b = BTIME(10.0);
       const float logo_fadein_e = BTIME(10.0+0.125);
@@ -1898,7 +1928,8 @@
       // -----------------------------------------------------------------------------
 
       const float effect_start  = BTIME(13.0);
-      const float effect_fadein = BTIME(13.0+0.85);
+      const float effect_flare  = BTIME(13.0+0.25);
+      const float effect_fadein = BTIME(13.0+0.875);
       const float effect_end    = BTIME(15.0);
 
       // License: WTFPL, author: sam hocevar, found: https://stackoverflow.com/a/17897228/418488
@@ -2065,9 +2096,10 @@
         return vec4(col, t);
       }
 
+      const vec3 skyCol = HSV2RGB(vec3(0.66, 0.2, 1.0));
+
       vec3 skyColor(vec3 ro, vec3 rd, vec3 nrd) {
-        const vec3 sky = HSV2RGB(vec3(0.66, 0.2, 1.0));
-        return sky;
+        return skyCol;
       }
 
       vec3 color(vec3 ww, vec3 uu, vec3 vv, vec3 ro, vec2 p) {
@@ -2147,7 +2179,8 @@
         p.x *= RESOLUTION.x/RESOLUTION.y;
         vec3 col = vec3(0.0);
         col = effect(p, q);
-        col += 2.0*smoothstep(effect_fadein, effect_start, TIME+length(p));
+        col += skyCol*smoothstep(effect_fadein, effect_start, TIME+length(p));
+        col = mix(col, vec3(1.0), smoothstep(effect_flare, effect_start, TIME));
       //  col = aces_approx(col);
         col = sRGB(col);
         frag_color = vec4(col, 1.0);
@@ -2277,6 +2310,15 @@
             },
           ],
         },
+        repeat_scene : {
+          defines: ["REPEAT"],
+          passes:[
+            {
+              vs: "vs_default"  ,
+              fs: "fs_001_crew" ,
+            },
+          ],
+        },
       };
 
       const bpm   = 130.0;
@@ -2319,6 +2361,14 @@
         },
         {
           begin       :  15                               ,
+          scene       :  all_scenes.red_scene             ,
+        },
+        {
+          begin       :  16                               ,
+          scene       :  all_scenes.repeat_scene          ,
+        },
+        {
+          begin       :  18                               ,
           scene       :  all_scenes.red_scene             ,
         },
       ];
