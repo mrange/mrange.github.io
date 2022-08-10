@@ -106,8 +106,9 @@
       const float bstart = 0.136;
       const float bpm    = 130.0;
       const float bhz    = bpm/60.0;
+      const float bperiod= 8.0/bhz;
 
-      #define BTIME(n) ((n)*8.0/bhz+bstart)
+      #define BTIME(n) ((n)*bperiod+bstart)
 
       float beatCount(float tm) {
         return (tm-bstart)*bhz;
@@ -200,8 +201,9 @@
       const float bstart = 0.136;
       const float bpm    = 130.0;
       const float bhz    = bpm/60.0;
+      const float bperiod= 8.0/bhz;
 
-      #define BTIME(n) ((n)*8.0/bhz+bstart)
+      #define BTIME(n) ((n)*bperiod+bstart)
 
       float beatCount(float tm) {
         return (tm-bstart)*bhz;
@@ -575,8 +577,9 @@
       const float bstart = 0.136;
       const float bpm    = 130.0;
       const float bhz    = bpm/60.0;
+      const float bperiod= 8.0/bhz;
 
-      #define BTIME(n) ((n)*8.0/bhz+bstart)
+      #define BTIME(n) ((n)*bperiod+bstart)
 
       float beatCount(float tm) {
         return (tm-bstart)*bhz;
@@ -1387,8 +1390,9 @@
       const float bstart = 0.136;
       const float bpm    = 130.0;
       const float bhz    = bpm/60.0;
+      const float bperiod= 8.0/bhz;
 
-      #define BTIME(n) ((n)*8.0/bhz+bstart)
+      #define BTIME(n) ((n)*bperiod+bstart)
 
       float beatCount(float tm) {
         return (tm-bstart)*bhz;
@@ -1703,8 +1707,9 @@
       const float bstart = 0.136;
       const float bpm    = 130.0;
       const float bhz    = bpm/60.0;
+      const float bperiod= 8.0/bhz;
 
-      #define BTIME(n) ((n)*8.0/bhz+bstart)
+      #define BTIME(n) ((n)*bperiod+bstart)
 
       float beatCount(float tm) {
         return (tm-bstart)*bhz;
@@ -1869,8 +1874,9 @@
       const float bstart = 0.136;
       const float bpm    = 130.0;
       const float bhz    = bpm/60.0;
+      const float bperiod= 8.0/bhz;
 
-      #define BTIME(n) ((n)*8.0/bhz+bstart)
+      #define BTIME(n) ((n)*bperiod+bstart)
 
       float beatCount(float tm) {
         return (tm-bstart)*bhz;
@@ -2216,8 +2222,9 @@
       const float bstart = 0.136;
       const float bpm    = 130.0;
       const float bhz    = bpm/60.0;
+      const float bperiod= 8.0/bhz;
 
-      #define BTIME(n) ((n)*8.0/bhz+bstart)
+      #define BTIME(n) ((n)*bperiod+bstart)
 
       float beatCount(float tm) {
         return (tm-bstart)*bhz;
@@ -2561,6 +2568,463 @@
       }
     </script>
 
+    <script id="vs_005_lines" type="x-shader/x-vertex">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float time;
+      uniform vec2 resolution;
+
+      #define TIME        time
+      #define RESOLUTION  resolution
+
+      #define PI          3.141592654
+      #define TAU         (2.0*PI)
+      #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
+      #define PCOS(a)     (0.5+0.5*cos(a))
+
+      const float bstart  = 0.136;
+      const float bpm     = 130.0;
+      const float bhz     = bpm/60.0;
+      const float bperiod = 8.0/bhz;
+
+      #define BTIME(n) ((n)*bperiod+bstart)
+
+      float beatCount(float tm) {
+        return (tm-bstart)*bhz;
+      }
+
+      float beat(float tm) {
+        const float off = asin(0.5);
+        return smoothstep(0.5, 1.0, sin(off+TAU*beatCount(tm)));
+      }
+
+      #if defined(SEGMENT0)
+      #define FROM_CURVE curve3
+      #define TO_CURVE   curve1
+      #elif defined(SEGMENT1)
+      #define FROM_CURVE curve3
+      #define TO_CURVE   curve2
+      #elif defined(SEGMENT2)
+      #define FROM_CURVE curve4
+      #define TO_CURVE   curve2
+      #elif defined(SEGMENT3)
+      #define FROM_CURVE curve4
+      #define TO_CURVE   curve4
+      #else
+      #define FROM_CURVE curve4
+      #define TO_CURVE   curve1
+      #endif
+
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+
+      uniform mat4 mvp;
+
+      in vec4 a_position;
+      in vec3 a_normal;
+      in vec2 a_texcoord;
+
+      out vec4  v_position    ;
+      out vec3  v_normal      ;
+      out vec2  v_texcoord    ;
+      flat out float v_ratio  ;
+      flat out vec2  v_i2     ;
+
+
+      vec2 path(float a) {
+        return vec2(sin(a*0.2), sin(sqrt(0.5)*a));
+      }
+
+
+      vec2 dpath_(float a) {
+        return vec2(cos(a), sqrt(0.5)*cos(sqrt(0.5)*a));
+      }
+
+      vec2 dpath(float a) {
+        const float d = 0.05;
+        return (path(a+d)-path(a-d))/(2.0*d);
+      }
+
+      // License: Unknown, author: Unknown, found: don't remember
+      float hash(float co) {
+        return fract(sin(co*12.9898) * 13758.5453);
+      }
+
+      const vec2 dimn = 2.0*vec2(120.0, 20.0);
+      vec2 i2(float i) {
+        return vec2(mod(i, dimn.x)/dimn.x, floor(i/dimn.x)/dimn.y);
+      }
+
+      vec3 curve0(vec2 p) {
+        p *= vec2(2.0, 2.0);
+        float r = mix(1.0, 3.0, 0.5+0.5*cos(p.x*0.5));
+        vec3 cp = vec3(
+            r*cos(p.x)*sin(p.y)
+          , r*sin(p.x)*sin(p.y)
+          , r*cos(p.y)
+          );
+        return cp;
+      }
+
+      vec3 curve1(vec2 p) {
+        p *= vec2(1.0, 4.0);
+        float a = 1.0;
+        float b = 2.5;
+      //  p *= ROT(2.0*PI/6.0);
+        vec3 cp = vec3(
+            (b + a*cos(p.y))*cos(p.x)
+          , (b + a*cos(p.y))*sin(p.x)
+          , a*sin(p.y)
+          );
+        return cp;
+      }
+
+      vec3 curve2(vec2 p) {
+        p *= vec2(4.0, 4.0);
+        float a = 0.5;
+        float b = 2.0+cos(0.25*p.x);
+      //  p.x+=0.5*time;
+        vec3 cp = vec3(
+            (b + a*cos(p.y))*cos(p.x)
+          , (b + a*cos(p.y))*sin(p.x)
+          , a*sin(p.y)+2.0*sin(0.25*p.x)
+          );
+        return cp;
+      }
+
+      vec3 curve3(vec2 p) {
+        p *= vec2(1.0, 4.0);
+        float a = 0.25;
+        float b = 0.75;
+      //  p *= ROT(2.0*PI/6.0);
+        float r = (b + a*cos(p.y));
+        vec3 cp = vec3(
+            r*cos(2.0*p.x)*(3.0+cos(3.0*p.x))
+          , r*sin(2.0*p.x)*(3.0+cos(3.0*p.x))
+          , r*sin(3.0*p.x)+PI*a*sin(p.y)
+          );
+        return cp;
+      }
+
+      vec3 curve4(vec2 p) {
+        //http://virtualmathmuseum.org/Surface/kuen/kuen.html
+        float a = 0.5*time+3.5;
+        p += vec2(mix(-2.0*PI, 2.0*PI, PCOS(a)), mix(0.5*PI, 1.0*PI, PCOS(a*sqrt(0.5))));
+        p *= vec2(8.0, 4.0);
+        float u = p.x;
+        float v = p.y;
+        float id = 1.0/(cosh(v) * cosh(v) + u * u);
+        vec3 cp = vec3(3.0, 3.0, 1.0)*vec3(
+            2.0 * cosh(v) * (cos(u) + u * sin(u))*id
+          , 2.0 * cosh(v) * (-u * cos(u) + sin(u))*id
+          , v - (2.0 * sinh(v) * cosh(v))*id
+          );
+        return 1.5*cp;
+      }
+
+      float sqr(float x) {
+        return x*x;
+      }
+
+
+      const vec2 dimu = vec2(-PI, PI);
+      const vec2 dimv = dimu;
+
+      const vec2 du = vec2(
+          (dimu.y - dimu.x)/dimn.x
+        , (dimv.y - dimv.x)/dimn.y
+        );
+
+      const vec2 dux = vec2(du.x, 0.0);
+      const vec2 duy = vec2(0.0, du.y);
+
+      vec2 uv(vec2 i2) {
+        float u   = mix(dimu.x, dimu.y, i2.x);
+        float v   = mix(dimv.x, dimv.y, i2.y);
+        return vec2(u, v);
+      }
+
+      void main() {
+        mat2 rxy = ROT(0.1*TIME);
+        mat2 rxz = ROT(0.35*TIME);
+        mat2 ryz = ROT(0.25*TIME);
+        vec3 off =  vec3(0.0, 0.0, 4.0);
+
+        float i   = float(gl_InstanceID);
+        vec2  i2  = i2(floor(i/2.0));
+        vec2 uv   = uv(i2);
+        vec2 duv  = mod(i, 2.0) >= 1.0 ? dux : duy;
+        vec3 p0_1 = FROM_CURVE(uv);
+        vec3 p1_1 = FROM_CURVE(uv+duv);
+
+        vec3 p0_2 = TO_CURVE(uv);
+        vec3 p1_2 = TO_CURVE(uv+duv);
+
+        const float offa = asin(0.5);
+        float f   = smoothstep(-0.5, 0.5, sin(offa+TAU*(TIME-bstart)/(2.0*bperiod)));
+        vec3 p0   = mix(p0_1, p0_2, f);
+        vec3 p1   = mix(p1_1, p1_2, f);
+
+        float bf = mix(1.0, 1.1, beat(TIME));
+        p0.xy *= rxy;
+        p0.xz *= rxz;
+        p0.yz *= ryz;
+        p0 *= bf;
+        p0 += off;
+
+        p1.xy *= rxy;
+        p1.xz *= rxz;
+        p1.yz *= ryz;
+        p1 *= bf;
+        p1 += off;
+
+        const float lw = 0.175;
+
+        vec3 c  = (p0+p1)*0.5;
+        vec3 d  = p1-p0;
+        float l = length(d);
+
+        vec3 up = vec3(0.0, 0.0, -1.0);
+        vec3 ww = d/l;
+        vec3 uu = normalize(cross(ww, up));
+        vec3 vv = cross(uu, ww);
+
+
+        vec4 p = a_position;
+        mat3 m = mat3(ww, uu, vv);
+        p.xy *= vec2(0.5*l, lw/2.0);
+      //  p.x *= 0.1;
+        p.xyz *= transpose(m);
+        p.xyz -= c;
+
+        gl_Position = mvp * p;
+
+        v_position  = p;
+        v_normal    = a_normal;
+        v_texcoord  = a_texcoord;
+        v_ratio     = (1.0*l)/lw;
+        v_i2        = i2;
+      }
+    </script>
+
+    <script id="fs_005_lines" type="x-shader/x-fragment">
+      precision highp float;
+
+      uniform float time;
+      uniform vec2 resolution;
+
+      in vec4  v_position    ;
+      in vec3  v_normal      ;
+      in vec2  v_texcoord    ;
+      flat in float v_ratio  ;
+      flat in vec2  v_i2     ;
+
+      out vec4 frag_color;
+
+      #define PI      3.141592654
+      #define PCOS(x) (0.5+0.5*cos(x))
+
+      float segmentx(vec2 p, float w) {
+        p = abs(p);
+        float d0 = p.y;
+        float d1 = length(p-vec2(w, 0.0));
+        return p.x > w ? d1 : d0;
+      }
+
+      // License: WTFPL, author: sam hocevar, found: https://stackoverflow.com/a/17897228/418488
+      const vec4 hsv2rgb_K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+      vec3 hsv2rgb(vec3 c) {
+        vec3 p = abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www);
+        return c.z * mix(hsv2rgb_K.xxx, clamp(p - hsv2rgb_K.xxx, 0.0, 1.0), c.y);
+      }
+      // License: WTFPL, author: sam hocevar, found: https://stackoverflow.com/a/17897228/418488
+      //  Macro version of above to enable compile-time constants
+      #define HSV2RGB(c)  (c.z * mix(hsv2rgb_K.xxx, clamp(abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www) - hsv2rgb_K.xxx, 0.0, 1.0), c.y))
+
+      void main() {
+        float originalZ = gl_FragCoord.z / gl_FragCoord.w;
+        vec2 q = v_texcoord;
+        vec2 p = -1. + 2. * q;
+
+        float r = v_ratio;
+        vec2  i2= v_i2;
+        p.x *= r;
+
+        vec3 col = vec3(0.0);
+        float l = length(p);
+        float h = i2.x+0.25*i2.y;
+        float s = 0.25;
+        vec3 gcol0 = hsv2rgb(vec3(h, 0.55, s));
+        vec3 gcol1 = hsv2rgb(vec3(h, 0.9, s));
+        float ds = segmentx(p, mix(0.0, 1.0, smoothstep(0.25, 1.0, cos(2.0*PI*i2.x+time)))*r); //PCOS(4.0*PI*i2.x+time)
+        col += 4.0*gcol0*exp(-9.0*ds);
+        col += 2.0*gcol1*exp(-6.0*ds);
+        col *= 3.0/(originalZ);
+        frag_color = vec4(col, 1.0);
+      }
+    </script>
+
+    <script id="fs_005_lines_post" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+      uniform sampler2D impulseAsset_logos;
+      uniform sampler2D impulseAsset_texts;
+
+      in vec4 v_position  ;
+      in vec3 v_normal    ;
+      in vec2 v_texcoord  ;
+
+      out vec4 frag_color ;
+
+      #define TIME        time
+      #define RESOLUTION  resolution
+
+      #define PI          3.141592654
+      #define TAU         (2.0*PI)
+      #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
+
+      const float bstart = 0.136;
+      const float bpm    = 130.0;
+      const float bhz    = bpm/60.0;
+      const float bperiod= 8.0/bhz;
+
+      #define BTIME(n) ((n)*bperiod+bstart)
+
+      float beatCount(float tm) {
+        return (tm-bstart)*bhz;
+      }
+
+      float beat(float tm) {
+        const float off = asin(0.5);
+        return smoothstep(0.5, 1.0, sin(off+TAU*beatCount(tm)));
+      }
+      const float impulseAsset_count = 15.0;
+
+      const float[15] impulseLogo_centerOffset = float[](
+          0.2725
+        , 0.245
+        , 0.2295
+        , 0.199
+        , 0.167
+        , 0.16
+        , 0.165
+        , 0.163
+        , 0.1455
+        , 0.141
+        , 0.148
+        , 0.141
+        , 0.135
+        , 0.103
+        , -0.0075
+        );
+
+      vec4 impulseAsset(sampler2D sampler, vec2 p, int i) {
+        const vec2 dim = vec2(1504.0, 3960.0);
+        p.y *= dim.x/dim.y;
+        p += vec2(0.5, 1.0-0.5/impulseAsset_count);
+        p.y = 1.0-p.y;
+        float t = step(p.y, 1.0/impulseAsset_count)*step(0.0/impulseAsset_count, p.y);
+        p.y += (1.0/impulseAsset_count)*float(i);
+        vec4 lcol = texture(sampler, p);
+        lcol.w *= t;
+        return lcol;
+      }
+
+      vec4 impulseLogo(vec2 p, int i) {
+        return impulseAsset(impulseAsset_logos, p, i);
+      }
+
+      vec4 impulseLogoCenter(vec2 p, int i) {
+        return impulseLogo(p - vec2(impulseLogo_centerOffset[i], 0.0), i);
+      }
+
+      vec4 impulseText(vec2 p, int i) {
+        return impulseAsset(impulseAsset_texts, p, i);
+      }
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+
+      uniform sampler2D prev_frame;
+      uniform sampler2D prev_pass;
+
+      const float effect_start  = BTIME(20.0);
+      const float effect_fadein = BTIME(20.0+0.25);
+      const float effect_fadeout= BTIME(24.0-0.25);
+      const float effect_end    = BTIME(24.0);
+
+
+      #define PI          3.141592654
+      #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
+
+      #define RESOLUTION  resolution
+
+      // License: Unknown, author: nmz (twitter: @stormoid), found: https://www.shadertoy.com/view/NdfyRM
+      float sRGB(float t) { return mix(1.055*pow(t, 1./2.4) - 0.055, 12.92*t, step(t, 0.0031308)); }
+      // License: Unknown, author: nmz (twitter: @stormoid), found: https://www.shadertoy.com/view/NdfyRM
+      vec3 sRGB(in vec3 c) { return vec3 (sRGB(c.x), sRGB(c.y), sRGB(c.z)); }
+      // License: Unknown, author: Matt Taylor (https://github.com/64), found: https://64.github.io/tonemapping/
+      vec3 aces_approx(vec3 v) {
+        v = max(v, 0.0);
+        v *= 0.6f;
+        float a = 2.51f;
+        float b = 0.03f;
+        float c = 2.43f;
+        float d = 0.59f;
+        float e = 0.14f;
+        return clamp((v*(a*v+b))/(v*(c*v+d)+e), 0.0f, 1.0f);
+      }
+
+      const mat2 brot = ROT(2.399);
+      //  simplyfied version of Dave Hoskins blur
+      vec3 dblur(vec2 q, float rad) {
+        vec3 acc=vec3(0);
+        vec2 pixel=vec2(.002*resolution.y/resolution.x,.002);
+        vec2 angle=vec2(0,rad);
+        rad=1.;
+        const int iter = 50;
+        for (int j=0; j<iter; ++j) {
+          rad += 1./rad;
+          angle*=brot;
+          vec4 col=texture(prev_frame,q+pixel*(rad-1.)*angle);
+          col.xyz*=col.xyz;
+          acc+=col.xyz;
+        }
+        return acc*(1.0/float(iter));
+      }
+
+
+      void main(void) {
+        vec2 q = v_texcoord;
+        vec2 p = -1.0+2.0*q;
+
+        vec4 pcol = texture(prev_pass,v_texcoord);
+        vec3 col = pcol.xyz;
+        vec3 bcol = vec3(0.0);
+        vec2 pp = p;
+        pp *= 0.9+0.075;
+        vec2 pq = 0.5+0.5*pp;
+        bcol = dblur(pq, 1.0);
+        col = aces_approx(col);
+        col += 0.55*bcol;
+        col *= smoothstep(effect_start, effect_fadein, TIME)*smoothstep(effect_end, effect_fadeout, TIME);
+        col = sRGB(col);
+
+        frag_color = vec4(col, pcol.w);
+      }
+    </script>
+
     <script type = "module">
       import TinySDF from "./tiny-sdf.js";
       const fontFamily  = "Josefin Slab"
@@ -2701,6 +3165,21 @@
             },
           ],
         },
+        /*
+        lines_scene_0 : {
+          defines: ["SEGMENT0"],
+          passes:[
+            {
+              vs: "vs_005_lines"        ,
+              fs: "fs_005_lines"        ,
+            },
+            {
+              vs: "vs_default"          ,
+              fs: "fs_005_lines_post"   ,
+            },
+          ],
+        },
+        */
       };
 
       const bpm   = 130.0;
