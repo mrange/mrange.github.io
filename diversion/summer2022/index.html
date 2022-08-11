@@ -69,10 +69,15 @@
       in vec2 a_texcoord;
 
       out vec4 v_position;
+      out vec3 v_normal  ;
       out vec2 v_texcoord;
 
       void main(void) {
         gl_Position = a_position;
+        // TODO: Why is this not working
+        // v_normal    = a_normal;
+        v_normal    = vec3(0.0, 0.0, -1.0);
+        v_texcoord  = a_texcoord;
         v_texcoord  = a_texcoord;
       }
     </script>
@@ -2577,6 +2582,10 @@
       uniform float time;
       uniform vec2 resolution;
 
+      in vec4 a_position;
+      in vec3 a_normal;
+      in vec2 a_texcoord;
+
       #define TIME        time
       #define RESOLUTION  resolution
 
@@ -2601,6 +2610,10 @@
         return smoothstep(0.5, 1.0, sin(off+TAU*beatCount(tm)));
       }
 
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+
       #if defined(SEGMENT0)
       #define FROM_CURVE curve3
       #define TO_CURVE   curve1
@@ -2618,15 +2631,7 @@
       #define TO_CURVE   curve1
       #endif
 
-      // -----------------------------------------------------------------------------
-      // SHADER
-      // -----------------------------------------------------------------------------
-
       uniform mat4 mvp;
-
-      in vec4 a_position;
-      in vec3 a_normal;
-      in vec2 a_texcoord;
 
       out vec4  v_position    ;
       out vec3  v_normal      ;
@@ -2638,7 +2643,6 @@
       vec2 path(float a) {
         return vec2(sin(a*0.2), sin(sqrt(0.5)*a));
       }
-
 
       vec2 dpath_(float a) {
         return vec2(cos(a), sqrt(0.5)*cos(sqrt(0.5)*a));
@@ -2804,7 +2808,9 @@
         gl_Position = mvp * p;
 
         v_position  = p;
-        v_normal    = a_normal;
+        // TODO: Why is this not working
+        // v_normal    = a_normal;
+        v_normal    = vec3(0.0, 0.0, -1.0);
         v_texcoord  = a_texcoord;
         v_ratio     = (1.0*l)/lw;
         v_i2        = i2;
@@ -2858,8 +2864,8 @@
         float l = length(p);
         float h = i2.x+0.25*i2.y;
         float s = 0.25;
-        vec3 gcol0 = hsv2rgb(vec3(h, 0.55, s));
-        vec3 gcol1 = hsv2rgb(vec3(h, 0.9, s));
+        vec3 gcol0 = hsv2rgb(vec3(h, 0.9, s));
+        vec3 gcol1 = hsv2rgb(vec3(h, 0.5, s));
         float ds = segmentx(p, mix(0.0, 1.0, smoothstep(0.25, 1.0, cos(2.0*PI*i2.x+time)))*r); //PCOS(4.0*PI*i2.x+time)
         col += 4.0*gcol0*exp(-9.0*ds);
         col += 2.0*gcol1*exp(-6.0*ds);
@@ -3013,11 +3019,11 @@
         vec3 col = pcol.xyz;
         vec3 bcol = vec3(0.0);
         vec2 pp = p;
-        pp *= 0.9+0.075;
+        pp *= 0.9+0.05;
         vec2 pq = 0.5+0.5*pp;
         bcol = dblur(pq, 1.0);
         col = aces_approx(col);
-        col += 0.55*bcol;
+        col += 0.6*bcol;
         col *= smoothstep(effect_start, effect_fadein, TIME)*smoothstep(effect_end, effect_fadeout, TIME);
         col = sRGB(col);
 
@@ -3070,11 +3076,34 @@
         },
       }
 
-      // List all scenes, all scenes have a vertex shader (often shared)
-      //  and a fragment shader
-      //  It's possible to reuse and tweak fragment shaders by using defines
-      //  Can also register extra uniforms
-      //  Default uniforms always includes time and resolution
+      function lines_scene(segment) {
+        return {
+          defines:[segment],
+          passes:[
+            {
+              vs: "vs_005_lines",
+              fs: "fs_005_lines",
+              requires_clear: true,
+              instances: 4800,
+              pre_render: (gl, time, scene, pass) => {
+                gl.enable(gl.BLEND);
+                gl.blendFuncSeparate(gl.SRC_ALPHA, gl.DST_ALPHA, gl.ONE, gl.ONE);
+                gl.blendEquationSeparate(gl.FUNC_ADD, gl.MAX);
+
+                gl.uniformMatrix4fv(pass.uniformLocations.mvp, false, mvp);
+              },
+            },
+            {
+              vs: "vs_default",
+              fs: "fs_005_lines_post",
+              pre_render: (gl, time, scene, pass) => {
+                gl.disable(gl.BLEND);
+              }
+            },
+          ],
+          uniforms: ["mvp"],
+        };
+      }
       const all_scenes = {
         red_scene : {
           passes:[
@@ -3165,19 +3194,10 @@
             },
           ],
         },
-        lines_scene_0 : {
-          defines: ["SEGMENT0"],
-          passes:[
-            {
-              vs: "vs_005_lines"        ,
-              fs: "fs_005_lines"        ,
-            },
-            {
-              vs: "vs_default"          ,
-              fs: "fs_005_lines_post"   ,
-            },
-          ],
-        },
+        lines_scene_0 : lines_scene("SEGMENT0"),
+        lines_scene_1 : lines_scene("SEGMENT1"),
+        lines_scene_2 : lines_scene("SEGMENT2"),
+        lines_scene_3 : lines_scene("SEGMENT3"),
       };
 
       const bpm   = 130.0;
@@ -3232,6 +3252,22 @@
         },
         {
           begin       :  20                               ,
+          scene       :  all_scenes.lines_scene_0         ,
+        },
+        {
+          begin       :  21                               ,
+          scene       :  all_scenes.lines_scene_1         ,
+        },
+        {
+          begin       :  22                               ,
+          scene       :  all_scenes.lines_scene_2         ,
+        },
+        {
+          begin       :  23                               ,
+          scene       :  all_scenes.lines_scene_3         ,
+        },
+        {
+          begin       :  24                               ,
           scene       :  all_scenes.red_scene             ,
         },
       ];
@@ -3259,7 +3295,11 @@
         return time_slots[i];
       }
 
-      function on_init_complete() {
+      function on_init_complete(width, height) {
+        globalThis.projection  = projection_matrix4(Math.PI/3.0, width/height, 1, 1000);
+        globalThis.view        = look_at_matrix4(vector3(0,0,3), vector3(0,0,0), vector3(0,1,0));
+        globalThis.mvp         = multiply_matrix4(view, projection);
+
         const label = document.getElementById("info_label");
         label.textContent = "Ready, click play to run";
 

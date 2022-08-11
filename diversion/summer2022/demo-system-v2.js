@@ -674,8 +674,8 @@ void main(void) {
       this.gl.vertexAttribPointer(pass.vertexNormalAttribute, 3, this.gl.FLOAT, false, 0, 0);
     }
     if (pass.textureCoordAttribute >= 0) {
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesTextureCoordBuffer);
-    this.gl.vertexAttribPointer(pass.textureCoordAttribute, 2, this.gl.FLOAT, false, 0, 0);
+      this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesTextureCoordBuffer);
+      this.gl.vertexAttribPointer(pass.textureCoordAttribute, 2, this.gl.FLOAT, false, 0, 0);
     }
     if (this.analyze_audio && pass.uniformLocations.frequency_data) {
       this.gl.activeTexture(this.gl.TEXTURE0);
