@@ -328,7 +328,12 @@ void main(void) {
 
     // Only continue if WebGL is available and working
     if (this.gl) {
-      this.frame_buffer   = this.gl.createFramebuffer();
+      this.frame_buffer         = this.gl.createFramebuffer();
+
+      this.depth_buffer         = this.gl.createRenderbuffer();
+      this.gl.bindRenderbuffer(this.gl.RENDERBUFFER, this.depth_buffer);
+      this.gl.renderbufferStorage(this.gl.RENDERBUFFER, this.gl.DEPTH_COMPONENT16, this.Width, this.Height);
+      this.gl.bindRenderbuffer(this.gl.RENDERBUFFER, null);
 
       this.prev_frame_texture   = this.create_blank_texture(this.Width, this.Height);
       this.ping_texture         = this.create_blank_texture(this.Width, this.Height);
@@ -339,14 +344,12 @@ void main(void) {
         this.texture_time_domain_data = this.create_bins_texture(this.frequency_data);
       }
 
-      this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
-      this.gl.clearDepth(1.0);
-
       this.init_buffers();
       this.init_textures();
       await this.init_scenes();
 
       this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
+      this.gl.clearDepth(1.0);
 
       this.initialized = true;
       on_init_complete(this.Width,this.Height);
@@ -409,8 +412,8 @@ void main(void) {
     const vertices = [
       -1.0, -1.0,  0.0,
        1.0, -1.0,  0.0,
-       1.0,  1.0,  0.0,
       -1.0,  1.0,  0.0,
+       1.0,  1.0,  0.0,
     ];
     this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(vertices), this.gl.STATIC_DRAW);
 
@@ -431,8 +434,8 @@ void main(void) {
     const textureCoordinates = [
       0.0,  0.0,
       1.0,  0.0,
-      1.0,  1.0,
       0.0,  1.0,
+      1.0,  1.0,
     ];
     this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(textureCoordinates), this.gl.STATIC_DRAW);
 
@@ -441,7 +444,7 @@ void main(void) {
     this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.verticesIndexBuffer);
     const vertexIndices = [
       0,  1,  2,
-      0,  2,  3,
+      2,  1,  3,
     ]
 
     this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(vertexIndices), this.gl.STATIC_DRAW);
@@ -475,6 +478,7 @@ void main(void) {
       const height = bcr.height;
 
       this.gl.bindFramebuffer(this.gl.DRAW_FRAMEBUFFER, this.frame_buffer);
+      this.gl.framebufferRenderbuffer(this.gl.FRAMEBUFFER, this.gl.DEPTH_ATTACHMENT, this.gl.RENDERBUFFER, this.depth_buffer);
 
       let prev_texture    = null;
       let render_texture  = null;
@@ -505,12 +509,9 @@ void main(void) {
       this.render_pass(time, width, height, render_texture, scene, scene.present_pass);
 
       // Since passes.length > 0 flip should never be undefined
-      if (flip)
-      {
+      if (flip) {
         this.ping_texture = this.prev_frame_texture;
-      }
-      else
-      {
+      } else {
         this.pong_texture = this.prev_frame_texture;
       }
       this.prev_frame_texture = render_texture;
