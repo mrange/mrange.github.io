@@ -409,8 +409,8 @@ void main(void) {
     const vertices = [
       -1.0, -1.0,  0.0,
        1.0, -1.0,  0.0,
-       1.0,  1.0,  0.0,
       -1.0,  1.0,  0.0,
+       1.0,  1.0,  0.0,
     ];
     this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(vertices), this.gl.STATIC_DRAW);
 
@@ -431,8 +431,8 @@ void main(void) {
     const textureCoordinates = [
       0.0,  0.0,
       1.0,  0.0,
-      1.0,  1.0,
       0.0,  1.0,
+      1.0,  1.0,
     ];
     this.gl.bufferData(this.gl.ARRAY_BUFFER, new Float32Array(textureCoordinates), this.gl.STATIC_DRAW);
 
@@ -441,7 +441,7 @@ void main(void) {
     this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.verticesIndexBuffer);
     const vertexIndices = [
       0,  1,  2,
-      0,  2,  3,
+      2,  1,  3,
     ]
 
     this.gl.bufferData(this.gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(vertexIndices), this.gl.STATIC_DRAW);

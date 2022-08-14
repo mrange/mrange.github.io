@@ -3033,7 +3033,7 @@
         bcol = dblur(pq, 1.0);
         col = aces_approx(col);
         col += 0.6*bcol;
-        col *= smoothstep(effect_start, effect_fadein, TIME)*smoothstep(effect_end, effect_fadeout, TIME);
+//        col *= smoothstep(effect_start, effect_fadein, TIME)*smoothstep(effect_end, effect_fadeout, TIME);
         col = sRGB(col);
 
         frag_color = vec4(col, pcol.w);
@@ -3950,6 +3950,7 @@
         lines_scene_2 : lines_scene("SEGMENT2"),
         lines_scene_3 : lines_scene("SEGMENT3"),
 */
+        lines_scene_0 : lines_scene("SEGMENT0"),
         supershapes_scene : {
           passes:[
             {
@@ -3992,8 +3993,12 @@
       const max_time_slots  = 64;
       const time_slots      = new Array(max_time_slots);
       const script = [
-      {
+        {
           begin       :  0                                ,
+          scene       :  all_scenes.lines_scene_0         ,
+        },
+        {
+          begin       :  1                                ,
           scene       :  all_scenes.supershapes_scene     ,
         },
 /*
