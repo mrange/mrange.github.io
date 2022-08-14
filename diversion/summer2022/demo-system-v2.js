@@ -339,8 +339,8 @@ void main(void) {
         this.texture_time_domain_data = this.create_bins_texture(this.frequency_data);
       }
 
-      this.gl.clearColor(0.0, 0.0, 0.0, 1.0);
-      this.gl.clearDepth(1.0);
+      this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
+//      this.gl.clearDepth(1.0);
 
       this.init_buffers();
       this.init_textures();

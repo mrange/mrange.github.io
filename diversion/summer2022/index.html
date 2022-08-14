@@ -3142,6 +3142,37 @@
       , Period(0.1, -0.75, saucer    )
       );
 
+      const int[] indexIdMap = int[](
+          0
+        , 1
+        , 2
+        , 2
+        , 1
+        , 3
+        );
+
+      const vec2[4] duv0 = vec2[](
+          vec2(0.0, 0.0)
+        , dux
+        , duy
+        , du
+        );
+
+      const vec2[4] duv1 = vec2[](
+          duv0[1] - duv0[0]
+        , duv0[2] - duv0[1]
+        , duv0[0] - duv0[2]
+        , duv0[2] - duv0[3]
+        );
+
+      const vec2[4] duv2 = vec2[](
+          duv0[2] - duv0[0]
+        , duv0[0] - duv0[1]
+        , duv0[1] - duv0[2]
+        , duv0[1] - duv0[3]
+        );
+
+
       Shape g_currentShape;
 
       float r(float th, vec3 n, vec3 q) {
@@ -3202,40 +3233,14 @@
           ));
       }
 
-
-      const vec2[6] duv0 = vec2[](
-          vec2(0.0, 0.0)
-        , dux
-        , duy
-        , duy
-        , dux
-        , du
-        );
-
-      const vec2[6] duv1 = vec2[](
-          duv0[1]   - duv0[0]
-        , duv0[2]   - duv0[1]
-        , duv0[0]   - duv0[2]
-        , duv0[4]   - duv0[3]
-        , duv0[5]   - duv0[4]
-        , duv0[3]   - duv0[5]
-        );
-
-      const vec2[6] duv2 = vec2[](
-          duv0[2]   - duv0[0]
-        , duv0[0]   - duv0[1]
-        , duv0[1]   - duv0[2]
-        , duv0[5]   - duv0[3]
-        , duv0[3]   - duv0[4]
-        , duv0[4]   - duv0[5]
-        );
-
-
       void main() {
 
         float i   = float(gl_InstanceID);
-        int   vid = gl_VertexID;
-
+      #if defined(INDEXED_DRAW)
+        int idxId = gl_VertexID;
+      #else
+        int idxId = indexIdMap[gl_VertexID];
+      #endif
         float etm = TIME-effect_start;
 
         float per = floor(etm/bperiod);
@@ -3254,9 +3259,9 @@
         float refr      = mix(period0.refr, period1.refr, ip);
 
         vec2 uv   = uv(i);
-        vec2 duv0 = duv0[vid];
-        vec2 duv1 = duv1[vid];
-        vec2 duv2 = duv2[vid];
+        vec2 duv0 = duv0[idxId];
+        vec2 duv1 = duv1[idxId];
+        vec2 duv2 = duv2[idxId];
 
         float sdm = mix(0.25, 0.0, hardness);
         vec2 uv0 = uv + duv0;
@@ -3952,6 +3957,7 @@
 */
         lines_scene_0 : lines_scene("SEGMENT0"),
         supershapes_scene : {
+          defines:["INDEXED_DRAW"],
           passes:[
             {
               vs: "vs_006_supershapes",
