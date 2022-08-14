@@ -3036,7 +3036,7 @@
         col *= smoothstep(effect_start, effect_fadein, TIME)*smoothstep(effect_end, effect_fadeout, TIME);
         col = sRGB(col);
 
-        frag_color = vec4(col, pcol.w);
+        frag_color = vec4(col, 1.0);
       }
     </script>
 
