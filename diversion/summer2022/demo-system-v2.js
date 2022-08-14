@@ -346,6 +346,8 @@ void main(void) {
       this.init_textures();
       await this.init_scenes();
 
+      this.gl.clearColor(0.0, 0.0, 0.0, 0.0);
+
       this.initialized = true;
       on_init_complete(this.Width,this.Height);
 

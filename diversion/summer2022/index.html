@@ -3342,8 +3342,9 @@
       in vec3        v_normal  ;
       in vec2        v_texcoord;
       in vec2        v_uv      ;
-      in mat4        v_imodel  ;
-      in float       v_refract  ;
+
+      flat in mat4        v_imodel  ;
+      flat in float       v_refract  ;
 
       out vec4 frag_color;
 
@@ -3773,7 +3774,7 @@
         col = mix(col, tcol.xyz, tcol.w);
         vec3 hsv = rgb2hsv(col);
         hsv.x += 0.1*TIME+0.2*p.y;
-        hsv.z *= smoothstep(effect_start, effect_fadein, TIME)*smoothstep(effect_end, effect_fadeout, TIME);
+//        hsv.z *= smoothstep(effect_start, effect_fadein, TIME)*smoothstep(effect_end, effect_fadeout, TIME);
         col = hsv2rgb(hsv);
         col = sRGB(col);
         frag_color = vec4(col, 1.0);
@@ -3862,6 +3863,7 @@
             },
           ],
         },
+/*
         start_scene : {
           passes:[
             {
@@ -3947,6 +3949,7 @@
         lines_scene_1 : lines_scene("SEGMENT1"),
         lines_scene_2 : lines_scene("SEGMENT2"),
         lines_scene_3 : lines_scene("SEGMENT3"),
+*/
         supershapes_scene : {
           passes:[
             {
@@ -3955,9 +3958,11 @@
               requires_clear: true,
               instances: 4096,
               pre_render: (gl, time, scene, pass) => {
-                gl.enable(gl.BLEND);
-                gl.blendFuncSeparate(gl.SRC_ALPHA, gl.DST_ALPHA, gl.ONE, gl.ONE);
-                gl.blendEquationSeparate(gl.FUNC_ADD, gl.MAX);
+                gl.enable(gl.DEPTH_TEST);
+                gl.depthFunc(gl.LESS);
+
+                gl.enable(gl.CULL_FACE);
+                gl.cullFace(gl.BACK);
 
                 gl.uniformMatrix4fv(pass.uniformLocations.proj, false, proj_006);
                 gl.uniformMatrix4fv(pass.uniformLocations.view, false, view_006);
@@ -3967,7 +3972,9 @@
               vs: "vs_default",
               fs: "fs_006_supershapes_post",
               pre_render: (gl, time, scene, pass) => {
-                gl.disable(gl.BLEND);
+                gl.disable(gl.DEPTH_TEST);
+
+                gl.disable(gl.CULL_FACE);
               }
             },
           ],
@@ -3985,6 +3992,11 @@
       const max_time_slots  = 64;
       const time_slots      = new Array(max_time_slots);
       const script = [
+      {
+          begin       :  0                                ,
+          scene       :  all_scenes.supershapes_scene     ,
+        },
+/*
         {
           begin       :  0                                ,
           scene       :  all_scenes.start_scene           ,
@@ -4047,12 +4059,13 @@
         },
         {
           begin       :  28                               ,
-          scene       :  all_scenes.red_scene             ,
+          scene       :  all_scenes.supershapes_scene     ,
         },
         {
           begin       :  36                               ,
-          scene       :  all_scenes.supershapes_scene     ,
+          scene       :  all_scenes.red_scene             ,
         },
+*/
       ];
 
       function populate_time_slots() {
