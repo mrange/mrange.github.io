@@ -613,12 +613,12 @@ void main(void) {
       const passes = scene.passes.concat(scene.present_pass);
       for (const passKey in passes) {
         const pass = passes[passKey];
-        this.init_pass(uniforms, prelude, pass)
+        this.init_pass(sceneKey, passKey, uniforms, prelude, pass)
       }
     }
   }
 
-  init_pass(uniforms, prelude, pass) {
+  init_pass(sceneKey, passKey, uniforms, prelude, pass) {
     const vertexShader    = pass.vs_inline
       ? this.compile_shader(prelude, this.vertex_shader_type, pass.vs_inline)
       : this.get_shader(prelude, pass.vs)
@@ -639,7 +639,7 @@ void main(void) {
     this.gl.linkProgram(pass.shaderProgram);
 
     if (!this.gl.getProgramParameter(pass.shaderProgram, this.gl.LINK_STATUS)) {
-      alert("Unable to initialize the shader program: " + sceneKey);
+      alert("Unable to initialize the scene: " + sceneKey + "#" + passKey);
     }
 
     this.gl.useProgram(pass.shaderProgram);

@@ -2818,21 +2818,30 @@
     </script>
 
     <script id="fs_005_lines" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
       precision highp float;
 
       uniform float time;
       uniform vec2 resolution;
+
+      out vec4 frag_color;
+
+      #define TIME        time
+      #define RESOLUTION  resolution
+      #define PI          3.141592654
+      #define TAU         (2.0*PI)
+      #define PCOS(x) (0.5+0.5*cos(x))
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
 
       in vec4  v_position    ;
       in vec3  v_normal      ;
       in vec2  v_texcoord    ;
       flat in float v_ratio  ;
       flat in vec2  v_i2     ;
-
-      out vec4 frag_color;
-
-      #define PI      3.141592654
-      #define PCOS(x) (0.5+0.5*cos(x))
 
       float segmentx(vec2 p, float w) {
         p = abs(p);
@@ -3031,6 +3040,746 @@
       }
     </script>
 
+    <script id="vs_006_supershapes" type="x-shader/x-vertex">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float time;
+      uniform vec2 resolution;
+
+      in vec4 a_position;
+      in vec3 a_normal;
+      in vec2 a_texcoord;
+
+      #define TIME        time
+      #define RESOLUTION  resolution
+
+      #define PI          3.141592654
+      #define TAU         (2.0*PI)
+      #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
+      #define PCOS(a)     (0.5+0.5*cos(a))
+
+      const float bstart  = 0.136;
+      const float bpm     = 130.0;
+      const float bhz     = bpm/60.0;
+      const float bperiod = 8.0/bhz;
+
+      #define BTIME(n) ((n)*bperiod+bstart)
+
+      float beatCount(float tm) {
+        return (tm-bstart)*bhz;
+      }
+
+      float beat(float tm) {
+        const float off = asin(0.5);
+        return smoothstep(0.5, 1.0, sin(off+TAU*beatCount(tm)));
+      }
+
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+
+      const float effect_start  = BTIME(28.0);
+      const float effect_end    = BTIME(26.0);
+
+      uniform mat4 proj ;
+      uniform mat4 view ;
+
+      out vec3        v_position;
+      out vec3        v_normal  ;
+      out vec2        v_texcoord;
+      out vec2        v_uv      ;
+      flat out mat4   v_imodel  ;
+      flat out float  v_refract ;
+
+      const vec2 dimn = vec2(64.0, 64.0);
+
+      vec2 uv(float i) {
+        return vec2(mod(i, dimn.x)/dimn.x, floor(i/dimn.x)/dimn.y);
+      }
+
+      const vec2 du = vec2(
+          1.0/dimn.x
+        , 1.0/dimn.y
+        );
+
+      const vec2 dux = vec2(du.x, 0.0);
+      const vec2 duy = vec2(0.0, du.y);
+
+      struct Shape {
+        float   p0  ;
+        vec3    p1  ;
+        vec3    p2  ;
+        vec3    p3  ;
+        vec3    p4  ;
+      };
+
+      struct Period {
+        float hard  ;
+        float refr  ;
+        Shape shape ;
+      };
+
+      const Shape sixBox    = Shape(3.0, vec3(60.0, 25.0, 25.0) , vec3(6.0, 1.0, 1.0) , vec3(250.0, 100.0, 100.0) , vec3(6.0, 1.0, 1.0));
+      const Shape sixSeed   = Shape(3.0, vec3(60.0, 30.0, 30.0) , vec3(6.0, 1.0, 1.0) , vec3(10.0, 10.0, 10.0)    , vec3(2.0, 1.0, 1.0));
+      const Shape sixFlower = Shape(5.0, vec3(0.2, 1.7, 1.7)    , vec3(7.0, 1.0, 1.0) , vec3(0.2, 1.7, 1.7)       , vec3(7.0, 1.0, 1.0));
+      const Shape saucer    = Shape(6.0, vec3(0.2, 1.7, 1.7)    , vec3(0.2, 1.0, 1.0) , vec3(0.5, 0.2, 0.2)       , vec3(1.0, 1.0, 1.0));
+      const Shape weirdSeed = Shape(4.0, vec3(0.1, 1.0, 2.5)    , vec3(2.6, 1.0, 1.0) , vec3(3.0, 0.2, 1.0)       , vec3(3.0, 1.0, 1.0));
+      const Shape seaAnimal = Shape(4.0, vec3(0.7, 0.3, 0.2)    , vec3(2.0, 1.0, 1.0) , vec3(100.0, 100.0, 20.0)  , vec3(2.0, 1.0, 1.0));
+      const Shape infFlower = Shape(8.0, vec3(0.2, 1.7, 1.7)    , vec3(20.0, 1.0, 1.0), vec3(0.5, 0.2, 0.2)       , vec3(6.0, 1.0, 1.0));
+      const Shape superSeed = Shape(3.0, vec3(60.0, 25.0, 25.0) , vec3(80.0, 1.0, 1.0), vec3(250.0, 100.0, 100.0), vec3(40.0, 1.0, 1.0));
+
+      const Period[] periods = Period[](
+        Period(1.0,  0.75, sixBox    )
+      , Period(0.1,  0.75, sixSeed   )
+      , Period(1.0, -0.75, superSeed )
+      , Period(0.1,  0.75, seaAnimal )
+      , Period(0.1, -0.75, weirdSeed )
+      , Period(0.1,  0.75, sixFlower )
+      , Period(0.1,  0.25, infFlower )
+      , Period(0.1, -0.75, saucer    )
+      );
+
+      Shape g_currentShape;
+
+      float r(float th, vec3 n, vec3 q) {
+        return pow(pow(abs(1.0/q.y*cos(q.x*th*0.25)), n.y) + pow(abs(1.0/q.z*sin(q.x*th*0.25)), n.z), -1.0/n.x);
+      }
+
+      vec3 supershape(vec2 p) {
+        p -= 0.5;
+        p *= vec2(2.0, 1.0)*PI;
+
+        float r0 = g_currentShape.p0;
+        float r1 = r(p.x, g_currentShape.p1, g_currentShape.p2);
+        float r2 = r(p.y, g_currentShape.p3, g_currentShape.p4);
+
+        return r0*vec3(
+            r1*cos(p.x)*r2*cos(p.y)
+          , r1*sin(p.x)*r2*cos(p.y)
+          , r2*sin(p.y)
+          );
+      }
+
+      mat3 rot_z(float a) {
+        float c = cos(a);
+        float s = sin(a);
+        return mat3(
+            c,s,0
+          ,-s,c,0
+          , 0,0,1
+          );
+      }
+
+      mat3 rot_y(float a) {
+        float c = cos(a);
+        float s = sin(a);
+        return mat3(
+            c,0,s
+          , 0,1,0
+          ,-s,0,c
+          );
+      }
+
+      mat3 rot_x(float a) {
+        float c = cos(a);
+        float s = sin(a);
+        return mat3(
+            1, 0,0
+          , 0, c,s
+          , 0,-s,c
+          );
+      }
+
+      mat4 translate(vec3 t) {
+        return transpose(mat4(
+            1,0,0,t.x
+          , 0,1,0,t.y
+          , 0,0,1,t.z
+          , 0,0,0,1
+          ));
+      }
+
+
+      const vec2[6] duv0 = vec2[](
+          vec2(0.0, 0.0)
+        , dux
+        , duy
+        , duy
+        , dux
+        , du
+        );
+
+      const vec2[6] duv1 = vec2[](
+          duv0[1]   - duv0[0]
+        , duv0[2]   - duv0[1]
+        , duv0[0]   - duv0[2]
+        , duv0[4]   - duv0[3]
+        , duv0[5]   - duv0[4]
+        , duv0[3]   - duv0[5]
+        );
+
+      const vec2[6] duv2 = vec2[](
+          duv0[2]   - duv0[0]
+        , duv0[0]   - duv0[1]
+        , duv0[1]   - duv0[2]
+        , duv0[5]   - duv0[3]
+        , duv0[3]   - duv0[4]
+        , duv0[4]   - duv0[5]
+        );
+
+
+      void main() {
+
+        float i   = float(gl_InstanceID);
+        int   vid = gl_VertexID;
+
+        float etm = TIME-effect_start;
+
+        float per = floor(etm/bperiod);
+        float tm  = mod(etm, bperiod);
+        float ip  = smoothstep(0.25*bperiod, 0.75*bperiod, tm);
+        float l   = float(periods.length());
+        int from  = int(mod(per, l));
+        int to    = int(mod(per+1.0, l));
+
+        Period period0  = periods[from];
+        Period period1  = periods[to];
+        Shape  shape0   = period0.shape;
+        Shape  shape1   = period1.shape;
+
+        float hardness  = mix(period0.hard, period1.hard, ip);
+        float refr      = mix(period0.refr, period1.refr, ip);
+
+        vec2 uv   = uv(i);
+        vec2 duv0 = duv0[vid];
+        vec2 duv1 = duv1[vid];
+        vec2 duv2 = duv2[vid];
+
+        float sdm = mix(0.25, 0.0, hardness);
+        vec2 uv0 = uv + duv0;
+        vec2 uv1 = uv0 + hardness*duv1 + sdm*hardness*duv2;
+        vec2 uv2 = uv0 + hardness*duv2 + sdm*hardness*duv1;
+
+        g_currentShape = Shape(
+          mix(shape0.p0, shape1.p0, ip)
+        , mix(shape0.p1, shape1.p1, ip)
+        , mix(shape0.p2, shape1.p2, ip)
+        , mix(shape0.p3, shape1.p3, ip)
+        , mix(shape0.p4, shape1.p4, ip)
+        );
+
+        vec3 p0  = supershape(uv0);
+        vec3 p1  = supershape(uv1);
+        vec3 p2  = supershape(uv2);
+
+        vec3 dp1  = p1-p0;
+        vec3 dp2  = p2-p0;
+        vec3 nor  = cross(dp1, dp2);
+        nor = normalize(nor);
+
+        vec4 ep     = vec4(p0, 1.0);
+
+        float a = TAU*etm/bperiod;
+        mat3 model3 = rot_x(a*0.5+0.125)*rot_y(a*0.25-0.5);
+        mat4 model4 = mat4(model3);
+        mat4 imodel4= mat4(transpose(model3));
+        mat4 vp     = proj*view*model4;
+
+        gl_Position = vp*ep;
+        vec4 mp     = model4*ep;
+        vec3 mnor   = model3*nor;
+
+        v_position  = mp.xyz          ;
+        v_normal    = mnor            ;
+        v_texcoord  = a_texcoord      ;
+        v_imodel    = imodel4         ;
+        v_refract   = refr            ;
+        v_uv        = uv0             ;
+      }
+    </script>
+
+    <script id="fs_006_supershapes" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+
+      #define TIME        time
+      #define RESOLUTION  resolution
+
+      #define PI          3.141592654
+      #define TAU         (2.0*PI)
+      #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
+
+      const float bstart = 0.136;
+      const float bpm    = 130.0;
+      const float bhz    = bpm/60.0;
+      const float bperiod= 8.0/bhz;
+
+      #define BTIME(n) ((n)*bperiod+bstart)
+
+      float beatCount(float tm) {
+        return (tm-bstart)*bhz;
+      }
+
+      float beat(float tm) {
+        const float off = asin(0.5);
+        return smoothstep(0.5, 1.0, sin(off+TAU*beatCount(tm)));
+      }
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+
+      in vec3        v_position;
+      in vec3        v_normal  ;
+      in vec2        v_texcoord;
+      in vec2        v_uv      ;
+      in mat4        v_imodel  ;
+      in float       v_refract  ;
+
+      out vec4 frag_color;
+
+      // License: WTFPL, author: sam hocevar, found: https://stackoverflow.com/a/17897228/418488
+      const vec4 hsv2rgb_K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+      vec3 hsv2rgb(vec3 c) {
+        vec3 p = abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www);
+        return c.z * mix(hsv2rgb_K.xxx, clamp(p - hsv2rgb_K.xxx, 0.0, 1.0), c.y);
+      }
+      // License: WTFPL, author: sam hocevar, found: https://stackoverflow.com/a/17897228/418488
+      //  Macro version of above to enable compile-time constants
+      #define HSV2RGB(c)  (c.z * mix(hsv2rgb_K.xxx, clamp(abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www) - hsv2rgb_K.xxx, 0.0, 1.0), c.y))
+
+      // http://mercury.sexy/hg_sdf/
+      vec2 mod2(inout vec2 p, vec2 size) {
+        vec2 c = floor((p + size*0.5)/size);
+        p = mod(p + size*0.5,size) - size*0.5;
+        return c;
+      }
+
+      float circle(vec2 p, float r) {
+        return length(p) - r;
+      }
+
+      // License: MIT, author: Inigo Quilez, found: https://iquilezles.org/www/articles/distfunctions2d/distfunctions2d.htm
+      float box(vec2 p, vec2 b) {
+        vec2 d = abs(p)-b;
+        return length(max(d,0.0)) + min(max(d.x,d.y),0.0);
+      }
+
+      // License: MIT, author: Inigo Quilez, found: https://www.iquilezles.org/www/articles/smin/smin.htm
+      float pmin(float a, float b, float k) {
+        float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0 );
+        return mix( b, a, h ) - k*h*(1.0-h);
+      }
+
+      // License: MIT, author: Inigo Quilez, found: https://iquilezles.org/www/articles/intersectors/intersectors.htm
+      float rayPlane(vec3 ro, vec3 rd, vec4 p) {
+        return -(dot(ro,p.xyz)+p.w)/dot(rd,p.xyz);
+      }
+
+      float raySphereDensity(vec3 ro, vec3 rd, vec4 sph, float dbuffer) {
+          float ndbuffer = dbuffer/sph.w;
+          vec3  rc = (ro - sph.xyz)/sph.w;
+
+          float b = dot(rd,rc);
+          float c = dot(rc,rc) - 1.0;
+          float h = b*b - c;
+          if( h<0.0 ) return 0.0;
+          h = sqrt( h );
+          float t1 = -b - h;
+          float t2 = -b + h;
+
+          if( t2<0.0 || t1>ndbuffer ) return 0.0;
+          t1 = max( t1, 0.0 );
+          t2 = min( t2, ndbuffer );
+
+          float i1 = -(c*t1 + b*t1*t1 + t1*t1*t1/3.0);
+          float i2 = -(c*t2 + b*t2*t2 + t2*t2*t2/3.0);
+          return (i2-i1)*(3.0/4.0);
+      }
+
+      float tanh_approx(float x) {
+      //  return tanh(x);
+        float x2 = x*x;
+        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
+      }
+
+      const vec3 lightDir1 = normalize(vec3(-0.3, 0.15, 1.0));
+      const vec3 lightDir2 = normalize(vec3(-1.5,  0., -1.0));
+      const vec3 glowCol   = vec3(1.0, 4.0, 1.5);
+
+      float blobs(vec2 p) {
+        // Generates a grid of dots
+        vec2 bp = p;
+        vec2 bn = mod2(bp, vec2(3.0));
+
+        vec2 dp = p;
+        vec2 dn = mod2(dp, vec2(0.25));
+        float ddots = length(dp);
+
+        // Blobs
+        float dblobs = 1E6;
+        for (int i = 0; i < 5; ++i) {
+          float dd = circle(bp-1.0*vec2(sin(TIME+float(i)), sin(float(i*i)+TIME*sqrt(0.5))), 0.1);
+          dblobs = pmin(dblobs, dd, 0.35);
+        }
+
+        float d = 1E6;
+        d = min(d, ddots);
+        // Smooth min between blobs and dots makes it look somewhat amoeba like
+        d = pmin(d, dblobs, 0.35);
+        return d;
+      }
+
+      vec3 skyColor(vec3 ro, vec3 rd) {
+        const vec3 gcol = HSV2RGB(vec3(0.45, 0.6, 1.0));
+        vec3 col = clamp(vec3(0.00125/abs(rd.y))*gcol, 0.0, 1.0);
+
+
+        float tp0  = rayPlane(ro, rd, vec4(vec3(0.0, 1.0, 0.0), 4.0));
+        float tp1  = rayPlane(ro, rd, vec4(vec3(0.0, -1.0, 0.0), 6.0));
+        float tp = tp1;
+        tp = max(tp0,tp1);
+        if (tp > 0.0) {
+          vec3 pos  = ro + tp*rd;
+          float f = 1.0-tanh_approx(0.1*length(pos.xz));
+          const float fz = 0.25;
+          const float bz = 1.0/fz;
+          pos.z += -3.0*TIME;
+          vec2 bpos = pos.xz/bz;
+          float db = blobs(bpos)*bz;
+          db = abs(db);
+          vec2 pp = pos.xz*fz;
+          float m = 0.5+0.25*(sin(3.0*pp.x+TIME*2.1)+sin(3.3*pp.y+TIME*2.0));
+          m *= m;
+          m *= m;
+          pp = fract(pp+0.5)-0.5;
+          float dp = pmin(abs(pp.x), abs(pp.y), 0.125);
+          dp = min(dp, db);
+          vec3 hsv = vec3(0.4+mix(0.15,0.0, m), tanh_approx(mix(50.0, 10.0, m)*dp), 1.0);
+          vec3 pcol = 1.5*hsv2rgb(hsv)*exp(-mix(30.0, 10.0, m)*dp);
+          col = mix(col, pcol , f);
+        }
+
+
+        if (tp1 > 0.0) {
+          vec3 pos  = ro + tp1*rd;
+          vec2 pp = pos.xz;
+          float db = box(pp, vec2(6.0, 9.0))-1.0;
+
+          col += vec3(2.0)*gcol*rd.y*smoothstep(0.25, 0.0, db);
+          col += vec3(0.8)*gcol*exp(-0.5*max(db, 0.0));
+        }
+
+
+        return col;
+      }
+
+      void main() {
+        vec2 q = v_texcoord;
+        vec2 p = -1.0+2.0*q;
+        vec3 nor = normalize(v_normal);
+
+        vec2 uv = v_uv;
+
+        vec2 ap = abs(p);
+        vec2 dpx = dFdx(ap);
+        vec2 dpy = dFdy(ap);
+        vec2 smf = vec2(abs(dpy.x)+abs(dpx.x), abs(dpx.y)+abs(dpy.y));
+        vec2 bp = smoothstep(vec2(1.0)-smf, vec2(1.0), ap);
+        vec2 fo = smoothstep(0.33, 0.0, smf);
+        float bcol = 0.5*(fo.x*fo.y)*tanh(1.0*(bp.x+bp.y));
+
+        vec3 ro = vec3(0.0, 3.0, 7.0);
+        vec3 ri = v_position;
+        vec3 rd = normalize(ri-ro);
+        vec3 ref = reflect(rd, nor);
+        vec3 refr= refract(rd, nor, v_refract);
+
+        mat4 imodel = v_imodel;
+        vec3 iro  = (imodel*vec4(ri, 1.0)).xyz;
+        vec3 ird  = mat3(imodel)*refr;
+
+        float diff1 = max(dot(nor, lightDir1), 0.0);
+        float diff2 = max(dot(nor, lightDir2), 0.0);
+
+        float fre  = 1.0+min(dot(rd, nor), 0.0);
+        fre *= fre;
+
+        vec3 rsky = skyColor(ri, ref);
+        vec3 col = vec3(0.0);
+        col += 0.5*fre*rsky*rsky;
+
+        float gf = beat(TIME);
+        float gsr = mix(2.0, 3.0, gf);
+        float gd = raySphereDensity(iro, ird, vec4(vec3(0.0), gsr), 1E6);
+        col += mix(0.6, 0.9, gf)*glowCol*gd*gd*(1.0-fre);
+
+        col += bcol*diff1+bcol*diff2;
+        vec3 mcol = hsv2rgb(vec3(0.5+0.25*v_uv.y, 0.95, 0.125));
+
+        frag_color = vec4(col,1.0);
+      }
+    </script>
+
+    <script id="fs_006_supershapes_post" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+      uniform sampler2D impulseAsset_logos;
+      uniform sampler2D impulseAsset_texts;
+
+      in vec4 v_position  ;
+      in vec3 v_normal    ;
+      in vec2 v_texcoord  ;
+
+      out vec4 frag_color ;
+
+      #define TIME        time
+      #define RESOLUTION  resolution
+
+      #define PI          3.141592654
+      #define TAU         (2.0*PI)
+      #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
+
+      const float bstart = 0.136;
+      const float bpm    = 130.0;
+      const float bhz    = bpm/60.0;
+      const float bperiod= 8.0/bhz;
+
+      #define BTIME(n) ((n)*bperiod+bstart)
+
+      float beatCount(float tm) {
+        return (tm-bstart)*bhz;
+      }
+
+      float beat(float tm) {
+        const float off = asin(0.5);
+        return smoothstep(0.5, 1.0, sin(off+TAU*beatCount(tm)));
+      }
+      const float impulseAsset_count = 15.0;
+
+      const float[15] impulseLogo_centerOffset = float[](
+          0.2725
+        , 0.245
+        , 0.2295
+        , 0.199
+        , 0.167
+        , 0.16
+        , 0.165
+        , 0.163
+        , 0.1455
+        , 0.141
+        , 0.148
+        , 0.141
+        , 0.135
+        , 0.103
+        , -0.0075
+        );
+
+      vec4 impulseAsset(sampler2D sampler, vec2 p, int i) {
+        const vec2 dim = vec2(1504.0, 3960.0);
+        p.y *= dim.x/dim.y;
+        p += vec2(0.5, 1.0-0.5/impulseAsset_count);
+        p.y = 1.0-p.y;
+        float t = step(p.y, 1.0/impulseAsset_count)*step(0.0/impulseAsset_count, p.y);
+        p.y += (1.0/impulseAsset_count)*float(i);
+        vec4 lcol = texture(sampler, p);
+        lcol.w *= t;
+        return lcol;
+      }
+
+      vec4 impulseLogo(vec2 p, int i) {
+        return impulseAsset(impulseAsset_logos, p, i);
+      }
+
+      vec4 impulseLogoCenter(vec2 p, int i) {
+        return impulseLogo(p - vec2(impulseLogo_centerOffset[i], 0.0), i);
+      }
+
+      vec4 impulseText(vec2 p, int i) {
+        return impulseAsset(impulseAsset_texts, p, i);
+      }
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+
+      const float effect_start  = BTIME(28.0);
+      const float effect_fadein = BTIME(28.0+0.25);
+      const float effect_fadeout= BTIME(36.0-0.25);
+      const float effect_end    = BTIME(36.0);
+
+
+      uniform sampler2D prev_frame;
+      uniform sampler2D prev_pass;
+
+      // License: Unknown, author: nmz (twitter: @stormoid), found: https://www.shadertoy.com/view/NdfyRM
+      float sRGB(float t) { return mix(1.055*pow(t, 1./2.4) - 0.055, 12.92*t, step(t, 0.0031308)); }
+      // License: Unknown, author: nmz (twitter: @stormoid), found: https://www.shadertoy.com/view/NdfyRM
+      vec3 sRGB(in vec3 c) { return vec3 (sRGB(c.x), sRGB(c.y), sRGB(c.z)); }
+
+      const vec4 hsv2rgb_K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+      vec3 hsv2rgb(vec3 c) {
+        vec3 p = abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www);
+        return c.z * mix(hsv2rgb_K.xxx, clamp(p - hsv2rgb_K.xxx, 0.0, 1.0), c.y);
+      }
+      #define HSV2RGB(c)  (c.z * mix(hsv2rgb_K.xxx, clamp(abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www) - hsv2rgb_K.xxx, 0.0, 1.0), c.y))
+
+      // License: WTFPL, author: sam hocevar, found: https://stackoverflow.com/a/17897228/418488
+      vec3 rgb2hsv(vec3 c) {
+        const vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+        vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+        vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+
+        float d = q.x - min(q.w, q.y);
+        float e = 1.0e-10;
+        return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+      }
+
+      // http://mercury.sexy/hg_sdf/
+      vec2 mod2(inout vec2 p, vec2 size) {
+        vec2 c = floor((p + size*0.5)/size);
+        p = mod(p + size*0.5,size) - size*0.5;
+        return c;
+      }
+
+      float circle(vec2 p, float r) {
+        return length(p) - r;
+      }
+
+      // License: MIT, author: Inigo Quilez, found: https://iquilezles.org/www/articles/distfunctions2d/distfunctions2d.htm
+      float box(vec2 p, vec2 b) {
+        vec2 d = abs(p)-b;
+        return length(max(d,0.0)) + min(max(d.x,d.y),0.0);
+      }
+
+      // License: MIT, author: Inigo Quilez, found: https://www.iquilezles.org/www/articles/smin/smin.htm
+      float pmin(float a, float b, float k) {
+        float h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0 );
+        return mix( b, a, h ) - k*h*(1.0-h);
+      }
+
+      // License: MIT, author: Inigo Quilez, found: https://iquilezles.org/www/articles/intersectors/intersectors.htm
+      float rayPlane(vec3 ro, vec3 rd, vec4 p) {
+        return -(dot(ro,p.xyz)+p.w)/dot(rd,p.xyz);
+      }
+
+      float tanh_approx(float x) {
+      //  return tanh(x);
+        float x2 = x*x;
+        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
+      }
+
+      float blobs(vec2 p) {
+        // Generates a grid of dots
+        vec2 bp = p;
+        vec2 bn = mod2(bp, vec2(3.0));
+
+        vec2 dp = p;
+        vec2 dn = mod2(dp, vec2(0.25));
+        float ddots = length(dp);
+
+        // Blobs
+        float dblobs = 1E6;
+        for (int i = 0; i < 5; ++i) {
+          float dd = circle(bp-1.0*vec2(sin(TIME+float(i)), sin(float(i*i)+TIME*sqrt(0.5))), 0.1);
+          dblobs = pmin(dblobs, dd, 0.35);
+        }
+
+        float d = 1E6;
+        d = min(d, ddots);
+        // Smooth min between blobs and dots makes it look somewhat amoeba like
+        d = pmin(d, dblobs, 0.35);
+        return d;
+      }
+
+      vec3 skyColor(vec3 ro, vec3 rd) {
+        const vec3 gcol = HSV2RGB(vec3(0.45, 0.6, 1.0));
+        vec3 col = clamp(vec3(0.00125/abs(rd.y))*gcol, 0.0, 1.0);
+
+        float tp0  = rayPlane(ro, rd, vec4(vec3(0.0, 1.0, 0.0), 4.0));
+        float tp1  = rayPlane(ro, rd, vec4(vec3(0.0, -1.0, 0.0), 6.0));
+        float tp = tp1;
+        tp = max(tp0,tp1);
+        if (tp > 0.0) {
+          vec3 pos  = ro + tp*rd;
+          float f = 1.0-tanh_approx(0.1*length(pos.xz));
+          const float fz = 0.25;
+          const float bz = 1.0/fz;
+          pos.z += -3.0*TIME;
+          vec2 bpos = pos.xz/bz;
+          float db = blobs(bpos)*bz;
+          db = abs(db);
+          vec2 pp = pos.xz*fz;
+          float m = 0.5+0.25*(sin(3.0*pp.x+TIME*2.1)+sin(3.3*pp.y+TIME*2.0));
+          m *= m;
+          m *= m;
+          pp = fract(pp+0.5)-0.5;
+          float dp = pmin(abs(pp.x), abs(pp.y), 0.125);
+          dp = min(dp, db);
+          vec3 hsv = vec3(0.4+mix(0.15,0.0, m), tanh_approx(mix(50.0, 10.0, m)*dp), 1.0);
+          vec3 pcol = 1.5*hsv2rgb(hsv)*exp(-mix(30.0, 10.0, m)*dp);
+
+          col = mix(col, pcol , f);
+        }
+
+
+        if (tp1 > 0.0) {
+          vec3 pos  = ro + tp1*rd;
+          vec2 pp = pos.xz;
+          float db = box(pp, vec2(6.0, 9.0))-1.0;
+
+          col += vec3(2.0)*gcol*rd.y*smoothstep(0.25, 0.0, db);
+          col += vec3(0.8)*gcol*exp(-0.5*max(db, 0.0));
+        }
+
+
+        return col;
+      }
+
+      void main() {
+        vec2 q = v_texcoord;
+        vec2 p = -1.0 + 2.0*q;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+
+        vec3 ro = vec3(0.0, 3.0, 7.0);
+        vec3 la = vec3(0.0, 0.0, 0.0);
+        vec3 up = vec3(0.0, 1.0, 0.0);
+
+        vec3 ww = normalize(la - ro);
+        vec3 uu = normalize(cross(up, ww ));
+        vec3 vv = normalize(cross(ww,uu));
+        float fov = tan(TAU/6.0);
+        vec3 rd = normalize(-p.x*uu + p.y*vv + fov*ww);
+
+        vec3 skyCol = skyColor(ro, rd);
+
+        vec4 tcol = texture(prev_pass,q);
+        vec3 col = skyCol;
+        col = mix(col, tcol.xyz, tcol.w);
+        vec3 hsv = rgb2hsv(col);
+        hsv.x += 0.1*TIME+0.2*p.y;
+        hsv.z *= smoothstep(effect_start, effect_fadein, TIME)*smoothstep(effect_end, effect_fadeout, TIME);
+        col = hsv2rgb(hsv);
+        col = sRGB(col);
+        frag_color = vec4(col, 1.0);
+      }
+    </script>
+
     <script type = "module">
       import TinySDF from "./tiny-sdf.js";
       const fontFamily  = "Josefin Slab"
@@ -3090,7 +3839,7 @@
                 gl.blendFuncSeparate(gl.SRC_ALPHA, gl.DST_ALPHA, gl.ONE, gl.ONE);
                 gl.blendEquationSeparate(gl.FUNC_ADD, gl.MAX);
 
-                gl.uniformMatrix4fv(pass.uniformLocations.mvp, false, mvp);
+                gl.uniformMatrix4fv(pass.uniformLocations.mvp, false, mvp_005);
               },
             },
             {
@@ -3198,6 +3947,32 @@
         lines_scene_1 : lines_scene("SEGMENT1"),
         lines_scene_2 : lines_scene("SEGMENT2"),
         lines_scene_3 : lines_scene("SEGMENT3"),
+        supershapes_scene : {
+          passes:[
+            {
+              vs: "vs_006_supershapes",
+              fs: "fs_006_supershapes",
+              requires_clear: true,
+              instances: 4096,
+              pre_render: (gl, time, scene, pass) => {
+                gl.enable(gl.BLEND);
+                gl.blendFuncSeparate(gl.SRC_ALPHA, gl.DST_ALPHA, gl.ONE, gl.ONE);
+                gl.blendEquationSeparate(gl.FUNC_ADD, gl.MAX);
+
+                gl.uniformMatrix4fv(pass.uniformLocations.proj, false, proj_006);
+                gl.uniformMatrix4fv(pass.uniformLocations.view, false, view_006);
+              },
+            },
+            {
+              vs: "vs_default",
+              fs: "fs_006_supershapes_post",
+              pre_render: (gl, time, scene, pass) => {
+                gl.disable(gl.BLEND);
+              }
+            },
+          ],
+          uniforms: ["proj", "view"],
+        },
       };
 
       const bpm   = 130.0;
@@ -3270,6 +4045,14 @@
           begin       :  24                               ,
           scene       :  all_scenes.red_scene             ,
         },
+        {
+          begin       :  28                               ,
+          scene       :  all_scenes.red_scene             ,
+        },
+        {
+          begin       :  36                               ,
+          scene       :  all_scenes.supershapes_scene     ,
+        },
       ];
 
       function populate_time_slots() {
@@ -3296,9 +4079,12 @@
       }
 
       function on_init_complete(width, height) {
-        globalThis.projection  = projection_matrix4(Math.PI/3.0, width/height, 1, 1000);
-        globalThis.view        = look_at_matrix4(vector3(0,0,3), vector3(0,0,0), vector3(0,1,0));
-        globalThis.mvp         = multiply_matrix4(view, projection);
+        globalThis.proj_005  = projection_matrix4(Math.PI/3.0, width/height, 1, 1000);
+        globalThis.view_005  = look_at_matrix4(vector3(0,0,3), vector3(0,0,0), vector3(0,1,0));
+        globalThis.mvp_005   = multiply_matrix4(view_005, proj_005);
+
+        globalThis.proj_006  = projection_matrix4(Math.PI/3.0, width/height, 1, 1000);
+        globalThis.view_006  = look_at_matrix4(vector3(0,3,7), vector3(0,0,0), vector3(0,1,0));
 
         const label = document.getElementById("info_label");
         label.textContent = "Ready, click play to run";
