@@ -146,7 +146,7 @@
       #define TAU         (2.0*PI)
       #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
 
-      const float bstart = 0.1;
+      const float bstart = 2.153;
       const float bpm    = 146.0;
       const float bhz    = bpm/60.0;
       const float bperiod= 8.0/bhz;
@@ -335,10 +335,12 @@
         vec3 uu = normalize(cross(normalize(vec3(0.0,1.0,0.0)+ddro), ww));
         vec3 vv = cross(ww, uu);
 
+        float fi = smoothstep(BTIME(0.25), BTIME(0.0), TIME);
         vec3 col = color(ww, uu, vv, ro, p);
         col -= .1*vec3(0.0, 1.0, 2.0).zyx*length(pp);
         col *= smoothstep(1.5, 0.5, length(pp));
         col = aces_approx(col);
+        col += fi;
         col = sRGB(col);
 
         return col;
@@ -354,7 +356,6 @@
 
         frag_color = vec4(col, 1.0);
       }
-
     </script>
 
     <script type = "module">
@@ -429,6 +430,10 @@
         {
           begin       :  0                                ,
           scene       :  all_scenes.star_travelling_scene ,
+        },
+        {
+          begin       :  4                                ,
+          scene       :  all_scenes.red_scene             ,
         },
       ];
 
