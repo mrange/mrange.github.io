@@ -184,11 +184,6 @@
       //  Macro version of above to enable compile-time constants
       #define HSV2RGB(c)  (c.z * mix(hsv2rgb_K.xxx, clamp(abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www) - hsv2rgb_K.xxx, 0.0, 1.0), c.y))
 
-      // License: Unknown, author: nmz (twitter: @stormoid), found: https://www.shadertoy.com/view/NdfyRM
-      vec3 sRGB(vec3 t) {
-        return mix(1.055*pow(t, vec3(1./2.4)) - 0.055, 12.92*t, step(t, vec3(0.0031308)));
-      }
-
       // License: Unknown, author: Matt Taylor (https://github.com/64), found: https://64.github.io/tonemapping/
       vec3 aces_approx(vec3 v) {
         v = max(v, 0.0);
@@ -341,7 +336,7 @@
         col *= smoothstep(1.5, 0.5, length(pp));
         col = aces_approx(col);
         col += fi;
-        col = sRGB(col);
+        col = sqrt(col);
 
         return col;
       }
@@ -728,6 +723,540 @@
       }
     </script>
 
+    <script id="fs_003_hyper_space" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+
+      in vec2 v_texcoord  ;
+
+      out vec4 frag_color ;
+
+      #define TIME        time
+      #define RESOLUTION  resolution
+
+      #define PI          3.141592654
+      #define TAU         (2.0*PI)
+      #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
+      #define PCOS(a)     0.5*(cos(a)+1.0)
+
+
+      const float bstart = 2.153;
+      const float bpm    = 146.0;
+      const float bhz    = bpm/60.0;
+      const float bperiod= 8.0/bhz;
+
+      #define BTIME(n) ((n)*bperiod+bstart)
+
+      float beatCount(float tm) {
+        return (tm-bstart)*bhz;
+      }
+
+      float beat(float tm) {
+        return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
+      }
+
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+
+      // License: WTFPL, author: sam hocevar, found: https://stackoverflow.com/a/17897228/418488
+      const vec4 hsv2rgb_K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+      vec3 hsv2rgb(vec3 c) {
+        vec3 p = abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www);
+        return c.z * mix(hsv2rgb_K.xxx, clamp(p - hsv2rgb_K.xxx, 0.0, 1.0), c.y);
+      }
+      // License: WTFPL, author: sam hocevar, found: https://stackoverflow.com/a/17897228/418488
+      //  Macro version of above to enable compile-time constants
+      #define HSV2RGB(c)  (c.z * mix(hsv2rgb_K.xxx, clamp(abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www) - hsv2rgb_K.xxx, 0.0, 1.0), c.y))
+
+      // License: Unknown, author: Unknown, found: don't remember
+      float hash(float co) {
+        return fract(sin(co*12.9898) * 13758.5453);
+      }
+
+      // License: MIT OR CC-BY-NC-4.0, author: mercury, found: https://mercury.sexy/hg_sdf/
+      float mod1(inout float p, float size) {
+        float halfsize = size*0.5;
+        float c = floor((p + halfsize)/size);
+        p = mod(p + halfsize, size) - halfsize;
+        return c;
+      }
+
+      // License: MIT, author: Inigo Quilez, found: https://www.iquilezles.org/www/articles/intersectors/intersectors.htm
+      vec2 rayCylinder(vec3 ro, vec3 rd, vec3 cb, vec3 ca, float cr) {
+        vec3  oc = ro - cb;
+        float card = dot(ca,rd);
+        float caoc = dot(ca,oc);
+        float a = 1.0 - card*card;
+        float b = dot( oc, rd) - caoc*card;
+        float c = dot( oc, oc) - caoc*caoc - cr*cr;
+        float h = b*b - a*c;
+        if( h<0.0 ) return vec2(-1.0); //no intersection
+        h = sqrt(h);
+        return vec2(-b-h,-b+h)/a;
+      }
+
+      // License: Unknown, author: Unknown, found: shadertoy somewhere, don't remember where
+      float dfcos(float x) {
+        return sqrt(x*x+1.0)*0.8-1.8;
+      }
+
+      // License: Unknown, author: Unknown, found: shadertoy somewhere, don't remember where
+      float dfcos(vec2 p, float freq) {
+        float x = p.x;
+        float y = p.y;
+        x *= freq;
+
+        float x1 = abs(mod(x+PI,TAU)-PI);
+        float x2 = abs(mod(x   ,TAU)-PI);
+
+        float a = 0.18*freq;
+
+        x1 /= max( y*a+1.0-a,1.0);
+        x2 /= max(-y*a+1.0-a,1.0);
+        return (mix(-dfcos(x2)-1.0,dfcos(x1)+1.0,clamp(y*0.5+0.5,0.0,1.0)))/max(freq*0.8,1.0)+max(abs(y)-1.0,0.0)*sign(y);
+      }
+
+      vec3 skyColor(vec3 ro, vec3 rd) {
+        const vec3 gcol0 = HSV2RGB(vec3(0.55, 0.9, 0.035*0.5));
+        const vec3 gcol1 = HSV2RGB(vec3(0.75, 0.85, 0.035*2.0));
+        float b = beat(TIME);
+        vec2 pp = rd.xy;
+        return mix(gcol0, gcol1, b)/dot(pp, pp);
+      }
+
+      // License: MIT, author: Inigo Quilez, found: https://www.iquilezles.org/www/articles/smin/smin.htm
+      float pmin(float a, float b, float k) {
+        float h = clamp(0.5+0.5*(b-a)/k, 0.0, 1.0);
+        return mix(b, a, h) - k*h*(1.0-h);
+      }
+
+      float sphere4(vec2 p, float r) {
+        p *= p;
+        return pow(dot(p, p), 0.25)-r;
+      }
+
+      // License: Unknown, author: Unknown, found: don't remember
+      float tanh_approx(float x) {
+        //  Found this somewhere on the interwebs
+        //  return tanh(x);
+        float x2 = x*x;
+        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
+      }
+
+      vec3 color(vec3 ww, vec3 uu, vec3 vv, vec3 ro, vec2 p) {
+      //  const float rdd = 2.0;
+        float lp = length(p);
+        const float rdd_per   = 10.0;
+        float rdd =  (1.75+0.75*pow(lp,1.5)*tanh_approx(lp+0.9*PCOS(rdd_per*p.x)*PCOS(rdd_per*p.y)));
+
+        const float mm = 4.0;
+        const float rep = 27.0;
+
+        vec3 rd = normalize(-p.x*uu + p.y*vv + rdd*ww);
+
+        vec3 skyCol = skyColor(ro, rd);
+
+        vec2 etc = rayCylinder(ro, rd, ro, vec3(0.0, 0.0, 1.0), 1.0);
+        vec3 etcp = ro+rd*etc.y;
+
+        rd.yx *= ROT(0.5*TIME);
+
+        vec3 col = skyCol;
+
+        // I read somewhere that if you call atan in a shader you got no business writing shader code.
+        //  I even call it in a loop :)
+        float a = atan(rd.y, rd.x);
+        for(float i = 0.0; i < mm; ++i) {
+          float ma = a;
+          float sz = rep+i*6.0;
+          float slices = TAU/sz;
+          float na = mod1(ma, slices);
+
+          float h1 = hash(na+13.0*i+123.4);
+          float h2 = fract(h1*3677.0);
+          float h3 = fract(h1*8677.0);
+
+          float tr = mix(0.5, 3.0, h1);
+          vec2 tc = rayCylinder(ro, rd, ro, vec3(0.0, 0.0, 1.0), tr);
+          vec3 tcp = ro + tc.y*rd;
+          vec2 tcp2 = vec2(tcp.z, atan(tcp.y, tcp.x));
+
+          float zz = mix(0.025, 0.05, sqrt(h1))*rep/sz;
+          float tnpy = mod1(tcp2.y, slices);
+          float fo = smoothstep(0.5*slices, 0.25*slices, abs(tcp2.y));
+          tcp2.x += -h2*TIME;
+          tcp2.y *= tr*PI/3.0;
+          tcp2/=zz;
+
+          float d0 = abs(dfcos(tcp2, 2.0*zz));
+          float d = d0;
+          d *= zz;
+
+          vec3 bcol = (1.0+cos(vec3(0.0, 1.0, 2.0)+TAU*h3+0.5*h2*h2*tcp.z))*0.00005;
+          bcol /= max(d*d, 0.000+5E-7*tc.y*tc.y);
+          bcol *= exp(-0.02*tc.y*tc.y);
+          bcol *= smoothstep(-0.5, 1.0, sin(mix(0.125, 1.0, h2)*tcp.z));
+          bcol *= fo;
+
+          col += bcol;
+        }
+
+        return col;
+      }
+
+      // License: Unknown, author: Matt Taylor (https://github.com/64), found: https://64.github.io/tonemapping/
+      vec3 aces_approx(vec3 v) {
+        v = max(v, 0.0);
+        v *= 0.6f;
+        float a = 2.51f;
+        float b = 0.03f;
+        float c = 2.43f;
+        float d = 0.59f;
+        float e = 0.14f;
+        return clamp((v*(a*v+b))/(v*(c*v+d)+e), 0.0f, 1.0f);
+      }
+
+      vec3 effect(vec2 p, vec2 pp) {
+        float tm  = TAU*TIME;
+        vec3 ro   = vec3(0.0, 0.0, tm);
+        vec3 dro  = normalize(vec3(1.0, 0.0, 3.0));
+        dro.xz *= ROT(0.2*sin(0.05*tm));
+        dro.yz *= ROT(0.2*sin(0.05*tm*sqrt(0.5)));
+        const vec3 up = vec3(0.0,1.0,0.0);
+        vec3 ww = normalize(dro);
+        vec3 uu = normalize(cross(up, ww));
+        vec3 vv = (cross(ww, uu));
+        vec3 col = color(ww, uu, vv, ro, p);
+        col -= 0.125*vec3(0.0, 1.0, 2.0).yzx*length(pp);
+        col = aces_approx(col);
+        float fi = smoothstep(BTIME(8.25), BTIME(8.0), TIME);
+        col += fi;
+        col = sqrt(col);
+        return col;
+      }
+
+      void main(void) {
+        vec2 q = v_texcoord;
+        vec2 p = -1. + 2. * q;
+        vec2 pp = p;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+
+        vec3 col = effect(p, pp);
+        frag_color = vec4(col, 1.0);
+      }
+    </script>
+
+    <script id="fs_004_cables" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+
+      in vec2 v_texcoord  ;
+
+      out vec4 frag_color ;
+
+      #define TIME        time
+      #define RESOLUTION  resolution
+
+      #define PI          3.141592654
+      #define TAU         (2.0*PI)
+      #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
+
+      const float bstart = 2.153;
+      const float bpm    = 146.0;
+      const float bhz    = bpm/60.0;
+      const float bperiod= 8.0/bhz;
+
+      #define BTIME(n) ((n)*bperiod+bstart)
+
+      float beatCount(float tm) {
+        return (tm-bstart)*bhz;
+      }
+
+      float beat(float tm) {
+        return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
+      }
+
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+
+      #define TOLERANCE       0.0001
+      #define NORMTOL         0.00125
+      #define MAX_RAY_LENGTH  20.0
+      #define MAX_RAY_MARCHES 90
+      #define TIME            time
+      #define RESOLUTION      resolution
+      #define ROT(a)          mat2(cos(a), sin(a), -sin(a), cos(a))
+      #define PI              3.141592654
+      #define TAU             (2.0*PI)
+      #define MAX_ITER        3
+
+      // https://stackoverflow.com/a/17897228/418488
+      const vec4 hsv2rgb_K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+      vec3 hsv2rgb(vec3 c) {
+        vec3 p = abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www);
+        return c.z * mix(hsv2rgb_K.xxx, clamp(p - hsv2rgb_K.xxx, 0.0, 1.0), c.y);
+      }
+      #define HSV2RGB(c)  (c.z * mix(hsv2rgb_K.xxx, clamp(abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www) - hsv2rgb_K.xxx, 0.0, 1.0), c.y))
+
+      #define PATHA vec2(0.1147, 0.2093)
+      #define PATHB vec2(13.0, 3.0)
+
+      const float cam_amp =1.;
+
+      mat2 g_rot = mat2(1.0);
+      float g_quad = 0.0;
+      int g_hit = 0;
+
+      float tanh_approx(float x) {
+      //  return tanh(x);
+        float x2 = x*x;
+        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
+      }
+
+      // License: MIT, author: Inigo Quilez, found: https://iquilezles.org/www/articles/distfunctions2d/distfunctions2d.htm
+      float roundedX(vec2 p, float w, float r) {
+        p = abs(p);
+        return length(p-min(p.x+p.y,w)*0.5) - r;
+      }
+
+      // License: MIT, author: Inigo Quilez, found: https://iquilezles.org/articles/spherefunctions
+      float sphered(vec3 ro, vec3 rd, vec4 sph, float dbuffer) {
+          float ndbuffer = dbuffer/sph.w;
+          vec3  rc = (ro - sph.xyz)/sph.w;
+
+          float b = dot(rd,rc);
+          float c = dot(rc,rc) - 1.0;
+          float h = b*b - c;
+          if( h<0.0 ) return 0.0;
+          h = sqrt( h );
+          float t1 = -b - h;
+          float t2 = -b + h;
+
+          if( t2<0.0 || t1>ndbuffer ) return 0.0;
+          t1 = max( t1, 0.0 );
+          t2 = min( t2, ndbuffer );
+
+          float i1 = -(c*t1 + b*t1*t1 + t1*t1*t1/3.0);
+          float i2 = -(c*t2 + b*t2*t2 + t2*t2*t2/3.0);
+          return (i2-i1)*(3.0/4.0);
+      }
+
+      // License: Unknown, author: Matt Taylor (https://github.com/64), found: https://64.github.io/tonemapping/
+      vec3 aces_approx(vec3 v) {
+        v = max(v, 0.0);
+        v *= 0.6f;
+        float a = 2.51f;
+        float b = 0.03f;
+        float c = 2.43f;
+        float d = 0.59f;
+        float e = 0.14f;
+        return clamp((v*(a*v+b))/(v*(c*v+d)+e), 0.0f, 1.0f);
+      }
+
+      vec3 cam_path(float z) {
+        return vec3(cam_amp*sin(z*PATHA)*PATHB, z);
+      }
+
+      vec3 dcam_path(float z) {
+        return vec3(cam_amp*PATHA*PATHB*cos(PATHA*z), 1.0);
+      }
+
+      vec3 ddcam_path(float z) {
+        return cam_amp*vec3(cam_amp*-PATHA*PATHA*PATHB*sin(PATHA*z), 0.0);
+      }
+
+      float cables(vec3 p3) {
+        const float cylr = 0.2;
+        vec2 p = p3.xy;
+        float t = p3.z;
+
+        const float ss = 1.5;
+        mat2 pp = ss*ROT(1.0+0.5*p3.z);
+
+        p *= g_rot;
+        float s = 1.0;
+
+        float d = 1E6;
+        float quad = 1.0;
+        int hit = 0;
+        for (int i = 0; i < MAX_ITER; ++i) {
+          p *= pp;
+          p = abs(p);
+          p -= 1.35*s;
+          s *= 1.0/ss;
+          const float sz = 1.0;
+
+          float dd = roundedX(p, sz*1.5*cylr, sz*0.25*cylr)*s;
+          vec2 s = sign(p);
+          float q = s.x*s.y;
+
+          if (dd < d) {
+            d = dd;
+            quad = q;
+            hit = i;
+          }
+
+        }
+
+        g_quad = quad;
+        g_hit = hit;
+
+        return d;
+      }
+
+      float df(vec3 p) {
+        // Found this world warping technique somewhere but forgot which shader :(
+        vec3 cam = cam_path(p.z);
+        vec3 dcam = normalize(dcam_path(p.z));
+        p.xy -= cam.xy;
+        p -= dcam*dot(vec3(p.xy, 0), dcam)*0.5*vec3(1,1,-1);
+        float d = cables(p);
+
+        return d;
+      }
+
+      float rayMarch(in vec3 ro, in vec3 rd, out int iter) {
+        float t = 0.0;
+        int i = 0;
+        for (i = 0; i < MAX_RAY_MARCHES; i++) {
+          float d = df(ro + rd*t);
+          if (d < TOLERANCE || t > MAX_RAY_LENGTH) break;
+          t += d;
+        }
+        iter = i;
+        return t;
+      }
+
+      vec3 normal(in vec3 pos) {
+        vec3  eps = vec3(NORMTOL,0.0,0.0);
+        vec3 nor;
+        nor.x = df(pos+eps.xyy) - df(pos-eps.xyy);
+        nor.y = df(pos+eps.yxy) - df(pos-eps.yxy);
+        nor.z = df(pos+eps.yyx) - df(pos-eps.yyx);
+        return normalize(nor);
+      }
+
+      float softShadow(in vec3 pos, in vec3 ld, in float ll, float mint, float k) {
+        const float minShadow = 0.25;
+        float res = 1.0;
+        float t = mint;
+        for (int i=0; i<25; ++i) {
+          float distance = df(pos + ld*t);
+          res = min(res, k*distance/t);
+          if (ll <= t) break;
+          if(res <= minShadow) break;
+          t += max(mint*0.2, distance);
+        }
+        return clamp(res,minShadow,1.0);
+      }
+
+      vec3 render(vec3 ro, vec3 rd, float tm) {
+        vec3 lightPos0  = cam_path(tm-0.5);
+        vec3 lightPos1  = cam_path(tm+6.5);
+
+        vec3 skyCol = vec3(0.0);
+
+        int iter = 0;
+        float t = rayMarch(ro, rd, iter);
+        float quad = g_quad;
+        float hit  = float(g_hit);
+
+        float tt = float(iter)/float(MAX_RAY_MARCHES);
+        float bs = 1.0-tt*tt*tt*tt;
+
+        vec3 pos = ro + t*rd;
+
+        float lsd1  = sphered(ro, rd, vec4(lightPos1, 2.5), t);
+        float beat  = beat(TIME);
+        const float hoff = 0.;
+        const vec3 bcol0 = HSV2RGB(vec3(hoff+0.6, 0.7, 3.0));
+        const vec3 bcol1 = HSV2RGB(vec3(hoff+0.55, 0.5, 7.0));
+        vec3 bcol   = mix(bcol0, bcol1, beat);
+        vec3 gcol   = lsd1*bcol;
+
+        if (t >= MAX_RAY_LENGTH) {
+          return skyCol+gcol;
+        }
+
+        vec3 nor    = normal(pos);
+
+        vec3 lv0    = lightPos0 - pos;
+        float ll20  = dot(lv0, lv0);
+        float ll0   = sqrt(ll20);
+        vec3 ld0    = lv0 / ll0;
+        float dm0   = 8.0/ll20;
+        float sha0  = softShadow(pos, ld0, ll0, 0.125, 32.0);
+        float dif0  = max(dot(nor,ld0),0.0)*dm0;
+
+        vec3 lv1    = lightPos1 - pos;
+        float ll21  = dot(lv1, lv1);
+        float ll1   = sqrt(ll21);
+        vec3 ld1    = lv1 / ll1;
+        float spe1  = pow(max(dot(reflect(ld1, nor), rd), 0.), 100.)*tanh_approx(3.0/ll21);
+
+        vec3 col = vec3(0.0);
+
+        const vec3 black = vec3(0.0);
+        const vec3 dcol0 = black;
+        const vec3 dcol1 = HSV2RGB(vec3(0.08, 1.0, 1.0));
+        col += dif0*sha0*mix(dcol0, dcol1, 0.5+0.5*quad);
+        col += spe1*bcol*bs;
+        col += gcol;
+
+        return col;
+      }
+
+      vec3 effect3d(vec2 p, vec2 pp) {
+        float tm = 2.0*TIME;
+        g_rot = ROT(-0.2*tm);
+        vec3 cam  = cam_path(tm);
+        vec3 dcam = dcam_path(tm);
+        vec3 ddcam= ddcam_path(tm);
+
+        vec3 ro = cam;
+        vec3 ww = normalize(dcam);
+        vec3 uu = normalize(cross(vec3(0.0,1.0,0.0)+ddcam*-2.0, ww ));
+        vec3 vv = normalize(cross(ww,uu));
+        float rdd = (2.0+0.75*tanh_approx(dot(p, p)));
+        vec3 rd = normalize(p.x*uu + p.y*vv + rdd*ww);
+
+        vec3 col = render(ro, rd, tm);
+        col -= 0.075*vec3(0.0, 1.0, 2.0);
+        col = aces_approx(col);
+        float fi = smoothstep(BTIME(12.25), BTIME(12.0), TIME);
+        col += fi;
+        col = sqrt(col);
+        return col;
+      }
+
+      void main() {
+        vec2 q = v_texcoord;
+        vec2 p = -1.0 + 2.0*q;
+        vec2 pp = p;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+
+        vec3 col = effect3d(p, pp);
+
+        frag_color = vec4(col, 1.0);
+      }
+    </script>
+
     <script type = "module">
       import TinySDF from "./tiny-sdf.js";
       const fontFamily  = "Josefin Slab"
@@ -797,6 +1326,22 @@
             },
           ],
         },
+        hyper_space_scene : {
+          passes:[
+            {
+              vs: "vs_default"              ,
+              fs: "fs_003_hyper_space"      ,
+            },
+          ],
+        },
+        cables_scene : {
+          passes:[
+            {
+              vs: "vs_default"              ,
+              fs: "fs_004_cables"           ,
+            },
+          ],
+        },
       };
 
       const bpm   = 146.0;
@@ -819,6 +1364,14 @@
         },
         {
           begin       :  8                                ,
+          scene       :  all_scenes.hyper_space_scene     ,
+        },
+        {
+          begin       :  12                               ,
+          scene       :  all_scenes.cables_scene          ,
+        },
+        {
+          begin       :  16                               ,
           scene       :  all_scenes.red_scene             ,
         },
       ];
