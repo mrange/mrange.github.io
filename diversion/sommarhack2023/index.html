@@ -744,8 +744,6 @@
       #define PI          3.141592654
       #define TAU         (2.0*PI)
       #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
-      #define PCOS(a)     0.5*(cos(a)+1.0)
-
 
       const float bstart = 2.153;
       const float bpm    = 146.0;
@@ -766,6 +764,13 @@
       // SHADER
       // -----------------------------------------------------------------------------
 
+      #define PI              3.141592654
+      #define TAU             (2.0*PI)
+      #define TIME            time
+      #define RESOLUTION      resolution
+      #define ROT(a)          mat2(cos(a), sin(a), -sin(a), cos(a))
+
+
       // License: WTFPL, author: sam hocevar, found: https://stackoverflow.com/a/17897228/418488
       const vec4 hsv2rgb_K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
       vec3 hsv2rgb(vec3 c) {
@@ -779,6 +784,14 @@
       // License: Unknown, author: Unknown, found: don't remember
       float hash(float co) {
         return fract(sin(co*12.9898) * 13758.5453);
+      }
+
+      vec3 skyColor(vec3 ro, vec3 rd) {
+        const vec3 gcol0 = HSV2RGB(vec3(0.55, 0.9, 0.035*0.5));
+        const vec3 gcol1 = HSV2RGB(vec3(0.75, 0.85, 0.035*2.0));
+        float b = beat(TIME);
+        vec2 pp = rd.xy;
+        return mix(gcol0, gcol1, b)/max(dot(pp, pp), 0.0001);
       }
 
       // License: MIT OR CC-BY-NC-4.0, author: mercury, found: https://mercury.sexy/hg_sdf/
@@ -803,62 +816,11 @@
         return vec2(-b-h,-b+h)/a;
       }
 
-      // License: Unknown, author: Unknown, found: shadertoy somewhere, don't remember where
-      float dfcos(float x) {
-        return sqrt(x*x+1.0)*0.8-1.8;
-      }
-
-      // License: Unknown, author: Unknown, found: shadertoy somewhere, don't remember where
-      float dfcos(vec2 p, float freq) {
-        float x = p.x;
-        float y = p.y;
-        x *= freq;
-
-        float x1 = abs(mod(x+PI,TAU)-PI);
-        float x2 = abs(mod(x   ,TAU)-PI);
-
-        float a = 0.18*freq;
-
-        x1 /= max( y*a+1.0-a,1.0);
-        x2 /= max(-y*a+1.0-a,1.0);
-        return (mix(-dfcos(x2)-1.0,dfcos(x1)+1.0,clamp(y*0.5+0.5,0.0,1.0)))/max(freq*0.8,1.0)+max(abs(y)-1.0,0.0)*sign(y);
-      }
-
-      vec3 skyColor(vec3 ro, vec3 rd) {
-        const vec3 gcol0 = HSV2RGB(vec3(0.55, 0.9, 0.035*0.5));
-        const vec3 gcol1 = HSV2RGB(vec3(0.75, 0.85, 0.035*2.0));
-        float b = beat(TIME);
-        vec2 pp = rd.xy;
-        return mix(gcol0, gcol1, b)/dot(pp, pp);
-      }
-
-      // License: MIT, author: Inigo Quilez, found: https://www.iquilezles.org/www/articles/smin/smin.htm
-      float pmin(float a, float b, float k) {
-        float h = clamp(0.5+0.5*(b-a)/k, 0.0, 1.0);
-        return mix(b, a, h) - k*h*(1.0-h);
-      }
-
-      float sphere4(vec2 p, float r) {
-        p *= p;
-        return pow(dot(p, p), 0.25)-r;
-      }
-
-      // License: Unknown, author: Unknown, found: don't remember
-      float tanh_approx(float x) {
-        //  Found this somewhere on the interwebs
-        //  return tanh(x);
-        float x2 = x*x;
-        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
-      }
-
       vec3 color(vec3 ww, vec3 uu, vec3 vv, vec3 ro, vec2 p) {
-      //  const float rdd = 2.0;
-        float lp = length(p);
-        const float rdd_per   = 10.0;
-        float rdd =  (1.75+0.75*pow(lp,1.5)*tanh_approx(lp+0.9*PCOS(rdd_per*p.x)*PCOS(rdd_per*p.y)));
-
-        const float mm = 4.0;
-        const float rep = 27.0;
+        float fo = smoothstep(BTIME(12.0), BTIME(10.0), TIME);
+        float rdd = mix(0.1, 2.0, fo);
+        const float mm  = 5.0;
+        const float rep = 26.0;
 
         vec3 rd = normalize(-p.x*uu + p.y*vv + rdd*ww);
 
@@ -866,46 +828,53 @@
 
         vec2 etc = rayCylinder(ro, rd, ro, vec3(0.0, 0.0, 1.0), 1.0);
         vec3 etcp = ro+rd*etc.y;
-
-        rd.yx *= ROT(0.5*TIME);
+        rd.yx *= ROT(0.3*etcp.z);
 
         vec3 col = skyCol;
 
         // I read somewhere that if you call atan in a shader you got no business writing shader code.
-        //  I even call it in a loop :)
         float a = atan(rd.y, rd.x);
         for(float i = 0.0; i < mm; ++i) {
           float ma = a;
-          float sz = rep+i*6.0;
+          float sz = rep+i*9.0;
           float slices = TAU/sz;
           float na = mod1(ma, slices);
 
           float h1 = hash(na+13.0*i+123.4);
           float h2 = fract(h1*3677.0);
           float h3 = fract(h1*8677.0);
+          float h5 = fract(h1*9677.0);
 
           float tr = mix(0.5, 3.0, h1);
           vec2 tc = rayCylinder(ro, rd, ro, vec3(0.0, 0.0, 1.0), tr);
           vec3 tcp = ro + tc.y*rd;
-          vec2 tcp2 = vec2(tcp.z, atan(tcp.y, tcp.x));
+          vec2 tcp2 = vec2(tcp.z, a);
 
           float zz = mix(0.025, 0.05, sqrt(h1))*rep/sz;
           float tnpy = mod1(tcp2.y, slices);
           float fo = smoothstep(0.5*slices, 0.25*slices, abs(tcp2.y));
-          tcp2.x += -h2*TIME;
-          tcp2.y *= tr*PI/3.0;
-          tcp2/=zz;
+          tcp2.x += 0.5*h2*TIME;
+          tcp2.y *= tr*(PI/3.0);
+          vec2 tcp3 = tcp2;
+          float w = mix(.2, 1.0, h2);
+          float tnpx = mod1(tcp3.x, w);
+          float h4 = hash(tnpx+123.4);
 
-          float d0 = abs(dfcos(tcp2, 2.0*zz));
-          float d = d0;
+          tcp2/=zz;
+          tcp3/=zz;
+          float d1 = abs(tcp2.y);
+
+          float d2 = length(tcp3) - 2.0*h4;
+          d2 = abs(d2)-1.0*h4;
+          d2 = abs(d2)-0.5*h4;
+          float d = h5 > 0.5 ? d2 : d1;
           d *= zz;
 
           vec3 bcol = (1.0+cos(vec3(0.0, 1.0, 2.0)+TAU*h3+0.5*h2*h2*tcp.z))*0.00005;
-          bcol /= max(d*d, 0.000+5E-7*tc.y*tc.y);
-          bcol *= exp(-0.02*tc.y*tc.y);
+          bcol /= max(d*d, 0.00001+5E-7*tc.y*tc.y);
+          bcol *= exp(-0.04*tc.y*tc.y);
           bcol *= smoothstep(-0.5, 1.0, sin(mix(0.125, 1.0, h2)*tcp.z));
           bcol *= fo;
-
           col += bcol;
         }
 
@@ -925,7 +894,7 @@
       }
 
       vec3 effect(vec2 p, vec2 pp) {
-        float tm  = TAU*TIME;
+        float tm  = 3.5*TIME;
         vec3 ro   = vec3(0.0, 0.0, tm);
         vec3 dro  = normalize(vec3(1.0, 0.0, 3.0));
         dro.xz *= ROT(0.2*sin(0.05*tm));
@@ -938,7 +907,9 @@
         col -= 0.125*vec3(0.0, 1.0, 2.0).yzx*length(pp);
         col = aces_approx(col);
         float fi = smoothstep(BTIME(8.25), BTIME(8.0), TIME);
+        float fo = smoothstep(BTIME(12.0), BTIME(11.5), TIME);
         col += fi;
+        col *= sqrt(fo);
         col = sqrt(col);
         return col;
       }
@@ -1240,8 +1211,10 @@
         col -= 0.075*vec3(0.0, 1.0, 2.0);
         col = aces_approx(col);
         float fi = smoothstep(BTIME(12.25), BTIME(12.0), TIME);
+        float fo = smoothstep(BTIME(16.00), BTIME(15.5), TIME);
         col += fi;
-        col = sqrt(col);
+        col *= fo;
+              col = sqrt(col);
         return col;
       }
 
