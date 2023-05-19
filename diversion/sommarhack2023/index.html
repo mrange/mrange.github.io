@@ -647,12 +647,9 @@
 
       uniform float     time              ;
       uniform vec2      resolution        ;
+      uniform sampler2D texts             ;
       uniform sampler2D frequency_data    ;
       uniform sampler2D time_domain_data  ;
-
-      uniform sampler2D prev_frame;
-      uniform sampler2D prev_pass;
-
 
       in vec2 v_texcoord  ;
 
@@ -680,9 +677,40 @@
         return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
       }
 
+      vec3 overlay(vec3 col, vec2 p, float n) {
+        p.y += 2.0/3.0;
+        float bd = abs(p.y)-0.14;
+
+        float od = abs(bd-0.03)-0.01;
+        float d = min(bd, od);
+        float aa = 4.0/RESOLUTION.y;
+
+        vec3 ocol = vec3(0.0);
+
+        col = mix(col, ocol, smoothstep(0.0, -aa, d));
+        vec2 tp = p;
+        tp *= 1.0;
+        tp.x /= 1440./448.0;
+        tp.x += 0.5;
+        tp.y += 0.115;
+        tp.y = 1.0-tp.y;
+        float t = step(0.75, tp.y)*step(tp.y, 1.0);
+        tp.y += 0.0-n*0.25;
+        vec4 tcol = texture(texts, tp*t);
+        col = mix(col, tcol.xyz, tcol.w);
+
+        return col;
+      }
+
+
+
       // -----------------------------------------------------------------------------
       // SHADER
       // -----------------------------------------------------------------------------
+
+      uniform sampler2D prev_frame;
+      uniform sampler2D prev_pass;
+
 
       #define RESOLUTION  resolution
 
@@ -710,12 +738,15 @@
       void main() {
         vec2 q = v_texcoord;
         vec2 p = -1.0+2.0*q;
+        vec2 pp = p;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
         vec4 pcol = texture(prev_pass,q);
         vec3 bcol = dblur(q, .75);
 
         vec3 col = pcol.xyz;
-        col += vec3(0.9, .8, 1.2)*mix(0.5, 0.8, length(p))*(vec3(0.05)+bcol);
+        col += vec3(0.9, .8, 1.2)*mix(0.5, 0.8, length(pp))*(vec3(0.05)+bcol);
         float fi = smoothstep(BTIME(4.25), BTIME(4.0), TIME);
+        col = overlay(col, p, 1.0);
         col += fi;
         col = sqrt(col);
 
@@ -731,6 +762,7 @@
 
       uniform float     time              ;
       uniform vec2      resolution        ;
+      uniform sampler2D texts             ;
       uniform sampler2D frequency_data    ;
       uniform sampler2D time_domain_data  ;
 
@@ -758,6 +790,31 @@
 
       float beat(float tm) {
         return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
+      }
+
+      vec3 overlay(vec3 col, vec2 p, float n) {
+        p.y += 2.0/3.0;
+        float bd = abs(p.y)-0.14;
+
+        float od = abs(bd-0.03)-0.01;
+        float d = min(bd, od);
+        float aa = 4.0/RESOLUTION.y;
+
+        vec3 ocol = vec3(0.0);
+
+        col = mix(col, ocol, smoothstep(0.0, -aa, d));
+        vec2 tp = p;
+        tp *= 1.0;
+        tp.x /= 1440./448.0;
+        tp.x += 0.5;
+        tp.y += 0.115;
+        tp.y = 1.0-tp.y;
+        float t = step(0.75, tp.y)*step(tp.y, 1.0);
+        tp.y += 0.0-n*0.25;
+        vec4 tcol = texture(texts, tp*t);
+        col = mix(col, tcol.xyz, tcol.w);
+
+        return col;
       }
 
       // -----------------------------------------------------------------------------
@@ -905,11 +962,12 @@
         vec3 vv = (cross(ww, uu));
         vec3 col = color(ww, uu, vv, ro, p);
         col -= 0.125*vec3(0.0, 1.0, 2.0).yzx*length(pp);
-        col = aces_approx(col);
         float fi = smoothstep(BTIME(8.25), BTIME(8.0), TIME);
         float fo = smoothstep(BTIME(12.0), BTIME(11.5), TIME);
-        col += fi;
         col *= sqrt(fo);
+        col = aces_approx(col);
+        col = overlay(col, p, 2.0);
+        col += fi;
         col = sqrt(col);
         return col;
       }
@@ -933,6 +991,7 @@
 
       uniform float     time              ;
       uniform vec2      resolution        ;
+      uniform sampler2D texts             ;
       uniform sampler2D frequency_data    ;
       uniform sampler2D time_domain_data  ;
 
@@ -960,6 +1019,31 @@
 
       float beat(float tm) {
         return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
+      }
+
+      vec3 overlay(vec3 col, vec2 p, float n) {
+        p.y += 2.0/3.0;
+        float bd = abs(p.y)-0.14;
+
+        float od = abs(bd-0.03)-0.01;
+        float d = min(bd, od);
+        float aa = 4.0/RESOLUTION.y;
+
+        vec3 ocol = vec3(0.0);
+
+        col = mix(col, ocol, smoothstep(0.0, -aa, d));
+        vec2 tp = p;
+        tp *= 1.0;
+        tp.x /= 1440./448.0;
+        tp.x += 0.5;
+        tp.y += 0.115;
+        tp.y = 1.0-tp.y;
+        float t = step(0.75, tp.y)*step(tp.y, 1.0);
+        tp.y += 0.0-n*0.25;
+        vec4 tcol = texture(texts, tp*t);
+        col = mix(col, tcol.xyz, tcol.w);
+
+        return col;
       }
 
       // -----------------------------------------------------------------------------
@@ -1212,9 +1296,10 @@
         col = aces_approx(col);
         float fi = smoothstep(BTIME(12.25), BTIME(12.0), TIME);
         float fo = smoothstep(BTIME(16.00), BTIME(15.5), TIME);
+        col = overlay(col, p, 1.0);
         col += fi;
         col *= fo;
-              col = sqrt(col);
+        col = sqrt(col);
         return col;
       }
 
@@ -1947,6 +2032,7 @@
       const demo_system     = new DemoSystemV2(analyze_audio);
 
       const global_uniforms = [
+        "texts"
       ];
 
       function override_nearest(image) {
@@ -1959,6 +2045,9 @@
       const all_textures = {
         sommarhack2023__the_crew : {
           image : (gl) => document.getElementById("sommarhack2023__the_crew"),
+        },
+        sommarhack2023__texts : {
+          image : (gl) => document.getElementById("sommarhack2023__texts"),
         },
       }
 
@@ -2014,7 +2103,6 @@
               fs: "fs_005_the_crew"         ,
               pre_render: (gl, time, scene, pass) => {
                 // Texture 0-3 is reserved
-                console.log(pass.uniformLocations);
                 gl.activeTexture(gl.TEXTURE4);
                 gl.bindTexture(gl.TEXTURE_2D, all_textures.sommarhack2023__the_crew.texture);
                 gl.uniform1i(pass.uniformLocations.the_crew, 4);
@@ -2132,6 +2220,9 @@
 
       function pre_render(gl, time, scene, pass) {
         // Texture 0-3 is reserved
+        gl.activeTexture(gl.TEXTURE4);
+        gl.bindTexture(gl.TEXTURE_2D, all_textures.sommarhack2023__texts.texture);
+        gl.uniform1i(pass.uniformLocations.texts, 4);
       }
 
       // Called each frame to select which scene to render
@@ -2162,5 +2253,6 @@
       </div>
     </div>
     <img id="sommarhack2023__the_crew" src="sommarhack2023__the_crew.jpg" style="display: none"/>
+    <img id="sommarhack2023__texts" src="sommarhack2023__texts.png" style="display: none"/>
   </body>
 </html>
