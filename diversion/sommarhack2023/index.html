@@ -1655,7 +1655,6 @@
 
       uniform float     time              ;
       uniform vec2      resolution        ;
-      uniform sampler2D texts             ;
       uniform sampler2D frequency_data    ;
       uniform sampler2D time_domain_data  ;
 
@@ -1685,34 +1684,11 @@
         return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
       }
 
-      vec3 overlay(vec3 col, vec2 p, float n) {
-        p.y += 2.0/3.0;
-        float bd = abs(p.y)-0.14;
-
-        float od = abs(bd-0.03)-0.01;
-        float d = min(bd, od);
-        float aa = 4.0/RESOLUTION.y;
-
-        vec3 ocol = vec3(0.0);
-
-        col = mix(col, ocol, smoothstep(0.0, -aa, d));
-        vec2 tp = p;
-        tp *= 1.0;
-        tp.x /= 1440./448.0;
-        tp.x += 0.5;
-        tp.y += 0.115;
-        tp.y = 1.0-tp.y;
-        float t = step(0.75, tp.y)*step(tp.y, 1.0);
-        tp.y += 0.0-n*0.25;
-        vec4 tcol = texture(texts, tp*t);
-        col = mix(col, tcol.xyz, tcol.w);
-
-        return col;
-      }
-
       // -----------------------------------------------------------------------------
       // SHADER
       // -----------------------------------------------------------------------------
+
+      uniform sampler2D     font        ;
 
       float box(vec2 p, vec2 b) {
           vec2 d = abs(p)-b;
@@ -1786,12 +1762,211 @@
         return 2.0*mix(gcol0, gcol1, b)/max(dot(p, p), 0.00025);
       }
 
+      // License: MIT OR CC-BY-NC-4.0, author: mercury, found: https://mercury.sexy/hg_sdf/
+      vec2 mod2(inout vec2 p, vec2 size) {
+        vec2 c = floor((p + size*0.5)/size);
+        p = mod(p + size*0.5,size) - size*0.5;
+        return c;
+      }
+
+      const vec2 SZ = 32.0/vec2(320.0, 200.0);
+      const vec2 HSZ= 0.5*SZ;
+      const vec2 A    = vec2(00.0, 00.0)*SZ;
+      const vec2 B    = vec2(01.0, 00.0)*SZ;
+      const vec2 C    = vec2(02.0, 00.0)*SZ;
+      const vec2 D    = vec2(03.0, 00.0)*SZ;
+      const vec2 E    = vec2(04.0, 00.0)*SZ;
+      const vec2 F    = vec2(05.0, 00.0)*SZ;
+      const vec2 G    = vec2(06.0, 00.0)*SZ;
+      const vec2 H    = vec2(07.0, 00.0)*SZ;
+      const vec2 I    = vec2(08.0, 00.0)*SZ;
+      const vec2 J    = vec2(09.0, 00.0)*SZ;
+      const vec2 K    = vec2(00.0, 01.0)*SZ;
+      const vec2 L    = vec2(01.0, 01.0)*SZ;
+      const vec2 M    = vec2(02.0, 01.0)*SZ;
+      const vec2 N    = vec2(03.0, 01.0)*SZ;
+      const vec2 O    = vec2(04.0, 01.0)*SZ;
+      const vec2 P    = vec2(05.0, 01.0)*SZ;
+      const vec2 Q    = vec2(06.0, 01.0)*SZ;
+      const vec2 R    = vec2(07.0, 01.0)*SZ;
+      const vec2 S    = vec2(08.0, 01.0)*SZ;
+      const vec2 T    = vec2(09.0, 01.0)*SZ;
+      const vec2 U    = vec2(00.0, 02.0)*SZ;
+      const vec2 V    = vec2(01.0, 02.0)*SZ;
+      const vec2 W    = vec2(02.0, 02.0)*SZ;
+      const vec2 X    = vec2(03.0, 02.0)*SZ;
+      const vec2 Y    = vec2(04.0, 02.0)*SZ;
+      const vec2 Z    = vec2(05.0, 02.0)*SZ;
+      const vec2 _0   = vec2(06.0, 02.0)*SZ;
+      const vec2 _1   = vec2(07.0, 02.0)*SZ;
+      const vec2 _2   = vec2(08.0, 02.0)*SZ;
+      const vec2 _3   = vec2(09.0, 02.0)*SZ;
+      const vec2 _4   = vec2(00.0, 03.0)*SZ;
+      const vec2 _5   = vec2(01.0, 03.0)*SZ;
+      const vec2 _6   = vec2(02.0, 03.0)*SZ;
+      const vec2 _7   = vec2(03.0, 03.0)*SZ;
+      const vec2 _8   = vec2(04.0, 03.0)*SZ;
+      const vec2 _9   = vec2(05.0, 03.0)*SZ;
+      const vec2 _A   = vec2(06.0, 03.0)*SZ;
+      const vec2 _PO  = vec2(07.0, 03.0)*SZ;
+      const vec2 _PC  = vec2(08.0, 03.0)*SZ;
+      const vec2 _E   = vec2(09.0, 03.0)*SZ;
+      const vec2 _C   = vec2(00.0, 04.0)*SZ;
+      const vec2 _D   = vec2(01.0, 04.0)*SZ;
+      const vec2 _P   = vec2(02.0, 04.0)*SZ;
+      const vec2 _CO  = vec2(03.0, 04.0)*SZ;
+      const vec2 _   = vec2(04.0, 04.0)*SZ;
+
+      const vec2[] ScrollText = vec2[](
+        _
+        ,L,E,O,N,A,R,D
+        ,_,_
+        ,L,O,T,E,K,_,S,T,Y,L,E
+        ,_,_
+        ,P,R,O,T,O,N
+        ,_,_
+        ,T,H,E,_,C,A,P,T,A,I,N,_,C,O,D,E,R
+        ,_,_
+        ,T,H,E,_,G,R,U,M,P,Y,_,G,A,M,E,_,D,E,V
+        ,_,_
+        ,B,I,G,_,W,I,N,G,S
+        ,_,_
+        ,B,Y,T,_3,M,_3,C,H,A,N,I,C
+        ,_,_
+        ,D,A,V,E,_,H,O,S,K,I,N,S
+        ,_,_
+        ,E,V,I,L,R,Y,U
+        ,_,_
+        ,E,V,V,V,I,L
+        ,_,_
+        ,I,Q
+        ,_,_
+        ,K,A,L,I
+        ,_,_
+        ,N,I,M,I,T,Z
+        ,_,_
+        ,S,H,A,N,E
+        ,_,_
+        ,T,O,T,E,T,M,A,T,T
+        ,_,_
+        ,D,E,L,T,A,_,F,O,R,C,E
+        ,_,_
+        ,N,O,_,C,R,E,W
+        ,_,_
+        ,O,M,E,G,A
+        ,_,_
+        ,O,X,Y,G,E,N,E
+        ,_,_
+        ,T,H,E,_,C,A,R,E,B,E,A,R,S
+        ,_,_
+        ,T,H,E,_,L,O,S,T,_,B,O,Y,S
+        ,_,_
+        ,T,H,E,_,O,V,E,R,L,A,N,D,E,R,S
+        ,_,_
+        ,T,H,E,_,U,N,I,O,N
+        ,_,_
+        ,X,I,A
+        ,_,_
+        ,Y,M,_,R,O,C,K,E,R,Z
+        );
+      const float ScrollMod = float(ScrollText.length())-1.0;
+
+      float scrollText(vec2 p) {
+
+        float gd = min(abs(p.x), abs(p.y));
+        vec2 tp = p;
+        tp.x *= 1.0/(320.0/200.0);
+        tp.y = -tp.y;
+        float n = mod(mod1(tp.x, SZ.x), ScrollMod);
+        vec2 cp = ScrollText[int(n)];
+        float a = step(abs(tp.x), HSZ.x)*step(abs(tp.y), HSZ.y);
+        tp += HSZ;
+        tp += cp;
+        float t = texture(font, tp).w*a;
+
+        return t;
+      }
+
+      vec2 toSmith(vec2 p)  {
+        // z = (p + 1)/(-p + 1)
+        // (x,y) = ((1+x)*(1-x)-y*y,2y)/((1-x)*(1-x) + y*y)
+        float d = (1.0 - p.x)*(1.0 - p.x) + p.y*p.y;
+        float x = (1.0 + p.x)*(1.0 - p.x) - p.y*p.y;
+        float y = 2.0*p.y;
+        return vec2(x,y)/d;
+      }
+
+      vec2 fromSmith(vec2 p)  {
+        // z = (p - 1)/(p + 1)
+        // (x,y) = ((x+1)*(x-1)+y*y,2y)/((x+1)*(x+1) + y*y)
+        float d = (p.x + 1.0)*(p.x + 1.0) + p.y*p.y;
+        float x = (p.x + 1.0)*(p.x - 1.0) + p.y*p.y;
+        float y = 2.0*p.y;
+        return vec2(x,y)/d;
+      }
+
+
+      vec2 transform(vec2 p) {
+        p *= ROT(-0.2);
+        float tm = TIME-BTIME(20.0)-10.0;
+        vec2 sp0 = toSmith(p-0.);
+        vec2 sp1 = toSmith(p+vec2(1.0)*ROT(0.12*tm));
+        vec2 sp2 = toSmith(p-vec2(1.0)*ROT(0.23*tm));
+        p = fromSmith(sp0+(sp1-sp2));
+        p += TIME*vec2(0.0, -0.5);
+        return p;
+      }
+
+      // License: Unknown, author: Unknown, found: don't remember
+      float hash(float co) {
+        return fract(sin(co*12.9898) * 13758.5453);
+      }
+
+      // License: Unknown, author: Unknown, found: don't remember
+      float hash(vec2 co) {
+        return fract(sin(dot(co.xy ,vec2(12.9898,58.233))) * 13758.5453);
+      }
+
+      vec3 scrollText(vec3 col, vec2 p) {
+        const float bsz = 0.01;
+        const float msz = bsz*0.1;
+        const float csz = 2.0*(bsz+msz);
+        const float rnd = bsz*0.5;
+        vec2 tp = transform(p);
+        float delta = (8.0/sqrt(2.0))/RESOLUTION.y;
+        vec2 ntp = transform(p+delta);
+        float aa = distance(ntp, tp);
+        vec2 cp = tp;
+        float tm = TIME - BTIME(20.0);
+        float ny = mod1(cp.y, 0.5*36.0*csz);
+        float hy = hash(ny+123.4);
+        float h0 = hash(ny+123.4);
+        cp.x += 0.5*mix(1.0, 3.0, hy*hy)*TIME+hy*100.0;
+        vec2 cn = mod2(cp, vec2(csz));
+        float ch0 = hash(cn);
+        float ch1 = fract(3677.0*ch0);
+        float ch2 = fract(8677.0*ch0);
+
+        vec2 sp = cn*vec2(2.0/200.0);
+
+        float cd0 = box(cp, vec2(bsz-rnd))-rnd;
+        float cd1 = dot(cp, cp);
+
+        float t = scrollText(sp);
+        vec3 scol = (1.0+cos(PI+PI*h0+vec3(0.0, 1.0, 2.0)+0.25*TAU*ch0));
+        scol = mix(col, scol, clamp(delta/aa, 0.0, 1.0));
+        scol *= mix(1.0, sqrt(ch1), beat(ch2*TIME+10.0*ch2));
+        col = mix(col, scol, smoothstep(0.0, -aa, cd0)*t);
+        col += 2.0*sqrt(aa)*beat(TIME)*HSV2RGB(vec3(0.55, 0.7, 1.0));
+
+        return col;
+      }
+
       vec3 effect(vec2 p, vec2 pp) {
         float aa = 4.0/RESOLUTION.y;
-        float tm = TIME;
-        p *= ROT(-.33*tm);
+        float tm = TIME*0.5;
         vec2 p0 = p+sin(vec2(1.0, sqrt(0.5)).yx*(tm+100.0));
-        vec2 p1 = p+sin(1.3*vec2(1.0, sqrt(0.5))*(tm+334.0));
+        vec2 p1 = p+sin(1.3*vec2(1.0, sqrt(0.5))*(tm+300.0));
         vec2 p2 = 0.5*(p0+p1);
         float sm = 0.0666*length(p);
         float d0 = df(p0);
@@ -1814,6 +1989,7 @@
         col += bcol2;
         col -= 0.25*vec3(0.0, 1.0, 2.0).zyx*length(pp);
         col *= smoothstep(1.5, 0.5, length(pp));
+        col = scrollText(col, p);
         col = aces_approx(col);
         float fi = smoothstep(BTIME(20.25), BTIME(20.00), TIME);
         col += fi;
@@ -2461,7 +2637,7 @@
         vec3 rd = normalize(-p.x*uu + p.y*vv + fov*ww );
 
         g_col = mix(3.5, 5.5, superbeat);
-        float bt = beat(TIME+0.2*rd.z);
+        float bt = beat(TIME+0.125*rd.z);
         float b = beat(TIME);
 
         min_radius2 = mix(0.5, 1., bt);
@@ -2548,16 +2724,19 @@
       function override_nearest(image) {
         return [image, (gl) => {
           gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_NEAREST);
+//          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_NEAREST);
         }];
       }
 
       const all_textures = {
-        sommarhack2023__the_crew : {
-          image : (gl) => document.getElementById("sommarhack2023__the_crew"),
+        sommarhack2023__font : {
+          image : (gl) => override_nearest(document.getElementById("sommarhack2023__font")),
         },
         sommarhack2023__texts : {
           image : (gl) => document.getElementById("sommarhack2023__texts"),
+        },
+        sommarhack2023__the_crew : {
+          image : (gl) => document.getElementById("sommarhack2023__the_crew"),
         },
       }
 
@@ -2626,8 +2805,15 @@
             {
               vs: "vs_default"              ,
               fs: "fs_006_moire"            ,
+              pre_render: (gl, time, scene, pass) => {
+                // Texture 0-3 is reserved
+                gl.activeTexture(gl.TEXTURE4);
+                gl.bindTexture(gl.TEXTURE_2D, all_textures.sommarhack2023__font.texture);
+                gl.uniform1i(pass.uniformLocations.font, 4);
+              },
             },
           ],
+          uniforms: ["font"],
         },
         bounce_scene : {
           passes:[
@@ -2776,5 +2962,6 @@
     </div>
     <img id="sommarhack2023__the_crew" src="sommarhack2023__the_crew.jpg" style="display: none"/>
     <img id="sommarhack2023__texts" src="sommarhack2023__texts.png" style="display: none"/>
+    <img id="sommarhack2023__font" src="sommarhack2023__font.png" style="display: none"/>
   </body>
 </html>
