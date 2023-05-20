@@ -84,6 +84,7 @@
 
       uniform float     time              ;
       uniform vec2      resolution        ;
+      uniform sampler2D texts             ;
       uniform sampler2D frequency_data    ;
       uniform sampler2D time_domain_data  ;
 
@@ -111,6 +112,31 @@
 
       float beat(float tm) {
         return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
+      }
+
+      vec3 overlay(vec3 col, vec2 p, float n) {
+        p.y += 2.0/3.0;
+        float bd = abs(p.y)-0.14;
+
+        float od = abs(bd-0.03)-0.01;
+        float d = min(bd, od);
+        float aa = 4.0/RESOLUTION.y;
+
+        vec3 ocol = vec3(0.0);
+
+        col = mix(col, ocol, smoothstep(0.0, -aa, d));
+        vec2 tp = p;
+        tp *= 1.0;
+        tp.x /= 1440./448.0;
+        tp.x += 0.5;
+        tp.y += 0.115;
+        tp.y = 1.0-tp.y;
+        float t = step(0.75, tp.y)*step(tp.y, 1.0);
+        tp.y += 0.0-n*0.25;
+        vec4 tcol = texture(texts, tp*t);
+        col = mix(col, tcol.xyz, tcol.w);
+
+        return col;
       }
 
       // -----------------------------------------------------------------------------
@@ -132,6 +158,7 @@
 
       uniform float     time              ;
       uniform vec2      resolution        ;
+      uniform sampler2D texts             ;
       uniform sampler2D frequency_data    ;
       uniform sampler2D time_domain_data  ;
 
@@ -159,6 +186,31 @@
 
       float beat(float tm) {
         return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
+      }
+
+      vec3 overlay(vec3 col, vec2 p, float n) {
+        p.y += 2.0/3.0;
+        float bd = abs(p.y)-0.14;
+
+        float od = abs(bd-0.03)-0.01;
+        float d = min(bd, od);
+        float aa = 4.0/RESOLUTION.y;
+
+        vec3 ocol = vec3(0.0);
+
+        col = mix(col, ocol, smoothstep(0.0, -aa, d));
+        vec2 tp = p;
+        tp *= 1.0;
+        tp.x /= 1440./448.0;
+        tp.x += 0.5;
+        tp.y += 0.115;
+        tp.y = 1.0-tp.y;
+        float t = step(0.75, tp.y)*step(tp.y, 1.0);
+        tp.y += 0.0-n*0.25;
+        vec4 tcol = texture(texts, tp*t);
+        col = mix(col, tcol.xyz, tcol.w);
+
+        return col;
       }
 
       // -----------------------------------------------------------------------------
@@ -361,6 +413,7 @@
 
       uniform float     time              ;
       uniform vec2      resolution        ;
+      uniform sampler2D texts             ;
       uniform sampler2D frequency_data    ;
       uniform sampler2D time_domain_data  ;
 
@@ -388,6 +441,31 @@
 
       float beat(float tm) {
         return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
+      }
+
+      vec3 overlay(vec3 col, vec2 p, float n) {
+        p.y += 2.0/3.0;
+        float bd = abs(p.y)-0.14;
+
+        float od = abs(bd-0.03)-0.01;
+        float d = min(bd, od);
+        float aa = 4.0/RESOLUTION.y;
+
+        vec3 ocol = vec3(0.0);
+
+        col = mix(col, ocol, smoothstep(0.0, -aa, d));
+        vec2 tp = p;
+        tp *= 1.0;
+        tp.x /= 1440./448.0;
+        tp.x += 0.5;
+        tp.y += 0.115;
+        tp.y = 1.0-tp.y;
+        float t = step(0.75, tp.y)*step(tp.y, 1.0);
+        tp.y += 0.0-n*0.25;
+        vec4 tcol = texture(texts, tp*t);
+        col = mix(col, tcol.xyz, tcol.w);
+
+        return col;
       }
 
       // -----------------------------------------------------------------------------
@@ -702,15 +780,12 @@
         return col;
       }
 
-
-
       // -----------------------------------------------------------------------------
       // SHADER
       // -----------------------------------------------------------------------------
 
       uniform sampler2D prev_frame;
       uniform sampler2D prev_pass;
-
 
       #define RESOLUTION  resolution
 
@@ -1323,9 +1398,9 @@
 
       uniform float     time              ;
       uniform vec2      resolution        ;
+      uniform sampler2D texts             ;
       uniform sampler2D frequency_data    ;
       uniform sampler2D time_domain_data  ;
-      uniform sampler2D the_crew          ;
 
       in vec2 v_texcoord  ;
 
@@ -1353,10 +1428,36 @@
         return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
       }
 
+      vec3 overlay(vec3 col, vec2 p, float n) {
+        p.y += 2.0/3.0;
+        float bd = abs(p.y)-0.14;
+
+        float od = abs(bd-0.03)-0.01;
+        float d = min(bd, od);
+        float aa = 4.0/RESOLUTION.y;
+
+        vec3 ocol = vec3(0.0);
+
+        col = mix(col, ocol, smoothstep(0.0, -aa, d));
+        vec2 tp = p;
+        tp *= 1.0;
+        tp.x /= 1440./448.0;
+        tp.x += 0.5;
+        tp.y += 0.115;
+        tp.y = 1.0-tp.y;
+        float t = step(0.75, tp.y)*step(tp.y, 1.0);
+        tp.y += 0.0-n*0.25;
+        vec4 tcol = texture(texts, tp*t);
+        col = mix(col, tcol.xyz, tcol.w);
+
+        return col;
+      }
+
       // -----------------------------------------------------------------------------
       // SHADER
       // -----------------------------------------------------------------------------
 
+      uniform sampler2D the_crew        ;
 
       #define PI              3.141592654
       #define TAU             (2.0*PI)
@@ -1554,6 +1655,7 @@
 
       uniform float     time              ;
       uniform vec2      resolution        ;
+      uniform sampler2D texts             ;
       uniform sampler2D frequency_data    ;
       uniform sampler2D time_domain_data  ;
 
@@ -1581,6 +1683,31 @@
 
       float beat(float tm) {
         return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
+      }
+
+      vec3 overlay(vec3 col, vec2 p, float n) {
+        p.y += 2.0/3.0;
+        float bd = abs(p.y)-0.14;
+
+        float od = abs(bd-0.03)-0.01;
+        float d = min(bd, od);
+        float aa = 4.0/RESOLUTION.y;
+
+        vec3 ocol = vec3(0.0);
+
+        col = mix(col, ocol, smoothstep(0.0, -aa, d));
+        vec2 tp = p;
+        tp *= 1.0;
+        tp.x /= 1440./448.0;
+        tp.x += 0.5;
+        tp.y += 0.115;
+        tp.y = 1.0-tp.y;
+        float t = step(0.75, tp.y)*step(tp.y, 1.0);
+        tp.y += 0.0-n*0.25;
+        vec4 tcol = texture(texts, tp*t);
+        col = mix(col, tcol.xyz, tcol.w);
+
+        return col;
       }
 
       // -----------------------------------------------------------------------------
@@ -1713,6 +1840,7 @@
 
       uniform float     time              ;
       uniform vec2      resolution        ;
+      uniform sampler2D texts             ;
       uniform sampler2D frequency_data    ;
       uniform sampler2D time_domain_data  ;
 
@@ -1740,6 +1868,31 @@
 
       float beat(float tm) {
         return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
+      }
+
+      vec3 overlay(vec3 col, vec2 p, float n) {
+        p.y += 2.0/3.0;
+        float bd = abs(p.y)-0.14;
+
+        float od = abs(bd-0.03)-0.01;
+        float d = min(bd, od);
+        float aa = 4.0/RESOLUTION.y;
+
+        vec3 ocol = vec3(0.0);
+
+        col = mix(col, ocol, smoothstep(0.0, -aa, d));
+        vec2 tp = p;
+        tp *= 1.0;
+        tp.x /= 1440./448.0;
+        tp.x += 0.5;
+        tp.y += 0.115;
+        tp.y = 1.0-tp.y;
+        float t = step(0.75, tp.y)*step(tp.y, 1.0);
+        tp.y += 0.0-n*0.25;
+        vec4 tcol = texture(texts, tp*t);
+        col = mix(col, tcol.xyz, tcol.w);
+
+        return col;
       }
 
       // -----------------------------------------------------------------------------
@@ -2003,8 +2156,365 @@
         vec3 col = effect3d(p, pp);
         frag_color = vec4(col, 1.0);
       }
+    </script>
+
+    <script id="fs_008_crazy" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform sampler2D texts             ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+
+      in vec2 v_texcoord  ;
+
+      out vec4 frag_color ;
+
+      #define TIME        time
+      #define RESOLUTION  resolution
+
+      #define PI          3.141592654
+      #define TAU         (2.0*PI)
+      #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
+
+      const float bstart = 2.153;
+      const float bpm    = 146.0;
+      const float bhz    = bpm/60.0;
+      const float bperiod= 8.0/bhz;
+
+      #define BTIME(n) ((n)*bperiod+bstart)
+
+      float beatCount(float tm) {
+        return (tm-bstart)*bhz;
+      }
+
+      float beat(float tm) {
+        return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
+      }
+
+      vec3 overlay(vec3 col, vec2 p, float n) {
+        p.y += 2.0/3.0;
+        float bd = abs(p.y)-0.14;
+
+        float od = abs(bd-0.03)-0.01;
+        float d = min(bd, od);
+        float aa = 4.0/RESOLUTION.y;
+
+        vec3 ocol = vec3(0.0);
+
+        col = mix(col, ocol, smoothstep(0.0, -aa, d));
+        vec2 tp = p;
+        tp *= 1.0;
+        tp.x /= 1440./448.0;
+        tp.x += 0.5;
+        tp.y += 0.115;
+        tp.y = 1.0-tp.y;
+        float t = step(0.75, tp.y)*step(tp.y, 1.0);
+        tp.y += 0.0-n*0.25;
+        vec4 tcol = texture(texts, tp*t);
+        col = mix(col, tcol.xyz, tcol.w);
+
+        return col;
+      }
+
+      #define NORM_OFF    0.001
+
+      const int   max_iter      = 90;
+
+      // License: CC0, author: Mårten Rånge, found: https://github.com/mrange/glsl-snippets
+      mat3 rotX(float a) {
+        float c = cos(a);
+        float s = sin(a);
+        return mat3(
+          1.0 , 0.0 , 0.0
+        , 0.0 , +c  , +s
+        , 0.0 , -s  , +c
+        );
+      }
+
+      // License: CC0, author: Mårten Rånge, found: https://github.com/mrange/glsl-snippets
+      mat3 rotY(float a) {
+        float c = cos(a);
+        float s = sin(a);
+        return mat3(
+          +c  , 0.0 , +s
+        , 0.0 , 1.0 , 0.0
+        , -s  , 0.0 , +c
+        );
+      }
+
+      // License: CC0, author: Mårten Rånge, found: https://github.com/mrange/glsl-snippets
+      mat3 rotZ(float a) {
+        float c = cos(a);
+        float s = sin(a);
+        return mat3(
+          +c  , +s  , 0.0
+        , -s  , +c  , 0.0
+        , 0.0 , 0.0 , 1.0
+        );
+      }
+
+      // License: Unknown, author: Unknown, found: don't remember
+      float tanh_approx(float x) {
+        //  Found this somewhere on the interwebs
+        //  return tanh(x);
+        float x2 = x*x;
+        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
+      }
+
+      // License: WTFPL, author: sam hocevar, found: https://stackoverflow.com/a/17897228/418488
+      const vec4 hsv2rgb_K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+      vec3 hsv2rgb(vec3 c) {
+        vec3 p = abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www);
+        return c.z * mix(hsv2rgb_K.xxx, clamp(p - hsv2rgb_K.xxx, 0.0, 1.0), c.y);
+      }
+      // License: WTFPL, author: sam hocevar, found: https://stackoverflow.com/a/17897228/418488
+      //  Macro version of above to enable compile-time constants
+      #define HSV2RGB(c)  (c.z * mix(hsv2rgb_K.xxx, clamp(abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www) - hsv2rgb_K.xxx, 0.0, 1.0), c.y))
+
+      float sphere4(vec3 p, float r) {
+        p *= p;
+        return pow(dot(p, p), 0.25)-r;
+      }
+
+      float box(vec4 p, vec4 b) {
+        vec4 q = abs(p) - b;
+        return length(max(q,0.0)) + min(max(max(q.x, q.w),max(q.y,q.z)),0.0);
+      }
+
+      const float fixed_radius2 = 1.8;
+      float min_radius2   = 0.5;
+      const vec4  folding_limit = vec4(1.0);
+      const float scale         = -2.9-0.;
+
+      mat3 g_rot;
+      float g_off;
+      float g_col;
 
 
+      float pmin(float a, float b, float k) {
+        float h = clamp(0.5+0.5*(b-a)/k, 0.0, 1.0);
+
+        return mix(b, a, h) - k*h*(1.0-h);
+      }
+
+      vec4 pmin(vec4 a, vec4 b, vec4 k) {
+        vec4 h = clamp( 0.5+0.5*(b-a)/k, 0.0, 1.0);
+        return mix(b, a, h) - k*h*(1.0-h);
+      }
+
+      void sphere_fold(inout vec4 z, inout float dz) {
+        float r2 = dot(z, z);
+
+        float t1 = (fixed_radius2 / min_radius2);
+        float t2 = (fixed_radius2 / r2);
+
+        if (r2 < min_radius2) {
+          z  *= t1;
+          dz *= t1;
+        } else if (r2 < fixed_radius2) {
+          z  *= t2;
+          dz *= t2;
+        }
+      }
+
+      void box_fold(float k, inout vec4 z, inout float dz) {
+        // Soft clamp after suggestion from ollij
+        vec4 zz = sign(z)*pmin(abs(z), folding_limit, vec4(k));
+        z = zz * 2.0 - z;
+      }
+
+      float mb(vec4 z, out float ss) {
+        float k = 0.1;
+        vec4 offset = z;
+        float dr = 1.0;
+        for(int n = 0; n < 5; ++n) {
+          box_fold(k/dr, z, dr);
+          sphere_fold(z, dr);
+          z = scale * z + offset;
+          dr = dr * abs(scale) + 1.0;
+        }
+
+        float d0 = (box(z, vec4(3.5, 3.5, 3.5, 3.5))-0.2) / abs(dr);
+        ss = dr;
+        return d0;
+      //  return pmin(d0, d, 0.05);
+      }
+
+      float df(vec3 p, out float ss) {
+        const float z = 0.1;
+        p /= z;
+        vec4 p4 = vec4(p, g_off);
+        p4.yzw *= g_rot;
+
+        float d0 = mb(p4, ss);
+        float d = d0;
+        return d*z;
+      }
+
+      vec3 glow(vec3 ro, vec3 rd, out float tt) {
+        float res;
+        float t = 0.+0.2;
+        int iter = max_iter;
+
+        vec3 col = vec3(0.0);
+        for(int i = 0; i < max_iter; ++i) {
+          vec3 p = ro + rd * t;
+          float ss;
+          res = df(p, ss);
+          float lss = log(ss);
+          float lum = 0.4*exp(-0.5*t-5.0*res*float(i*i));
+          vec3 gcol = ((0.5+0.5*cos(g_col -0.5*vec3(0.0, 1.0, 2.0)+2.0*(lss))))*lum;
+          col += gcol;
+          if(res < 0.0003 * t || res > 20.) {
+            iter = i;
+            break;
+          }
+          t += res;
+        }
+
+        tt = t;
+
+        return col;
+      }
+
+      vec3 normal(vec3 pos) {
+        vec2  eps = vec2(NORM_OFF,0.0);
+        vec3 nor;
+        float ss;
+        nor.x = df(pos+eps.xyy, ss) - df(pos-eps.xyy, ss);
+        nor.y = df(pos+eps.yxy, ss) - df(pos-eps.yxy, ss);
+        nor.z = df(pos+eps.yyx, ss) - df(pos-eps.yyx, ss);
+        return normalize(nor);
+      }
+
+      // License: Unknown, author: Matt Taylor (https://github.com/64), found: https://64.github.io/tonemapping/
+      vec3 aces_approx(vec3 v) {
+        v = max(v, 0.0);
+        v *= 0.6f;
+        float a = 2.51f;
+        float b = 0.03f;
+        float c = 2.43f;
+        float d = 0.59f;
+        float e = 0.14f;
+        return clamp((v*(a*v+b))/(v*(c*v+d)+e), 0.0f, 1.0f);
+      }
+
+      float raySphereDensity(vec3 ro, vec3 rd, vec4 sph, float dbuffer) {
+        float ndbuffer = dbuffer/sph.w;
+        vec3  rc = (ro - sph.xyz)/sph.w;
+
+        float b = dot(rd,rc);
+        float c = dot(rc,rc) - 1.0;
+        float h = b*b - c;
+        if( h<0.0 ) return 0.0;
+        h = sqrt( h );
+        float t1 = -b - h;
+        float t2 = -b + h;
+
+        if( t2<0.0 || t1>ndbuffer ) return 0.0;
+        t1 = max( t1, 0.0 );
+        t2 = min( t2, ndbuffer );
+
+        float i1 = -(c*t1 + b*t1*t1 + t1*t1*t1/3.0);
+        float i2 = -(c*t2 + b*t2*t2 + t2*t2*t2/3.0);
+        return (i2-i1)*(3.0/4.0);
+      }
+
+
+      vec3 render(vec2 p, vec2 pp) {
+        const float slowbeat0 = BTIME(31.0);
+        const float slowbeat1 = BTIME(31.5);
+        const float slowbeatp = bperiod/8.0;
+        float slowbeatf = (1.0-mod((TIME-bstart), slowbeatp)/slowbeatp);
+        float slowbeat = 1.0;
+        if (TIME > slowbeat0 && TIME <= slowbeat1) {
+          slowbeat = slowbeatf*slowbeatf;
+        }
+
+        const float superbeat0 = BTIME(31.5);
+        const float superbeat1 = BTIME(31.5+0.125);
+        const float superbeat2 = BTIME(31.75);
+        const float superbeat3 = BTIME(31.75+0.125);
+        const float superbeatp = bperiod/32.0;
+        float superbeatf = 1.0-mod((TIME-bstart), superbeatp)/superbeatp;
+        float superbeat = 0.0;
+        if (TIME > superbeat0 && TIME <= superbeat1 || TIME > superbeat2 && TIME <= superbeat3) {
+          superbeat = superbeatf;
+        }
+
+        float tm = TIME*0.5;
+        vec3 lightDir = normalize(vec3(-1.0, 1.0, 1.0));
+        mat2 rot= ROT(TIME/3.0+0.125*superbeat);
+        vec3 ro = 0.4*vec3(-1.0, 0.5, -0.0);
+        lightDir.xz *= rot;
+        ro.xz  *= rot;
+        vec3 la = vec3(0.0, 0.0, 0.0);
+        vec3 ww = normalize(la-ro);
+        vec3 uu = normalize(cross(vec3(0.0,1.0,0.0), ww ));
+        vec3 vv = (cross(ww,uu));
+        const float fov = 3.0;
+        vec3 rd = normalize(-p.x*uu + p.y*vv + fov*ww );
+
+        g_col = mix(3.5, 5.5, superbeat);
+        float bt = beat(TIME+0.2*rd.z);
+        float b = beat(TIME);
+
+        min_radius2 = mix(0.5, 1., bt);
+        g_off = sin(tm*0.53)+0.25*bt;
+
+        g_rot = rotX(0.1*tm)*rotY(0.23*tm)*rotZ(0.31*tm);
+
+        float tt = 0.0;
+        vec3 col = vec3(0.0);
+        vec3 gcol = glow(ro, rd, tt);
+
+        float sd = raySphereDensity(ro, rd, vec4(vec3(0.0), mix(0.3, 0.5, b)), tt);
+        const vec3 gcol0 = HSV2RGB(vec3(0.55, 0.7, 1.));
+        const vec3 gcol1 = HSV2RGB(vec3(0.55, 0.35, 2.0));
+        vec3 ccol = mix(gcol0, gcol1, b);
+
+        vec3 pos = ro+rd*tt;
+        vec3 nor = normal(pos);
+        vec3 ref = reflect(rd, nor);
+
+        float ttt = tanh_approx(0.3*tt);
+        float diff  = max(dot(lightDir, nor), 0.0);
+        float spe   = pow(max(dot(lightDir, ref), 0.0), 40.0);
+        float fre   = dot(rd, nor) + 1.0;
+        fre *= fre;
+
+        float fog = exp(-0.75*tt);
+        float sfog = exp(-2.0*0.5*tt);
+        const vec3 dcol = HSV2RGB(vec3(0.9, 0.5, 0.9));
+        const vec3 scol = HSV2RGB(vec3(0.15, 0.5, 4.0));
+        col += gcol;
+        col += spe*sfog*scol;
+        col += sd*sd*ccol;
+        col -= 0.025*vec3(0.0, 1.0, 2.0).zyx*(1.0+length(pp));
+        col = aces_approx(col);
+        float fi = smoothstep(BTIME(28.25), BTIME(28.0), TIME);
+        col += superbeat;
+        col *= slowbeat;
+        col += fi;
+        col = sqrt(col);
+        return col;
+      }
+
+      void main() {
+        vec2 q  = v_texcoord;
+        vec2 p = -1.0 + 2.0*q;
+        vec2 pp = p;
+        p.x*=RESOLUTION.x/RESOLUTION.y;
+
+        vec3 col = render(p, pp);
+
+        frag_color=vec4(col,1.0);
+      }
     </script>
 
     <script type = "module">
@@ -2127,6 +2637,14 @@
             },
           ],
         },
+        crazy_scene : {
+          passes:[
+            {
+              vs: "vs_default"              ,
+              fs: "fs_008_crazy"            ,
+            },
+          ],
+        },
       };
 
       const bpm   = 146.0;
@@ -2165,10 +2683,14 @@
         },
         {
           begin       :  24                               ,
-          scene       :  all_scenes.bounce_scene             ,
+          scene       :  all_scenes.bounce_scene          ,
         },
         {
           begin       :  28                               ,
+          scene       :  all_scenes.crazy_scene           ,
+        },
+        {
+          begin       :  32                               ,
           scene       :  all_scenes.red_scene             ,
         },
       ];
