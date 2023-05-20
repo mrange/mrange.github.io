@@ -1371,7 +1371,7 @@
         col = aces_approx(col);
         float fi = smoothstep(BTIME(12.25), BTIME(12.0), TIME);
         float fo = smoothstep(BTIME(16.00), BTIME(15.5), TIME);
-        col = overlay(col, p, 1.0);
+        col = overlay(col, p, 3.0);
         col += fi;
         col *= fo;
         col = sqrt(col);
@@ -2842,6 +2842,304 @@
       }
     </script>
 
+    <script id="vs_009_the_tree" type="x-shader/x-vertex">
+      precision highp float;
+
+      uniform float time;
+      uniform mat4 mvp;
+
+      in vec4 a_position;
+      in vec3 a_normal;
+      in vec2 a_texcoord;
+
+      out vec2  v_texcoord    ;
+      flat out float v_lf     ;
+      flat out float v_ratio  ;
+      flat out int   v_level  ;
+
+      #define TIME        time
+
+      #define PI          3.141592654
+      #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
+
+      // License: Unknown, author: Unknown, found: don't remember
+      float hash(float co) {
+        return fract(sin(co*12.9898) * 13758.5453);
+      }
+
+      void tree3D(int i, out int level, out float lw, out vec3 p0, out vec3 p1) {
+        vec3 p  = vec3(0.0, 2.0,0.0);
+        float a = 0.085*sin(TIME*0.5);
+        vec3 d  = vec3(0.0, -0.9, 0.0);
+        const float fa = PI/8.0;
+
+        float fs = 0.85;
+        mat2 lr = fs*ROT(fa+a);
+        mat2 rr = 0.90*fs*ROT(-fa+a);
+        mat2 fr = fs*ROT(fa);
+        mat2 nr = 0.9*fs*ROT(-fa);
+        int ii  = i - 1;
+        float l = 0.2;
+        int lvl = 0;
+        int c = int(ceil(log(3.0*(float(i+1)))/log(4.0)-1.0));
+        for(int j = 0; j < c; ++j) {
+          ++lvl;
+          p += d;
+          int di = ii & 3;
+          switch(di) {
+          case 0:
+            d.xy *= lr;
+            break;
+          case 1:
+            d.xy *= rr;
+            break;
+          case 2:
+            d.zy *= fr;
+            break;
+          case 3:
+            d.zy *= nr;
+            break;
+          }
+          ii = ii >> 2;
+          l *= (fs);
+        }
+
+        level = lvl;
+        lw = l;
+        p0 = p;
+        p1 = p + d;
+      }
+
+      void main() {
+        int  level= 0;
+        float lw  = 0.0;
+        vec3 p0   = vec3(0.0, 0.0, 0.0);
+        vec3 p1   = vec3(0.0, 0.0, 0.0);
+
+        tree3D(gl_InstanceID, level, lw, p0, p1);
+        const float period = 20.0;
+        float h0  = hash(float(gl_InstanceID)+123.4);
+        float h1  = fract(h0*1667.0);
+        float st  = h0*period;
+        float te  = mod(0.5*TIME-st, period);
+        float ef  = smoothstep(0.0, 10.0, te);
+        float doff = 0.25*sin(h1*20.0*ef)*ef;
+        vec3 woff = vec3(5.0*ef+doff, 10.0*ef*ef, doff)*step(te, 5.0);
+        if (level > 6) {
+          p0 += woff;
+          p1 += woff;
+        }
+        const mat2 r = ROT(3.5);
+        vec3 off = vec3(0.0, 0.0, 2.0);
+        p0.xz *= r;
+        p1.xz *= r;
+        p0 += off;
+        p1 += off;
+        vec3 c  = (p0+p1)*0.5;
+        vec3 d  = p1-p0;
+        float l = length(d);
+
+        vec3 up = vec3(0.0, 0.0, -1.0);
+        vec3 ww = d/l;
+      //  vec3 uu = normalize(cross(ww, up));
+        // Bug, should be like above
+        vec3 uu = (cross(ww, up));
+        vec3 vv = cross(uu, ww);
+
+        vec4 p = a_position;
+        mat3 m = mat3(ww, uu, vv);
+        float lf = step(float(level), 6.0);
+        float gl = min(l*lf+lw,l);
+        vec2 rr= vec2(gl, lw);
+        p.xy  *= 0.5*rr;
+        p.xyz *= transpose(m);
+        p.xyz -= c;
+
+        gl_Position = mvp * p;
+
+        v_texcoord  = a_texcoord;
+        v_lf        = lf;
+        v_ratio     = rr.x/rr.y;
+        v_level     = level;
+      }
+    </script>
+
+    <script id="fs_009_the_tree" type="x-shader/x-fragment">
+      precision highp float;
+
+      in vec2  v_texcoord    ;
+      flat in float v_lf     ;
+      flat in float v_ratio  ;
+      flat in int   v_level  ;
+
+      out vec4 frag_color;
+
+      #define PI      3.141592654
+      #define TAU     (2.0*PI)
+
+      float segmentx(vec2 p, float w) {
+        p = abs(p);
+        float d0 = p.y;
+        float d1 = length(p-vec2(w, 0.0));
+        return p.x > w ? d1 : d0;
+      }
+
+      // License: WTFPL, author: sam hocevar, found: https://stackoverflow.com/a/17897228/418488
+      const vec4 hsv2rgb_K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+      vec3 hsv2rgb(vec3 c) {
+        vec3 p = abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www);
+        return c.z * mix(hsv2rgb_K.xxx, clamp(p - hsv2rgb_K.xxx, 0.0, 1.0), c.y);
+      }
+      // License: WTFPL, author: sam hocevar, found: https://stackoverflow.com/a/17897228/418488
+      //  Macro version of above to enable compile-time constants
+      #define HSV2RGB(c)  (c.z * mix(hsv2rgb_K.xxx, clamp(abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www) - hsv2rgb_K.xxx, 0.0, 1.0), c.y))
+
+      void main() {
+        vec4 fc = gl_FragCoord;
+        float originalZ = fc.z / gl_FragCoord.w;
+        vec2 q = v_texcoord;
+        vec2 p = -1. + 2. * q;
+
+        float r     = v_ratio;
+        int   level = v_level;
+        float lf    = v_lf;
+        p.x *= r;
+
+        vec3 col = vec3(0.0);
+        float l = length(p);
+        float h = 0.44+float(level)/10.0;;
+        float s = 1.0;
+      #define HSVCOLOR
+      #if defined(HSVCOLOR)
+        vec3 gcol0 = hsv2rgb(vec3(h, 0.55, s));
+        vec3 gcol1 = hsv2rgb(vec3(h, 0.95, s));
+      #else
+        float tt = 3.5;
+        vec3 gcol0 = s*(1.0+cos(tt+0.25*vec3(0.0, 1.0, 2.0).zyx+TAU*h));
+        vec3 gcol1 = s*(1.0+cos(tt+0.5*vec3(0.0, 1.0, 2.0).zyx+TAU*h));
+      #endif
+        float ds = segmentx(p, lf*r);
+        float g = exp(-3.0*ds);
+        col += 1.0*gcol0*g*g*g;
+        col += 0.5*gcol1*g*g;
+        col /= mix(1.0, float(level*level)+1.0, lf);
+        col *= 9.0*exp(-0.5*originalZ);
+        frag_color = vec4(col, 1.0);
+      }
+    </script>
+
+    <script id="fs_009_the_tree_post" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform sampler2D texts             ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+
+      in vec2 v_texcoord  ;
+
+      out vec4 frag_color ;
+
+      #define TIME        time
+      #define RESOLUTION  resolution
+
+      #define PI          3.141592654
+      #define TAU         (2.0*PI)
+      #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
+
+      const float bstart = 2.153;
+      const float bpm    = 146.0;
+      const float bhz    = bpm/60.0;
+      const float bperiod= 8.0/bhz;
+
+      #define BTIME(n) ((n)*bperiod+bstart)
+
+      float beatCount(float tm) {
+        return (tm-bstart)*bhz;
+      }
+
+      float beat(float tm) {
+        return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
+      }
+
+      vec3 overlay(vec3 col, vec2 p, float n) {
+        p.y += 2.0/3.0;
+        float bd = abs(p.y)-0.14;
+
+        float od = abs(bd-0.03)-0.01;
+        float d = min(bd, od);
+        float aa = 4.0/RESOLUTION.y;
+
+        vec3 ocol = vec3(0.0);
+
+        col = mix(col, ocol, smoothstep(0.0, -aa, d));
+        vec2 tp = p;
+        tp *= 1.0;
+        tp.x /= 1440./448.0;
+        tp.x += 0.5;
+        tp.y += 0.115;
+        tp.y = 1.0-tp.y;
+        float t = step(0.75, tp.y)*step(tp.y, 1.0);
+        tp.y += 0.0-n*0.25;
+        vec4 tcol = texture(texts, tp*t);
+        col = mix(col, tcol.xyz, tcol.w);
+
+        return col;
+      }
+
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+
+      uniform sampler2D prev_frame;
+      uniform sampler2D prev_pass;
+
+      void main() {
+        vec2 q = v_texcoord;
+        vec2 p = -1.0+2.0*q;
+        vec2 pp = p;
+        pp *= 0.9+0.05;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+
+        vec2 pq = 0.5+0.5*pp;
+
+        const int c = 3;
+
+        vec2 aa = 6.0/RESOLUTION.xy;
+        vec2 start = pq-float(c)*aa;
+        vec3 bcol = vec3(0.0);
+        for (int y = -c; y <= c; ++y) {
+          vec2 pp = start;
+          for (int x = -c; x <= c; ++x) {
+            vec4 fcol = texture(prev_frame, pp);
+            bcol += fcol.xyz;
+            pp.x += aa.x;
+          }
+          start.y += aa.y;
+        }
+
+        bcol /= float((2*c+1)*(2*c+1));
+
+        vec4 pcol = texture(prev_pass,q);
+        vec3 col = pcol.xyz;
+      //  col -= 0.075*length(p);
+        float aaa = 4.0/RESOLUTION.y;
+        col = clamp(col, 0.0, 1.0);
+        col = sqrt(col);
+        col = mix(col, bcol, 0.6)*1.25;
+        float fi = smoothstep(BTIME(33.0), BTIME(32.0), TIME+length(p));
+        float ofi = smoothstep(BTIME(33.5), BTIME(33.0), TIME);
+        vec2 op = p+vec2(0.0, 0.5*ofi);
+        col = overlay(col, op, 0.0);
+        col += 0.5*fi*vec3(1.0, 0.75, 0.875);
+        frag_color = vec4(col, 1.0);
+      }
+    </script>
+
     <script type = "module">
       import TinySDF from "./tiny-sdf.js";
       const fontFamily  = "Josefin Slab"
@@ -2987,6 +3285,35 @@
             },
           ],
         },
+        tree_scene : {
+          passes:[
+            {
+              vs: "vs_009_the_tree"         ,
+              fs: "fs_009_the_tree"         ,
+              requires_clear: true          ,
+              instances: 21845              ,
+              pre_render: (gl, time, scene, pass) => {
+                gl.enable(gl.BLEND);
+                gl.blendFuncSeparate(gl.SRC_ALPHA, gl.DST_ALPHA, gl.ONE, gl.ONE);
+                gl.blendEquationSeparate(gl.FUNC_ADD, gl.MAX);
+
+                gl.uniformMatrix4fv(pass.uniformLocations.mvp, false, mvp_009);
+              },
+            },
+            {
+              vs: "vs_default"              ,
+              fs: "fs_009_the_tree_post"    ,
+              pre_render: (gl, time, scene, pass) => {
+                gl.disable(gl.BLEND);
+                // Texture 0-3 is reserved
+                gl.activeTexture(gl.TEXTURE4);
+                gl.bindTexture(gl.TEXTURE_2D, all_textures.sommarhack2023__texts.texture);
+                gl.uniform1i(pass.uniformLocations.texts, 4);
+              },
+            },
+          ],
+          uniforms: ["mvp"],
+        },
       };
 
       const bpm   = 146.0;
@@ -3033,6 +3360,10 @@
         },
         {
           begin       :  32                               ,
+          scene       :  all_scenes.tree_scene            ,
+        },
+        {
+          begin       :  36                               ,
           scene       :  all_scenes.red_scene             ,
         },
       ];
@@ -3064,6 +3395,10 @@
       }
 
       function on_init_complete(width, height) {
+        globalThis.projection_009 = projection_matrix4(Math.PI/3.0, width/height, 1, 1000);
+        globalThis.view_009       = look_at_matrix4(vector3(0,0,3), vector3(0,0,0), vector3(0,1,0));
+        globalThis.mvp_009        = multiply_matrix4(view_009, projection_009);
+
         const label = document.getElementById("info_label");
         label.textContent = "Ready, click play to run";
 
