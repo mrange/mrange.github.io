@@ -3131,13 +3131,18 @@
       //  col -= 0.075*length(p);
         float aaa = 4.0/RESOLUTION.y;
         col = clamp(col, 0.0, 1.0);
+        float fo = smoothstep(BTIME(35.75), BTIME(35.5), TIME);
         col = sqrt(col);
         col = mix(col, bcol, 0.6)*1.25;
-        float fi = smoothstep(BTIME(33.0), BTIME(32.0), TIME+length(p));
+        float l = length(p);
+        float fi = smoothstep(BTIME(33.0), BTIME(32.0), TIME+l);
         float ofi = smoothstep(BTIME(33.5), BTIME(33.0), TIME);
         vec2 op = p+vec2(0.0, 0.5*ofi);
         col = overlay(col, op, 0.0);
-        col += 0.5*fi*vec3(1.0, 0.75, 0.875);
+        const vec3 flashCol = 0.5*vec3(1.0, 0.75, 0.875);
+        col += flashCol*fo*step(BTIME(35.5), TIME)*max(2.0-l, 0.);
+        col += flashCol*fi;
+        col *= fo;
         frag_color = vec4(col, 1.0);
       }
     </script>
