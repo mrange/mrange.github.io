@@ -150,6 +150,153 @@
       }
     </script>
 
+    <script id="fs_intro" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform sampler2D texts             ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+
+      in vec2 v_texcoord  ;
+
+      out vec4 frag_color ;
+
+      #define TIME        time
+      #define RESOLUTION  resolution
+
+      #define PI          3.141592654
+      #define TAU         (2.0*PI)
+      #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
+
+      const float bstart = 2.153;
+      const float bpm    = 146.0;
+      const float bhz    = bpm/60.0;
+      const float bperiod= 8.0/bhz;
+
+      #define BTIME(n) ((n)*bperiod+bstart)
+
+      float beatCount(float tm) {
+        return (tm-bstart)*bhz;
+      }
+
+      float beat(float tm) {
+        return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
+      }
+
+      vec3 overlay(vec3 col, vec2 p, float n) {
+        p.y += 2.0/3.0;
+        float bd = abs(p.y)-0.14;
+
+        float od = abs(bd-0.03)-0.01;
+        float d = min(bd, od);
+        float aa = 4.0/RESOLUTION.y;
+
+        vec3 ocol = vec3(0.0);
+
+        col = mix(col, ocol, smoothstep(0.0, -aa, d));
+        vec2 tp = p;
+        tp *= 1.0;
+        tp.x /= 1440./448.0;
+        tp.x += 0.5;
+        tp.y += 0.115;
+        tp.y = 1.0-tp.y;
+        float t = step(0.75, tp.y)*step(tp.y, 1.0);
+        tp.y += 0.0-n*0.25;
+        vec4 tcol = texture(texts, tp*t);
+        col = mix(col, tcol.xyz, tcol.w);
+
+        return col;
+      }
+
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+
+      uniform sampler2D the_motley_crew;
+      uniform sampler2D something_wild;
+
+      vec4 logo(vec2 p, float n) {
+        p *= 0.5;
+        float t = step(abs(p.y), 1.0/6.0);
+        p.y += 0.33*(-n+1.0);
+        p += 0.5;
+        p.y = 1.0-p.y;
+        vec4 tcol = texture(something_wild, p);
+        tcol.xyz *= tcol.xyz;
+        tcol.w *= t;
+        return tcol;
+      }
+
+      vec3 logo(vec3 col, vec2 p, float n) {
+      /*
+        p *= 0.5;
+        float t = step(abs(p.y), 1.0/6.0);
+        p.y += 0.33*(-n+1.0);
+        p += 0.5;
+        p.y = 1.0-p.y;
+        */
+        vec4 tcol = logo(p, n);
+        col = mix(col, tcol.xyz, tcol.w);
+        return col;
+      }
+
+      vec3 effect(vec2 p) {
+
+        vec2 tp0 = p;
+        tp0 *= 0.5*RESOLUTION.y/RESOLUTION.x;
+        tp0 += 0.5;
+        tp0.y = 1.0-tp0.y;
+        vec3 tcol0 = texture(the_motley_crew, tp0).xyz;
+        tcol0 *= tcol0;
+        tcol0 *= 0.25*smoothstep(0.0, BTIME(-0.5), TIME);
+
+        vec2 tp1 = p;
+        tp1 *= 0.5;
+        tp1 += 0.5;
+        tp1.y = 1.0-tp1.y;
+
+        vec3 tcol1 = texture(the_motley_crew, tp1).xyz;
+        float t1 = step(BTIME(-0.5), TIME)*step(abs(p.x), 1.0);
+        tcol1 *= tcol1;
+        tcol1 = logo(tcol1.xyz, p, 0.0);
+        tcol1 += smoothstep(BTIME(-0.375), BTIME(-0.5), TIME);
+
+        vec2 p2 = p;
+        p2.y += 2.0/3.0;
+        vec4 tcol2 = logo(p2, 1.0);
+        tcol2.w *= step(BTIME(-0.375), TIME)*step(abs(p.x), 1.0);
+
+        vec2 p3 = p2;
+        float d3 = abs(p3.y)+abs(p3.x*0.125);
+
+        vec3 col = vec3(0.0);
+        col = tcol0.xyz;
+        col = mix(col, tcol1.xyz, t1);
+        col = mix(col, tcol2.xyz, tcol2.w);
+        col += 0.33*vec3(1.0, 0.5, 0.25)/max(d3, 0.025)*smoothstep(BTIME(-0.25), BTIME(-0.375), TIME)*step(BTIME(-0.375), TIME);
+
+        col *= step(TIME, BTIME(0.0));
+
+        col = sqrt(col);
+
+        return col;
+      }
+
+      void main(void) {
+        vec2 q = v_texcoord;
+        vec2 p = -1.0+2.0*q;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+        vec3 col = effect(p);
+
+        frag_color = vec4(col, 1.0);
+      }
+    </script>
+
     <script id="fs_000_star_travelling" type="x-shader/x-fragment">
       // -----------------------------------------------------------------------------
       // PRELUDE
@@ -3186,11 +3333,17 @@
         sommarhack2023__font : {
           image : (gl) => override_nearest(document.getElementById("sommarhack2023__font")),
         },
+        sommarhack2023__something_wild : {
+          image : (gl) => document.getElementById("sommarhack2023__something_wild"),
+        },
         sommarhack2023__texts : {
           image : (gl) => document.getElementById("sommarhack2023__texts"),
         },
         sommarhack2023__the_crew : {
           image : (gl) => document.getElementById("sommarhack2023__the_crew"),
+        },
+        sommarhack2023__the_motley_crew : {
+          image : (gl) => document.getElementById("sommarhack2023__the_motley_crew"),
         },
       }
 
@@ -3202,6 +3355,25 @@
               fs: "fs_red"    ,
             },
           ],
+        },
+        intro_scene : {
+          passes:[
+            {
+              vs: "vs_default"  ,
+              fs: "fs_intro"    ,
+              pre_render: (gl, time, scene, pass) => {
+                // Texture 0-3 is reserved
+                gl.activeTexture(gl.TEXTURE4);
+                gl.bindTexture(gl.TEXTURE_2D, all_textures.sommarhack2023__the_motley_crew.texture);
+                gl.uniform1i(pass.uniformLocations.the_motley_crew, 4);
+
+                gl.activeTexture(gl.TEXTURE5);
+                gl.bindTexture(gl.TEXTURE_2D, all_textures.sommarhack2023__something_wild.texture);
+                gl.uniform1i(pass.uniformLocations.something_wild, 5);
+              },
+            },
+          ],
+          uniforms: ["the_motley_crew", "something_wild"],
         },
         star_travelling_scene : {
           passes:[
@@ -3395,7 +3567,7 @@
 
       function get_slot(time) {
         if (time < start) {
-          return all_scenes.red_scene;
+          return all_scenes.intro_scene;
         }
         const i = clamp(Math.floor((time-start)*bhz/8.0), 0, max_time_slots-1);
         return time_slots[i];
@@ -3437,7 +3609,7 @@
         if(slot && slot.scene) {
           return slot.scene;
         } else {
-          return all_scenes.red_scene;
+          return all_scenes.intro_scene;
         }
       }
 
@@ -3515,8 +3687,10 @@
         </canvas>
       </div>
     </div>
-    <img id="sommarhack2023__the_crew" src="sommarhack2023__the_crew.jpg" style="display: none"/>
-    <img id="sommarhack2023__texts" src="sommarhack2023__texts.png" style="display: none"/>
     <img id="sommarhack2023__font" src="sommarhack2023__font.png" style="display: none"/>
+    <img id="sommarhack2023__something_wild" src="sommarhack2023__something_wild.png" style="display: none"/>
+    <img id="sommarhack2023__texts" src="sommarhack2023__texts.png" style="display: none"/>
+    <img id="sommarhack2023__the_crew" src="sommarhack2023__the_crew.jpg" style="display: none"/>
+    <img id="sommarhack2023__the_motley_crew" src="sommarhack2023__the_motley_crew.jpg" style="display: none"/>
   </body>
 </html>
