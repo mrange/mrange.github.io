@@ -264,7 +264,6 @@
         float t1 = step(BTIME(-0.5), TIME)*step(abs(p.x), 1.0);
         tcol1 *= tcol1;
         tcol1 = logo(tcol1.xyz, p, 0.0);
-        tcol1 += smoothstep(BTIME(-0.375), BTIME(-0.5), TIME);
 
         vec2 p2 = p;
         p2.y += 2.0/3.0;
@@ -272,13 +271,16 @@
         tcol2.w *= step(BTIME(-0.375), TIME)*step(abs(p.x), 1.0);
 
         vec2 p3 = p2;
+        float d2 = length(p);
         float d3 = abs(p3.y)+abs(p3.x*0.125);
 
         vec3 col = vec3(0.0);
         col = tcol0.xyz;
         col = mix(col, tcol1.xyz, t1);
         col = mix(col, tcol2.xyz, tcol2.w);
-        col += 0.33*vec3(1.0, 0.5, 0.25)/max(d3, 0.025)*smoothstep(BTIME(-0.25), BTIME(-0.375), TIME)*step(BTIME(-0.375), TIME);
+        const vec3 gcol = vec3(1.0, 0.5, 0.25);
+        col += (gcol/max(d2, 0.05))*smoothstep(BTIME(-0.375), BTIME(-0.5), TIME)*step(BTIME(-0.5), TIME);
+        col += (gcol/3.0)/max(d3, 0.025)*smoothstep(BTIME(-0.25), BTIME(-0.375), TIME)*step(BTIME(-0.375), TIME);
 
         col *= step(TIME, BTIME(0.0));
 
@@ -3623,62 +3625,68 @@
 
       <p id="info_label">Please wait... </p>
 
-      Hello! We wanted to do a demo contribution for the <a target="_blank" href="https://sommarhack.se/2023/compo.php#regular5">Wild competion</a> for <a target="_blank" href="https://sommarhack.se/2023/">Sommarhack 2023</a>.
+      Hey there, fabulous folks! Guess what? We're all set to rock the stage with our demo contribution for the super cool <a target="_blank" href="https://sommarhack.se/2023/compo.php#regular5">Wild competition</a> at <a target="_blank" href="https://sommarhack.se/2023/">Sommarhack 2023</a>!
 
-      Unfortunately, we lack musical talent and "borrowed" a great tune which disqualifies us from the competition. However, we wanted to shared this demo in the hope someone likes it.
+      <p>Now, here's the twist: We've got some amazing moves but our musical talent? Well, let's just say it's on a secret vacation. So, what did we do? We sneakily "borrowed" an incredible tune! Oopsie, that means we're disqualified from the competition. 😂</p>
 
-      <h2>Contributors</h2>
 
-      <p>Haiku by ChatGPT</p>
+      <p>But hold on a sec! Don't worry, we're not letting that stop us. We simply couldn't resist sharing this demo with you all. Who knows, maybe it'll make someone's ears tingle with joy and foot tapping madness! So sit back, relax, and get ready to be amazed (and forgive our little rule-breaking adventure)!</p>
 
-      <p>Code by Lance!</p>
+      <h2>Awesome Contributors</h2>
 
-      <p>Art by GlimGlam and Bing Image Creator</p>
+      <p>Haiku by the one and only ChatGPT, the master of poetic AI wizardry!</p>
 
-      <p>Font by an unknown <a target="_blank" href="http://christophekohler.epizy.com/AmigaBlogWp/1991/11/15/step40-bitmap-font/">Amiga</a> pixel god</p>
+      <p>Code by the incredible Lance! He's the coding maestro who makes digital dreams come true.</p>
 
-      <p>Music <a target="_blank" href="https://soundcloud.com/spacebuddha/space-buddha-mental-hotline-2006?si=25f0035ca00b4fa4836a3f90fd484451&utm_source=clipboard&utm_medium=text&utm_campaign=social_sharing">Mental Hotline</a> by <a target="_blank" href="https://soundcloud.com/spacebuddha">Space Buddha</a><br/>(Borrowed without asking, we lack musical talent but are in admiration of those that have)</p>
+      <p>Art by the fabulous duo, GlimGlam and Bing Image Creator. They sprinkle creativity like magical fairy dust!</p>
 
-      <p>The scroll text with greetings is unreadable as called to by tradition. Listing you here instead</p>
+      <p>Font by an anonymous pixel god from the mystical land of <a target="_blank" href="http://christophekohler.epizy.com/AmigaBlogWp/1991/11/15/step40-bitmap-font/">Amiga</a>. We may not know their name, but we're forever grateful for their font-tastic talents!</p>
+
+      <p>Now, brace yourselves for a mind-blowing musical experience! We present to you the legendary track, <a target="_blank" href="https://soundcloud.com/spacebuddha/space-buddha-mental-hotline-2006?si=25f0035ca00b4fa4836a3f90fd484451&utm_source=clipboard&utm_medium=text&utm_campaign=social_sharing">Mental Hotline</a> by the magnificent <a target="_blank" href="https://soundcloud.com/spacebuddha">Space Buddha</a>. And hey, confession time: we borrowed it without asking, because our musical talent decided to take a vacation. But let's give a standing ovation to all the true musical geniuses out there, who we admire from the bottom of our beat-loving hearts!</p>
+
+      <p>Oh, and just so you know, the scroll text with greetings is intentionally unreadable, following the ancient traditions of mystery and intrigue. It's like a secret code only the chosen ones can decipher!</p>
+
+      <p>Therefore, we present to you the incredible individuals and groups who have inspired us, listed below with their unique talents:</p>
 
       <h2>Twitch buddies</h2>
       <ul>
-        <li>Essenbee</li>
-        <li>Proton</li>
-        <li>The Captain Coder</li>
-        <li>The Grumpy Game Dev</li>
-        <li>Thindal</li>
+        <li>🎉 <b>Essenbee</b> - The hype magician! ✨</li>
+        <li>⚡ <b>Proton</b> - Electrifying energy in every stream! 🔥</li>
+        <li>🏴‍☠️ <b>The Captain Coder</b> - Guiding the coding seas with pirate charm! ⚓</li>
+        <li>😡 <b>The Grumpy Game Dev</b> - Grumpy outside, heart of gold inside! 😄</li>
+        <li>🧙 <b>Thindal</b> - A mystical wizard of Twitch enchantment! ✨</li>
       </ul>
 
       <h2>Shader gods</h2>
       <ul>
-        <li>Big Wings</li>
-        <li>Byt3 M3chanic</li>
-        <li>Dave Hoskins</li>
-        <li>EvilRyu</li>
-        <li>Evvvil</li>
-        <li>IQ</li>
-        <li>Kali</li>
-        <li>Nimitz</li>
-        <li>Shane</li>
-        <li>Totetmatt</li>
+        <li>🦅 <b>Big Wings</b> - Soaring with mind-bending shader magic! 🎨</li>
+        <li>🧠 <b>Byt3 M3chanic</b> - Engineering genius of breathtaking visuals! 🌈</li>
+        <li>🧪 <b>Dave Hoskins</b> - Mad scientist, blowing minds one pixel at a time! 🤯</li>
+        <li>😈 <b>EvilRyu</b> - Unleashing wickedly awesome shaders that drop jaws! 🔥</li>
+        <li>🌑 <b>Evvvil</b> - Conjuring atmospheric realms of awe and a hint of terror! 😱</li>
+        <li>🤔 <b>IQ</b> - Mind-boggling shaders that question reality itself! 🚀</li>
+        <li>🧙‍♀️ <b>Kali</b> - Enchantress weaving mesmerizing visual spells! ✨</li>
+        <li>⛵ <b>Nimitz</b> - Navigating shader seas with finesse and artistic flair! 🎆</li>
+        <li>🎶 <b>Shane</b> - Crafting symphonies of light and color that dance! 💃</li>
+        <li>🎨 <b>Totetmatt</b> - Master sculptor molding stunning digital art! 🔧</li>
       </ul>
 
       <h2>ATARI people</h2>
       <ul>
-        <li>Delta Force</li>
-        <li>Leonard</li>
-        <li>Lotek Style</li>
-        <li>No Crew</li>
-        <li>Omega</li>
-        <li>Oxygene</li>
-        <li>The Carebears</li>
-        <li>The Lost Boys</li>
-        <li>The Overlanders</li>
-        <li>The Union</li>
-        <li>XiA</li>
-        <li>YM Rockerz</li>
+        <li>💪 <b>Delta Force</b> - Unstoppable force behind Atari innovations! 🚀</li>
+        <li>🧙‍♂️ <b>Leonard</b> - Atari wizard rewriting demo rules! 🕹️</li>
+        <li>🎩 <b>Lotek Style</b> - Stylish maestro, pixel artist, and music talent! 🎵</li>
+        <li>🏴‍☠️ <b>No Crew</b> - Renegade rebels leaving their mark on Atari! ✊</li>
+        <li>⚛️ <b>Omega</b> - Master of Atari mastery and uncovering secrets! 🔓</li>
+        <li>🔮 <b>Oxygene</b> - Atari alchemist transforming bits into gaming gold! 🎮</li>
+        <li>🐻 <b>The Carebears</b> - Spreading love and joy through cuddly pixels! ❤️</li>
+        <li>🗺️ <b>The Lost Boys</b> - Adventurers discovering Atari wonders! 🧗‍♂️</li>
+        <li>🌄 <b>The Overlanders</b> - Fearless pioneers of Atari exploration! 🌟</li>
+        <li>🤝 <b>The Union</b> - United forces elevating demo scene to new heights! 🌈</li>
+        <li>⚔️ <b>XiA</b> - Talented music artist and warrior battling code challenges! 🎵</li>
+        <li>🎸 <b>YM Rockerz</b> - Rocking Atari world with music and passion! 🎶</li>
       </ul>
+
     </div>
     <div class="center-flex">
       <div>
