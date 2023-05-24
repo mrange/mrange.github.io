@@ -2619,7 +2619,7 @@
         if (TIME > BTIME(27.0+5.0/8.0)) {
           col *= slowbeatf*slowbeatf;
         }
-
+//        col *= smoothstep(1.5, 0.5, length(pp));
         col += fi;
         col = sqrt(col);
 
@@ -3577,16 +3577,26 @@
         return time_slots[i];
       }
 
+      function handleKeyDown(event) {
+        if (event.altKey && event.key === 'Enter') {
+          event.preventDefault();
+          const music = document.getElementById("music");
+          music.play();
+        }
+      }
+
       function on_init_complete(width, height) {
         globalThis.projection_009 = projection_matrix4(Math.PI/3.0, width/height, 1, 1000);
         globalThis.view_009       = look_at_matrix4(vector3(0,0,3), vector3(0,0,0), vector3(0,1,0));
         globalThis.mvp_009        = multiply_matrix4(view_009, projection_009);
 
         const label = document.getElementById("info_label");
-        label.textContent = "Ready, click play to run";
+        label.textContent = "🚀 Ready, click play to run or hit Alt+Enter";
 
         const music = document.getElementById("music");
         music.style.visibility = "visible";
+
+        document.addEventListener('keydown', handleKeyDown);
       }
 
       // Called after user clicked play
@@ -3597,7 +3607,7 @@
       // Called before each shader is compiled
       function on_loading_scene(key) {
         const label = document.getElementById("info_label");
-        label.textContent = "Compiling: " + key;
+        label.textContent = "🔄 Compiling: " + key;
       }
 
       function pre_render(gl, time, scene, pass) {
