@@ -1809,16 +1809,18 @@
           + smoothstep(BTIME(19.125+3.0/32.0), BTIME(19.125),TIME)*s3
           + s4
           ;
-        float iz = mix(sqrt(0.5), 1.0, lt)/(RESOLUTION.x/RESOLUTION.y);
-        float b = length(p);
-        float a = 0.3-s0*0.75+s1-1.5*s2+s3+0.25*s4+.5*(s2-2.0*s3+s4)*b;
-        mat2 rot = ROT(a);
-        col = logo(col, p*(iz*rot), 2.0, lt);
-        col += lt*lt*lt*(1.0-s4);
-        const float superbeatp = bperiod/16.0;
-        float superbeatf = 1.0-mod((TIME-bstart), superbeatp)/superbeatp;
-        col += vec3(1.0, 0.85, 0.95)/max(length(pp), 0.1)*step(BTIME(19.3125),TIME)*step(TIME, BTIME(19.50))*superbeatf;
-        return col;
+          float iz = mix(sqrt(0.5), 1.0, lt)/(RESOLUTION.x/RESOLUTION.y);
+          float b = length(p);
+          float a = 0.3-s0*0.75+s1-1.5*s2+s3+0.25*s4+.5*(s2-2.0*s3+s4)*b;
+          float zz = 1.0-0.025*max(TIME-BTIME(19.125), 0.0);
+          a -= zz-1.0;
+          mat2 rot = ROT(a);
+          col = logo(col, zz*p*(iz*rot), 2.0, lt);
+          col += lt*lt*lt*(1.0-s4);
+          const float superbeatp = bperiod/16.0;
+          float superbeatf = 1.0-mod((TIME-bstart), superbeatp)/superbeatp;
+          col += vec3(1.0, 0.85, 0.95)/max(length(pp), 0.1)*step(BTIME(19.3125),TIME)*step(TIME, BTIME(19.50))*superbeatf;
+          return col;
       }
 
       void main() {
