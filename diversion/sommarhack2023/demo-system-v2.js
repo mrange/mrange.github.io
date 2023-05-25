@@ -319,7 +319,7 @@ void main(void) {
     const height  = window.innerHeight;
 
     // TODO:  Make configurable
-    this.Height = Math.round(height < 1200 ? height : 1200);
+    this.Height = Math.round(height < 1080 ? height : 1080);
     this.Width  = Math.round((width/height)*this.Height);
     this.canvas.width  = this.Width;
     this.canvas.height = this.Height;
