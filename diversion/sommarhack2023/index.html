@@ -1775,13 +1775,12 @@
       vec3 effect(vec2 p, vec2 pp) {
         float aa = 4.0/RESOLUTION.y;
         float fi0 = smoothstep(BTIME(16.25), BTIME(16.0), TIME);
-        float fi1 = smoothstep(BTIME(16.0), BTIME(17.0), TIME);
+        float fi1 = smoothstep(BTIME(16.0-0.25), BTIME(17.0), TIME);
         vec2 ip = p;
         ip *= ROT(mix(1.55*TAU, -0.1, fi1));
-        float z = mix(0.1, 1.0, fi1);
-        ip /= z;
-        float d = box(ip, vec2(1.0));
-        d *= z;
+        float bsz = mix(0.0, 1.0, fi1);
+        float br = mix(0.5*bsz, 0.0, fi1);
+        float d = box(ip, vec2(bsz-br))-br;
         const vec3 lp = vec3(-4.0, -5.0, 3.0);
         const vec3 ro = vec3(0.0, 0.0, 10.0);
         float gd = d+0.0;
@@ -1819,9 +1818,18 @@
           col += lt*lt*lt*(1.0-s4);
           const float superbeatp = bperiod/16.0;
           float superbeatf = 1.0-mod((TIME-bstart), superbeatp)/superbeatp;
-          col += vec3(1.0, 0.85, 0.95)/max(length(pp), 0.1)*step(BTIME(19.3125),TIME)*step(TIME, BTIME(19.50))*superbeatf;
+//          col += vec3(1.0, 0.85, 0.95)/max(length(p), 0.1)*step(BTIME(19.3125),TIME)*step(TIME, BTIME(19.50))*superbeatf;
+          float s5 = step(BTIME(19.3125),TIME)*step(TIME, BTIME(19.50));
+          col += superbeatf*superbeatf*superbeatf*s5;
+          vec2 fp = p;
+          fp *= rot;
+          float fd = 0.0;
+          fd += 1.0/max(abs(fp.y*fp.x), 0.1);
+          fd *= superbeatf*s5;
+          const vec3 fcol = HSV2RGB(vec3(0.05, 0.825, 1.0));
+          col += fcol*fd;
           return col;
-      }
+        }
 
       void main() {
         vec2 q = v_texcoord;
