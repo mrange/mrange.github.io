@@ -84,7 +84,6 @@
 
       uniform float     time              ;
       uniform vec2      resolution        ;
-      uniform sampler2D texts             ;
       uniform sampler2D frequency_data    ;
       uniform sampler2D time_domain_data  ;
 
@@ -99,8 +98,8 @@
       #define TAU         (2.0*PI)
       #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
 
-      const float bstart = 2.153;
-      const float bpm    = 146.0;
+      const float bstart = 16.62;
+      const float bpm    = 125.0;
       const float bhz    = bpm/60.0;
       const float bperiod= 8.0/bhz;
 
@@ -114,31 +113,6 @@
         return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
       }
 
-      vec3 overlay(vec3 col, vec2 p, float n) {
-        p.y += 2.0/3.0;
-        float bd = abs(p.y)-0.14;
-
-        float od = abs(bd-0.03)-0.01;
-        float d = min(bd, od);
-        float aa = 4.0/RESOLUTION.y;
-
-        vec3 ocol = vec3(0.0);
-
-        col = mix(col, ocol, smoothstep(0.0, -aa, d));
-        vec2 tp = p;
-        tp *= 1.0;
-        tp.x /= 1440./448.0;
-        tp.x += 0.5;
-        tp.y += 0.115;
-        tp.y = 1.0-tp.y;
-        float t = step(0.75, tp.y)*step(tp.y, 1.0);
-        tp.y += 0.0-n*0.25;
-        vec4 tcol = texture(texts, tp*t);
-        col = mix(col, tcol.xyz, tcol.w);
-
-        return col;
-      }
-
       // -----------------------------------------------------------------------------
       // SHADER
       // -----------------------------------------------------------------------------
@@ -150,11 +124,967 @@
       }
     </script>
 
+    <script id="fs_postproc" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform float     fader             ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+      uniform sampler2D prev_pass         ;
+      uniform sampler2D prev_frame        ;
+
+
+      in vec2 v_texcoord  ;
+
+      out vec4 frag_color ;
+
+      #define TIME        time
+      #define RESOLUTION  resolution
+
+      #define PI          3.141592654
+      #define TAU         (2.0*PI)
+      #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
+
+      const float bstart = 16.62;
+      const float bpm    = 125.0;
+      const float bhz    = bpm/60.0;
+      const float bperiod= 8.0/bhz;
+
+      #define BTIME(n) ((n)*bperiod+bstart)
+
+      float beatCount(float tm) {
+        return (tm-bstart)*bhz;
+      }
+
+      float beat(float tm) {
+        return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
+      }
+
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+
+      // License: Unknown, author: Matt Taylor (https://github.com/64), found: https://64.github.io/tonemapping/
+      vec3 aces_approx(vec3 v) {
+        v = max(v, 0.0);
+        v *= 0.6f;
+        float a = 2.51f;
+        float b = 0.03f;
+        float c = 2.43f;
+        float d = 0.59f;
+        float e = 0.14f;
+        return clamp((v*(a*v+b))/(v*(c*v+d)+e), 0.0f, 1.0f);
+      }
+
+
+      // License: Unknowon, author: XorDev, found: https://github.com/XorDev/GM_FXAA
+      vec4 fxaa(sampler2D tex, vec2 uv, vec2 texelSz) {
+        // See this blog
+        // https://mini.gmshaders.com/p/gm-shaders-mini-fxaa
+
+        // Maximum texel span
+        const float span_max    = 8.0;
+        // These are more technnical and probably don't need changing:
+        // Minimum "dir" reciprocal
+        const float reduce_min  = (1.0/128.0);
+        // Luma multiplier for "dir" reciprocal
+        const float reduce_mul  = (1.0/32.0);
+
+        const vec3  luma        = vec3(0.299, 0.587, 0.114);
+
+        // Sample center and 4 corners
+        vec3 rgbCC = texture(tex, uv).rgb;
+        vec3 rgb00 = texture(tex, uv+vec2(-0.5,-0.5)*texelSz).rgb;
+        vec3 rgb10 = texture(tex, uv+vec2(+0.5,-0.5)*texelSz).rgb;
+        vec3 rgb01 = texture(tex, uv+vec2(-0.5,+0.5)*texelSz).rgb;
+        vec3 rgb11 = texture(tex, uv+vec2(+0.5,+0.5)*texelSz).rgb;
+
+        //Get luma from the 5 samples
+        float lumaCC = dot(rgbCC, luma);
+        float luma00 = dot(rgb00, luma);
+        float luma10 = dot(rgb10, luma);
+        float luma01 = dot(rgb01, luma);
+        float luma11 = dot(rgb11, luma);
+
+        // Compute gradient from luma values
+        vec2 dir = vec2((luma01 + luma11) - (luma00 + luma10), (luma00 + luma01) - (luma10 + luma11));
+
+        // Diminish dir length based on total luma
+        float dirReduce = max((luma00 + luma10 + luma01 + luma11) * reduce_mul, reduce_min);
+
+        // Divide dir by the distance to nearest edge plus dirReduce
+        float rcpDir = 1.0 / (min(abs(dir.x), abs(dir.y)) + dirReduce);
+
+        // Multiply by reciprocal and limit to pixel span
+        dir = clamp(dir * rcpDir, -span_max, span_max) * texelSz.xy;
+
+        // Average middle texels along dir line
+        vec4 A = 0.5 * (
+            texture(tex, uv - dir * (1.0/6.0))
+          + texture(tex, uv + dir * (1.0/6.0))
+          );
+
+        // Average with outer texels along dir line
+        vec4 B = A * 0.5 + 0.25 * (
+            texture(tex, uv - dir * (0.5))
+          + texture(tex, uv + dir * (0.5))
+          );
+
+
+        // Get lowest and highest luma values
+        float lumaMin = min(lumaCC, min(min(luma00, luma10), min(luma01, luma11)));
+        float lumaMax = max(lumaCC, max(max(luma00, luma10), max(luma01, luma11)));
+
+        // Get average luma
+        float lumaB = dot(B.rgb, luma);
+
+        //If the average is outside the luma range, using the middle average
+        return ((lumaB < lumaMin) || (lumaB > lumaMax)) ? A : B;
+      }
+
+      void main() {
+        vec2 q = v_texcoord;
+        vec2 pp = -1.0+2.0*q;
+        vec2 p = pp;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+      #define FXAA
+      #if defined(FXAA)
+        vec3 col = fxaa(prev_pass, q, 1./resolution.xy).xyz;
+      #else
+        vec3 col = texture(prevPass, q).xyz;
+      #endif
+        col -= 0.05*length(pp);
+        col = aces_approx(col);
+
+        col = max(col,0.0);
+        col = sqrt(col);
+
+        frag_color = vec4(col, 1.0);
+      }
+    </script>
+
+    <script id="fs_cubes" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform float     fader             ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+
+      in vec2 v_texcoord  ;
+
+      out vec4 frag_color ;
+
+      #define TIME        time
+      #define RESOLUTION  resolution
+
+      #define PI          3.141592654
+      #define TAU         (2.0*PI)
+      #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
+
+      const float bstart = 16.62;
+      const float bpm    = 125.0;
+      const float bhz    = bpm/60.0;
+      const float bperiod= 8.0/bhz;
+
+      #define BTIME(n) ((n)*bperiod+bstart)
+
+      float beatCount(float tm) {
+        return (tm-bstart)*bhz;
+      }
+
+      float beat(float tm) {
+        return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
+      }
+
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+
+      #define TIME            time
+      #define RESOLUTION      resolution
+
+      #define PI              3.141592654
+      #define TAU             (2.0*PI)
+
+      #define TOLERANCE       0.0001
+      #define MAX_RAY_LENGTH  24.0
+      #define MAX_RAY_MARCHES 70
+      #define NORM_OFF        0.001
+      #define ROT(a)          mat2(cos(a), sin(a), -sin(a), cos(a))
+
+      //#define DF0
+      //#define FLAIR
+      //#define BOXY
+
+      // License: WTFPL, author: sam hocevar, found: https://stackoverflow.com/a/17897228/418488
+      const vec4 hsv2rgb_K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+      vec3 hsv2rgb(vec3 c) {
+        vec3 p = abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www);
+        return c.z * mix(hsv2rgb_K.xxx, clamp(p - hsv2rgb_K.xxx, 0.0, 1.0), c.y);
+      }
+      // License: WTFPL, author: sam hocevar, found: https://stackoverflow.com/a/17897228/418488
+      //  Macro version of above to enable compile-time constants
+      #define HSV2RGB(c)  (c.z * mix(hsv2rgb_K.xxx, clamp(abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www) - hsv2rgb_K.xxx, 0.0, 1.0), c.y))
+
+      const float hoff      = 0.;
+      const vec3 skyCol     = HSV2RGB(vec3(hoff+0.57, 0.70, 0.25));
+      const vec3 glowCol0   = HSV2RGB(vec3(hoff+0.05, 0.85, 0.00125));
+      const vec3 glowCol1   = HSV2RGB(vec3(hoff+0.55, 0.85, 0.05));
+      const vec3 sunCol1    = HSV2RGB(vec3(hoff+0.60, 0.50, 0.5));
+      const vec3 sunCol2    = HSV2RGB(vec3(hoff+0.05, 0.75, 25.0));
+      const vec3 diffCol    = HSV2RGB(vec3(hoff+0.60, 0.75, 0.125));
+      const vec3 sunDir1    = normalize(vec3(3., 3.0, -7.0));
+
+      // License: CC0, author: Mårten Rånge, found: https://github.com/mrange/glsl-snippets
+      #define ROTY(a)               \
+        mat3(                       \
+          +cos(a) , 0.0 , +sin(a)   \
+        , 0.0     , 1.0 , 0.0       \
+        , -sin(a) , 0.0 , +cos(a)   \
+        )
+
+      // License: CC0, author: Mårten Rånge, found: https://github.com/mrange/glsl-snippets
+      #define ROTZ(a)               \
+        mat3(                       \
+          +cos(a) , +sin(a) , 0.0   \
+        , -sin(a) , +cos(a) , 0.0   \
+        , 0.0     , 0.0     , 1.0   \
+        )
+
+      // License: CC0, author: Mårten Rånge, found: https://github.com/mrange/glsl-snippets
+      #define ROTX(a)               \
+        mat3(                       \
+          1.0 , 0.0     , 0.0       \
+        , 0.0 , +cos(a) , +sin(a)   \
+        , 0.0 , -sin(a) , +cos(a)   \
+        )
+
+
+      float torus( vec3 p, vec2 t ) {
+        vec2 q = vec2(length(p.xz)-t.x,p.y);
+        return length(q)-t.y;
+      }
+
+      // License: CC0, author: Mårten Rånge, found: https://github.com/mrange/glsl-snippets
+      float ref(inout vec3 p, vec3 r) {
+        float d = dot(p, r);
+        p -= r*min(0.0, d)*2.0;
+        return d < 0.0 ? 0.0 : 1.0;
+      }
+
+      #define SCA(a)      vec2(sin(a), cos(a))
+
+      // License: MIT, author: Inigo Quilez, found: https://iquilezles.org/articles/distfunctions/
+      float rayPlane(vec3 ro, vec3 rd, vec4 p) {
+        return -(dot(ro,p.xyz)+p.w)/dot(rd,p.xyz);
+      }
+
+      // License: MIT, author: Inigo Quilez, found: https://iquilezles.org/www/articles/distfunctions2d/distfunctions2d.htm
+      float box(vec2 p, vec2 b) {
+        vec2 d = abs(p)-b;
+        return length(max(d,0.0)) + min(max(d.x,d.y),0.0);
+      }
+
+      float box(vec3 p, vec3 b) {
+        vec3 q = abs(p) - b;
+        return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
+      }
+
+      float boxf(vec3 p, vec3 b, float e) {
+             p = abs(p  )-b;
+        vec3 q = abs(p+e)-e;
+        return min(min(
+            length(max(vec3(p.x,q.y,q.z),0.0))+min(max(p.x,max(q.y,q.z)),0.0),
+            length(max(vec3(q.x,p.y,q.z),0.0))+min(max(q.x,max(p.y,q.z)),0.0)),
+            length(max(vec3(q.x,q.y,p.z),0.0))+min(max(q.x,max(q.y,p.z)),0.0));
+      }
+
+      // License: MIT, author: Inigo Quilez, found: https://www.iquilezles.org/www/articles/smin/smin.htm
+      float pmin(float a, float b, float k) {
+        float h = clamp(0.5+0.5*(b-a)/k, 0.0, 1.0);
+        return mix(b, a, h) - k*h*(1.0-h);
+      }
+
+      float pmax(float a, float b, float k) {
+        return -pmin(-a, -b, k);
+      }
+
+      // License: MIT, author: Inigo Quilez, found: https://www.iquilezles.org/www/articles/smin/smin.htm
+      vec3 pmin(vec3 a, vec3 b, float k) {
+        vec3 h = clamp(0.5+0.5*(b-a)/k, 0.0, 1.0);
+        return mix(b, a, h) - k*h*(1.0-h);
+      }
+
+
+      vec3 pabs(vec3 a, float k) {
+        return -pmin(a, -a, k);
+      }
+
+      float sphere(vec3 p, float r) {
+        return length(p) - r;
+      }
+
+      float sphere4(vec3 p, float r) {
+        p *= p;
+        return pow(dot(p, p), 0.25) - r;
+      }
+
+      float sphere8(vec3 p, float r) {
+        p *= p;
+        p *= p;
+        return pow(dot(p, p), 0.125) - r;
+      }
+
+      // License: MIT OR CC-BY-NC-4.0, author: mercury, found: https://mercury.sexy/hg_sdf/
+      vec3 mod3(inout vec3 p, vec3 size) {
+        vec3 c = floor((p + size*0.5)/size);
+        p = mod(p + size*0.5,size) - size*0.5;
+        return c;
+      }
+
+      float bbox(vec3 p, vec3 b) {
+        vec3 q = abs(p) - b;
+        return (max(q.x,max(q.y,q.z)));
+      }
+
+      float dfbase(vec3 p, out float ogd) {
+        vec3 p0 = p;
+        float d0 = box(p0, vec3(3.0));
+        vec3 p1 = p;
+        float d1 = boxf(p1, vec3(3.01), 0.)-0.01;
+
+        float d = d0;
+        d = min(d, d1);
+
+        ogd = d1;
+
+        return d;
+      }
+
+      #if defined(DF0)
+      float dfeffect(vec3 p, out float ogd) {
+        return dfbase(p, ogd);
+      }
+      #elif defined(DF1)
+      #if !defined(BOXY)
+      #define BACKSTEP
+      #endif
+
+      float dfeffect(vec3 p, out float ogd) {
+      #if defined(BOXY)
+        float d0 = box(p, vec3(3.0));
+        float d1 = boxf(p, vec3(2.98), 0.)-0.01;
+      #else
+        float d0 = sphere8(p, (3.));
+      #endif
+        vec3 p2 = p;
+        const vec3 rot0 = vec3(0.0, 1.0, 0.0)*ROTZ(-PI/4.0);
+        const vec3 rot1 = vec3(0.0, 1.0, 0.0)*ROTX(PI/4.0);
+        p2 = abs(p2);
+        ref(p2, rot0);
+        ref(p2, rot1);
+        p2.y -= 3.0;
+        float d2 = torus(p2, vec2(1.5, 0.025));
+
+        vec3 p3 = p2;
+        const float r3 = 0.75;
+        p3.y -= r3;
+        float d3 = length(p3) - r3;
+
+        vec3 p4 = p2;
+        p4.y -= 0.05;
+        float d4 = length(p4)-0.05;
+
+        float gd = d2;
+      #if defined(BOXY)
+        gd = min(gd, d1);
+      #endif
+        gd = min(gd, d4);
+        gd = abs(gd);
+
+
+        float d = d0;
+
+        d = pmax(d, -(gd-0.00), 0.1);
+      #if defined(BOXY)
+        d = min(d, d1);
+      #endif
+        d = min(d, d2);
+        d = pmax(d, -d3, 1.);
+        d = min(d, d4);
+
+        ogd = gd;
+
+        return d;
+      }
+      #elif defined(DF2)
+      #if !defined(BOXY)
+      #define BACKSTEP
+      #endif
+
+      float dfeffect(vec3 p, out float ogd) {
+      #if defined(BOXY)
+        float d0 = box(p, vec3(3.0));
+        float d1 = boxf(p, vec3(3.01), 0.0)-0.01;
+      #else
+        float d0 = sphere8(p, (3.));
+      #endif
+
+        float d3 = length(p)-(3.-0.12);
+
+        float d = d0;
+        d = pmax(d, -d3, 1.0);
+        d = min(d, d3);
+      #if defined(BOXY)
+        d = min(d, d1);
+      #endif
+
+        float d2 = max(max(d, d3-0.4), -(d3-0.25));
+
+        float gd = d2;
+      #if defined(BOXY)
+        gd = min(gd, d1);
+      #endif
+        gd = abs(gd);
+
+        ogd = gd;
+
+
+        return d;
+
+      }
+      #elif defined(DF3)
+      #if !defined(BOXY)
+      #define BACKSTEP
+      #endif
+
+      float dfeffect(vec3 p, out float ogd) {
+      #if defined(BOXY)
+        float d0 = box(p, vec3(3.0));
+        float d1 = boxf(p, vec3(3.01), 0.0)-0.01;
+      #else
+        float d0 = sphere8(p, (3.));
+      #endif
+        vec3 p2 = p;
+      #if defined(FLAIR)
+        const float sz = 6.0/(3.-1.0);
+      #else
+        const float sz = 6.0/(24.0-1.0);
+      #endif
+        mod3(p2, vec3(sz));
+        float d2 = box(p2, vec3(0.80*sz*0.5))-0.15*sz*0.5;
+
+        float d4 = sphere4(p, 3.-0.005);
+
+        float d = d2;
+        d = max(d, d0);
+      #if defined(BOXY)
+        d = min(d, d1);
+      #endif
+        d = min(d, d4);
+
+        float gd = d4;
+      #if defined(BOXY)
+        gd = min(gd, d1);
+      #endif
+        ogd = gd;
+
+        return d;
+
+      }
+      #elif defined(DF4)
+      #if !defined(BOXY)
+      #define BACKSTEP
+      #endif
+
+      #define ZOOM        (1.)
+      #define FWD(x)      exp2((x)*ZOOM)
+      #define REV(x)      (log2(x)/ZOOM)
+
+      float dfeffect(vec3 p, out float ogd) {
+      #if defined(BOXY)
+
+        float d0 = box(p, vec3(3.));
+        float d1 = boxf(p, vec3(3.01), 0.0)-0.01;
+      #else
+        float d0 = sphere8(p, (3.));
+      #endif
+        float d3 = sphere4(p, 3.0);
+        float d4 = min(min(abs(p.x), abs(p.y)), abs(p.z))-0.015;
+      #if defined(FLAIR)
+        float d5 = max(d0, d4);
+      #endif
+        vec3 p2 = p;
+
+        p2 = abs(p2);
+        p2 -= 3.0;
+
+        vec3 fp2 = FWD(abs(p2));
+
+        float n = floor(max(max(fp2.x, fp2.y), fp2.z));
+
+        float x0 = REV(n);
+        float x1 = REV(n+1.0);
+
+        float m = (x0+x1)*0.5;
+        float w = x1-x0;
+
+        float d2 = abs(bbox(p2, vec3(m)))-(w*0.5)+0.015;
+
+        d0 = max(d0, d2);
+
+        float d = d0;
+        d = min(d, d3);
+      #if defined(FLAIR)
+        d = min(d, d5);
+      #endif
+      #if defined(BOXY)
+        d = min(d, d1);
+      #endif
+
+        float gd = d3;
+      #if defined(FLAIR)
+        gd = min(gd, d5);
+      #endif
+      #if defined(BOXY)
+        gd = min(gd, d1);
+      #endif
+        ogd = gd;
+
+        return d;
+
+      }
+
+      #elif defined(DF5)
+      #if !defined(BOXY)
+      #define BACKSTEP
+      #endif
+
+      #define ZOOM        (1.-.1)
+      #define FWD(x)      exp2((x)*ZOOM)
+      #define REV(x)      (log2(x)/ZOOM)
+
+      float dfeffect(vec3 p, out float ogd) {
+      #if defined(BOXY)
+        float d0 = box(p, vec3(3.0));
+        float d1 = boxf(p, vec3(3.01), 0.0)-0.01;
+      #else
+        float d0 = sphere8(p, (3.));
+      #endif
+        float d3 = sphere4(p, 3.0-.001);
+
+        vec3 p2 = p;
+        p2 = abs(p2);
+        p2 -= 3.0;
+        float fp2 = FWD(length(p2));
+
+        float n = floor(fp2);
+
+        float x0 = REV(n);
+        float x1 = REV(n+1.0);
+
+        float m = (x0+x1)*0.5;
+        float w = x1-x0;
+
+        float d2 = abs(length(p2)-m)-(w*0.5)+0.025;
+      #if defined(FLAIR)
+        float d5 = abs(length(p2)-m)-0.005;
+        d5 = max(d0, d5);
+      #endif
+
+        d0 = max(d0, d2);
+
+        float d = d0;
+        d = min(d, d3);
+      #if defined(BOXY)
+        d = min(d, d1);
+      #endif
+
+        float gd = d3;
+      #if defined(FLAIR)
+        gd = min(gd, d5);
+      #endif
+      #if defined(BOXY)
+        gd = min(gd, d1);
+      #endif
+
+        ogd = gd;
+
+        return d;
+
+      }
+
+      #elif defined(DF6)
+      #define BACKSTEP
+
+
+      const float fixed_radius2 = 1.9;
+      const float min_radius2 = 0.1;
+      const float folding_limit = 1.0;
+      const float scale = -2.4;
+
+      void sphere_fold(inout vec3 z, inout float dz) {
+        float r2 = dot(z, z);
+        if(r2 < min_radius2) {
+          float temp = (fixed_radius2 / min_radius2);
+          z *= temp;
+          dz *= temp;
+        } else if(r2 < fixed_radius2) {
+          float temp = (fixed_radius2 / r2);
+          z *= temp;
+          dz *= temp;
+        }
+      }
+
+      void box_fold(inout vec3 z, inout float dz) {
+        z = clamp(z, -folding_limit, folding_limit) * 2.0 - z;
+      }
+
+      float mb(vec3 z, out float ddd) {
+        vec3 offset = z;
+        float dr = 1.0;
+      #if defined(FLAIR)
+        float d2 = 1E3;
+      #else
+        float d2 = sphere4(z,2.2);
+      #endif
+
+        for(int n = 0; n < 5; ++n) {
+          box_fold(z, dr);
+          sphere_fold(z, dr);
+
+          z = scale * z + offset;
+          dr = dr * abs(scale) + 1.5;
+      #if defined(FLAIR)
+          if (n < 2) {
+            float d = (length(z))/abs(dr)-0.06;
+            d2 = min(d, d2);
+          }
+      #endif
+        }
+
+        float d = (length(z))/abs(dr)-0.04;
+      #if !defined(FLAIR)
+        d2 = pmax(d2, -d, 0.5);
+      #endif
+        d = min(d, d2);
+
+        ddd = d2;
+
+        return d;
+      }
+
+
+      float dfeffect(vec3 p, out float ogd) {
+        const float z = 1.5;
+        vec3 p0 = p/z;
+        float d2;
+        float d0 = mb(p0, d2);
+        d0 *= z;
+        float d1 = d2*z;
+
+        ogd = d1;
+
+        float d = d0;
+        d = min(d, d1);
+        return d0;
+
+      }
+      #elif defined(DF7)
+      #if !defined(BOXY)
+      #define BACKSTEP
+      #endif
+
+      #define ZOOM        (0.2025)
+      #define REV(x)      exp2((x)*ZOOM)
+      #define FWD(x)      (log2(x)/ZOOM)
+
+      float dfeffect(vec3 p, out float ogd) {
+      #if defined(BOXY)
+        float d0 = box(p, vec3(3.0));
+        float d1 = boxf(p, vec3(3.01), 0.0)-0.01;
+      #else
+        float d0 = sphere8(p, (3.));
+      #endif
+        float d3 = sphere4(p, 3.0-.001);
+
+        vec3 p4 = p;
+        p4 = abs(p4);
+        p4 -= 3.0-0.75;
+
+        float d4 = sphere(p4, 0.75);
+
+        vec3 p2 = p;
+        p2 = abs(p2);
+        p2 -= 3.0;
+        float fp2 = FWD(length(p2));
+
+        float n = floor(fp2);
+
+        float x0 = REV(n);
+        float x1 = REV(n+1.0);
+
+        float m = (x0+x1)*0.5;
+        float w = x1-x0;
+
+        float d2 = abs(length(p2)-m)-(w*0.5)+0.025;
+      #if defined(FLAIR)
+        float d5 = abs(length(p2)-m)-0.005;
+      #endif
+        d0 = max(d0, d2);
+
+        float d = d0;
+        d = min(d, d3);
+      #if defined(BOXY)
+        d = min(d, d1);
+      #endif
+        d = pmax(d, -d4, 0.5);
+        d = min(d, d4);
+        float gd = d3;
+      #if defined(FLAIR)
+        gd = min(gd, max(d5, d0));
+      #endif
+      #if defined(BOXY)
+        gd = min(gd, d1);
+      #endif
+        gd = pmax(gd, -d4, 0.5);
+        ogd = gd;
+
+        return d;
+
+      }
+      #else
+      float dfeffect(vec3 p, out float ogd) {
+        return dfbase(p, ogd);
+      }
+      #endif
+
+      mat3 g_rot;
+      float g_gd;
+
+      #define FADER
+
+      float df(vec3 p) {
+        p *= g_rot;
+        float gd1;
+        float d1 = dfeffect(p, gd1);
+
+      #if defined(FADER)
+        float gd0;
+        float d0 = dfbase(p, gd0);
+
+        float m = fader;
+        float d = mix(d1, d0, m);
+        float gd = mix(gd1, gd0, m);
+      #else
+        float d = d1;
+        float gd = gd1;
+      #endif
+        g_gd = min(g_gd, gd);
+
+        return d;
+      }
+
+
+      vec3 normal(vec3 pos) {
+        vec2  eps = vec2(NORM_OFF,0.0);
+        vec3 nor;
+        nor.x = df(pos+eps.xyy) - df(pos-eps.xyy);
+        nor.y = df(pos+eps.yxy) - df(pos-eps.yxy);
+        nor.z = df(pos+eps.yyx) - df(pos-eps.yyx);
+        return normalize(nor);
+      }
+
+      float rayMarch(vec3 ro, vec3 rd, out int iter) {
+        float t = 0.0;
+        const float tol = TOLERANCE;
+        vec2 dti = vec2(1e10,0.0);
+        int i = 0;
+        for (i = 0; i < MAX_RAY_MARCHES; ++i) {
+          float d = df(ro + rd*t);
+          if (d<dti.x) { dti=vec2(d,t); }
+          if (d < TOLERANCE || t > MAX_RAY_LENGTH) {
+            break;
+          }
+          t += d;
+        }
+      #if defined(BACKSTEP)
+        if(i==MAX_RAY_MARCHES) { t=dti.y; };
+      #endif
+        iter = i;
+        return t;
+      }
+
+      vec3 render0(vec3 ro, vec3 rd) {
+        vec3 col = vec3(0.0);
+        float sd = max(dot(sunDir1, rd), 0.0);
+        float sf = 1.0001-sd;
+
+
+      #if defined(CLICHE)
+        for (float i = 0.0; i < 10.0; ++i) {
+          float off = 0.05*sin(TIME+0.3*(i));
+          col += clamp(vec3(1.0/abs(rd.y+off))*mix(glowCol0, glowCol0.yzx, i*0.1), 0.0, 1.0);
+        }
+      #else
+          col += clamp(vec3(1.0/abs(rd.y))*glowCol0, 0.0, 1.0);
+      #endif
+        col += 0.75*skyCol*pow((1.0-abs(rd.y)), 8.0);
+        col += 2.0*sunCol1*pow(sd, 100.0);
+        col += sunCol2*pow(sd, 800.0);
+
+        float tp1  = rayPlane(ro, rd, vec4(vec3(0.0, -1.0, 0.0), -6.0));
+
+        if (tp1 > 0.0) {
+          vec3 pos  = ro + tp1*rd;
+          vec2 pp = pos.xz;
+          float db = box(pp, vec2(5.0, 9.0))-3.0;
+
+          col += vec3(4.0)*skyCol*rd.y*rd.y*smoothstep(0.25, 0.0, db);
+          col += vec3(0.8)*skyCol*exp(-0.5*max(db, 0.0));
+          col += 0.25*sqrt(skyCol)*max(-db, 0.0);
+        }
+
+        return clamp(col, 0.0, 10.0);
+      }
+
+      vec3 render1(vec3 ro, vec3 rd, vec2 sp) {
+
+        int iter;
+        g_gd = 1E3;
+        float t = rayMarch(ro, rd, iter);
+        vec3 ggcol = (glowCol1)*inversesqrt(max(g_gd, 0.00025));
+        vec3 col = render0(ro, rd);
+
+        vec3 p = ro+rd*t;
+        vec3 n = normal(p);
+        vec3 r = reflect(rd, n);
+        float fre0 = 1.0+dot(rd, n);
+        float fre = fre0;
+        fre *= fre;
+        float dif = dot(sunDir1, n);
+
+        float ao = 1.0-float(iter)/float(MAX_RAY_MARCHES);
+        float fo = mix(0.2, 1.0, ao);
+        if (t < MAX_RAY_LENGTH) {
+          col = vec3(0.0);
+          col += sunCol1*dif*dif*diffCol*fo*1.0;
+          col += mix(0.33, 1.0, fre)*render0(p, r)*fo*0.75;
+        }
+
+      //  col *= smoothstep(0.1, -0.1, cos((TAU*TIME-2.0*sp.y)/30.0));
+      //  col *= 0.0;
+        col += clamp(ggcol, 0.0, 4.0);
+
+        return col;
+      }
+      // License: CC0, author: Mårten Rånge, found: https://github.com/mrange/glsl-snippets
+      mat3 rotX(float a) {
+        float c = cos(a);
+        float s = sin(a);
+        return mat3(
+          1.0 , 0.0 , 0.0
+        , 0.0 , +c  , +s
+        , 0.0 , -s  , +c
+        );
+      }
+
+      // License: CC0, author: Mårten Rånge, found: https://github.com/mrange/glsl-snippets
+      mat3 rotY(float a) {
+        float c = cos(a);
+        float s = sin(a);
+        return mat3(
+          +c  , 0.0 , +s
+        , 0.0 , 1.0 , 0.0
+        , -s  , 0.0 , +c
+        );
+      }
+
+      // License: CC0, author: Mårten Rånge, found: https://github.com/mrange/glsl-snippets
+      mat3 rotZ(float a) {
+        float c = cos(a);
+        float s = sin(a);
+        return mat3(
+          +c  , +s  , 0.0
+        , -s  , +c  , 0.0
+        , 0.0 , 0.0 , 1.0
+        );
+      }
+
+      float bounce(float t, float dy, float dropOff) {
+        const float g = 10.0;
+        float p0 = 2.0*dy/g;
+
+        t += p0/2.0;
+
+        float ldo = log(dropOff);
+        float yy = 1.0 - (1.0 - dropOff) * t / p0;
+
+
+        if (yy > 1e-4) {
+          float n  = floor(log(yy) / ldo);
+          float dn = pow(dropOff, n);
+
+          float yyy = dy * dn;
+          t -= p0 * (1.0 - dn) / (1.0 - dropOff);
+
+          return -0.5*g*t*t + yyy*t;
+
+        }
+        else {
+            return 0.0;
+        }
+      }
+
+
+      vec3 effect(vec2 p, vec2 pp) {
+        float tm  = 0.5*TIME+10.0;
+        g_rot = rotX(0.333*tm)*rotZ(0.5*tm)*rotY(0.23*tm);
+
+        vec3 ro = 1.75*vec3(5.0, 1.5, 0.);
+        ro.xz *= ROT(-0.1*tm);
+      //  ro.xy *= ROT(-0.5*sin(0.06*tm));
+        const vec3 la = vec3(0.0, 0.0, 0.0);
+        const vec3 up = normalize(vec3(0.0, 1.0, 0.0));
+
+        vec3 ww = normalize(la - ro);
+        vec3 uu = normalize(cross(up, ww ));
+        vec3 vv = (cross(ww,uu));
+        const float fov = tan(TAU/6.);
+        vec3 rd = normalize(-p.x*uu + p.y*vv + fov*ww);
+
+        vec3 col = render1(ro, rd, p);
+
+        return col;
+      }
+
+      void main() {
+        vec2 q = v_texcoord;
+        vec2 p = -1. + 2. * q;
+        vec2 pp = p;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+        vec3 col = vec3(0.0);
+        col = effect(p, pp);
+        frag_color = vec4(col, 1.0);
+      }
+    </script>
+
     <script type = "text/javascript">
       const analyze_audio   = false;
       const demo_system     = new DemoSystemV2(analyze_audio);
 
       const global_uniforms = [
+        "fader",
       ];
 
       function override_nearest(image) {
@@ -176,11 +1106,23 @@
             },
           ],
         },
+        basic_cube_scene : {
+          passes:[
+            {
+              vs: "vs_default"  ,
+              fs: "fs_cubes"    ,
+            },
+            {
+              vs: "vs_default"  ,
+              fs: "fs_postproc" ,
+            },
+          ],
+        },
       };
 
-      const bpm   = 146.0;
+      const start = 16.62;
+      const bpm   = 125.0;
       const bhz   = bpm/60.0;
-      const start = 2.153;
       function btime(b) {
         return (8.0*b/bhz+start);
       }
@@ -214,7 +1156,7 @@
 
       function get_slot(time) {
         if (time < start) {
-          return all_scenes.red_scene;
+          return all_scenes.basic_cube_scene;
         }
         const i = clamp(Math.floor((time-start)*bhz/8.0), 0, max_time_slots-1);
         return time_slots[i];
@@ -258,7 +1200,7 @@
         if(slot && slot.scene) {
           return slot.scene;
         } else {
-          return all_scenes.red_scene;
+          return all_scenes.basic_cube_scene;
         }
       }
 
