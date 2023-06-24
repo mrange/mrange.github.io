@@ -165,7 +165,12 @@
       // SHADER
       // -----------------------------------------------------------------------------
 
+      uniform sampler2D prev_frame    ;
       uniform sampler2D image  ;
+
+      uniform sampler2D texts  ;
+
+      const float TextHeight = 1.0/8.0;
 
       vec3 imageCol(vec3 col, vec2 p) {
         p *= 0.5;
@@ -178,72 +183,6 @@
         return col;
       }
 
-      vec3 effect(vec2 p) {
-        vec3 col = vec3(0.0);
-        vec2 p0 = p;
-        vec2 p1 = p;
-        col = imageCol(col, p1);
-        float aa = 4.0/RESOLUTION.y;
-        return col;
-      }
-
-      void main() {
-        vec2 q = v_texcoord;
-        vec2 p = -1. + 2. * q;
-        p.x *= RESOLUTION.x/RESOLUTION.y;
-        vec3 col = effect(p);
-
-        frag_color = vec4(col, 1.0);
-      }
-    </script>
-
-    <script id="fs_moody_post" type="x-shader/x-fragment">
-      // -----------------------------------------------------------------------------
-      // PRELUDE
-      // -----------------------------------------------------------------------------
-      precision highp float;
-
-      uniform float     time              ;
-      uniform vec2      resolution        ;
-      uniform sampler2D frequency_data    ;
-      uniform sampler2D time_domain_data  ;
-
-      in vec2 v_texcoord  ;
-
-      out vec4 frag_color ;
-
-      #define TIME        time
-      #define RESOLUTION  resolution
-
-      #define PI          3.141592654
-      #define TAU         (2.0*PI)
-      #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
-
-      const float bstart = 25.61;
-      const float bpm    = 125.0;
-      const float bhz    = bpm/60.0;
-      const float bperiod= 8.0/bhz;
-
-      #define BTIME(n) ((n)*bperiod+bstart)
-
-      float beatCount(float tm) {
-        return (tm-bstart)*bhz;
-      }
-
-      float beat(float tm) {
-        return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
-      }
-
-      // -----------------------------------------------------------------------------
-      // SHADER
-      // -----------------------------------------------------------------------------
-
-      uniform sampler2D prev_frame    ;
-      uniform sampler2D prev_pass     ;
-
-      uniform sampler2D texts  ;
-
-      const float TextHeight = 1.0/8.0;
 
       vec4 textsCol(vec2 p, float n) {
         p *= 0.5;
@@ -290,7 +229,8 @@
         vec2 zp = 0.95*p;
         zp.x /= r;
         vec2 zq = 0.5+0.5*zp;
-        vec3 col = texture(prev_pass,q).xyz;
+        vec3 col = vec3(0.0);
+        col = imageCol(col, p);
         float ftm = TAU*TIME*0.5;
         float flash = smoothstep(-0.5, 0.5, sin(ftm+p.x)*sin(sqrt(0.5)*ftm+p.y)*sin(sqrt(3.0)*ftm+p.x+p.y));
         col = min(col, mix(0.33, 1.0, flash*step(mid, p.y)));
@@ -325,11 +265,14 @@
         p2.y -= 1.0-TextHeight*3.0;
         vec4 tcol2 = textsCol(p2, 3.0);
 
-        float fi = smoothstep(4.0, 17.0, TIME+4.0*p.y-4.0);
-        col = mix(col, tcol0.xyz, fi*tcol0.w);
-        col = mix(col, tcol1.xyz, fi*tcol1.w);
-        col = mix(col, tcol2.xyz, fi*tcol2.w);
+        float fi = smoothstep(6.0, 14.0, TIME+4.0*p.y-4.0-2.0*p.x*p.x);
+        const float fader = 2.0/3.0;
+
+        col = mix(col, tcol0.xyz*fader, fi*tcol0.w);
+        col = mix(col, tcol1.xyz*fader, fi*tcol1.w);
+        col = mix(col, tcol2.xyz*fader, fi*tcol2.w);
         col *= smoothstep(bstart, bstart-1.0, TIME);
+        col *= smoothstep(0.0, 6.0, TIME);
         col = sqrt(col);
         frag_color = vec4(col, 1.0);
       }
@@ -377,18 +320,12 @@
                 gl.activeTexture(gl.TEXTURE4);
                 gl.bindTexture(gl.TEXTURE_2D, all_textures.tribute__1989.texture);
                 gl.uniform1i(pass.uniformLocations.image, 4);
-              },
-            },
-            {
-              vs: "vs_default"    ,
-              fs: "fs_moody_post" ,
-              pre_render: (gl, time, scene, pass) => {
-                // Texture 0-3 is reserved
-                gl.activeTexture(gl.TEXTURE4);
+
+                gl.activeTexture(gl.TEXTURE5);
                 gl.bindTexture(gl.TEXTURE_2D, all_textures.tribute__texts.texture);
-                gl.uniform1i(pass.uniformLocations.texts, 4);
+                gl.uniform1i(pass.uniformLocations.texts, 5);
               },
-            },
+            }
           ],
           uniforms: ["image", "texts"],
         },
