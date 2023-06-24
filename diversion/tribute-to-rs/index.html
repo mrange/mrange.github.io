@@ -1,0 +1,501 @@
+<!--
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+-->
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Our tribute to Red Sector</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <script src="demo-system-v2.js" type="text/javascript"></script>
+    <script src="tiny-sdf.js" type="module"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Josefin+Slab&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Josefin Slab';
+            font-size: 2vw;
+            color: white;
+            background-color: black;
+        }
+        a:link {
+          text-decoration: none;
+          color: #FF8240;
+        }
+        a:visited {
+          text-decoration: none;
+          color: #FF8240;
+        }
+        a:hover {
+          text-decoration: underline;
+          color: #DFF180;
+        }
+        a:active {
+          text-decoration: underline;
+          color: #DFF180;
+        }
+        canvas.gl {
+          position:fixed;
+          z-index:-1;
+          top:0;
+          left: 0;
+          height: 100%;
+          width: 100%;
+          background-color: black;
+        }
+        div.center-flex {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+    </style>
+
+    <script id="vs_default" type="x-shader/x-vertex">
+      precision highp float;
+
+      in vec4 a_position;
+      in vec3 a_normal  ;
+      in vec2 a_texcoord;
+
+      out vec2 v_texcoord;
+
+      void main(void) {
+        gl_Position = a_position;
+        v_texcoord  = a_texcoord;
+      }
+    </script>
+
+    <script id="fs_red" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+
+      in vec2 v_texcoord  ;
+
+      out vec4 frag_color ;
+
+      #define TIME        time
+      #define RESOLUTION  resolution
+
+      #define PI          3.141592654
+      #define TAU         (2.0*PI)
+      #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
+
+      const float bstart = 25.76;
+      const float bpm    = 125.0;
+      const float bhz    = bpm/60.0;
+      const float bperiod= 8.0/bhz;
+
+      #define BTIME(n) ((n)*bperiod+bstart)
+
+      float beatCount(float tm) {
+        return (tm-bstart)*bhz;
+      }
+
+      float beat(float tm) {
+        return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
+      }
+
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+
+      void main(void) {
+        vec3 col = vec3(1.0, 0.0, 0.0);
+
+        frag_color = vec4(col, 1.0);
+      }
+    </script>
+
+    <script id="fs_moody" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+
+      in vec2 v_texcoord  ;
+
+      out vec4 frag_color ;
+
+      #define TIME        time
+      #define RESOLUTION  resolution
+
+      #define PI          3.141592654
+      #define TAU         (2.0*PI)
+      #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
+
+      const float bstart = 25.76;
+      const float bpm    = 125.0;
+      const float bhz    = bpm/60.0;
+      const float bperiod= 8.0/bhz;
+
+      #define BTIME(n) ((n)*bperiod+bstart)
+
+      float beatCount(float tm) {
+        return (tm-bstart)*bhz;
+      }
+
+      float beat(float tm) {
+        return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
+      }
+
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+
+      uniform sampler2D image  ;
+
+      vec3 imageCol(vec3 col, vec2 p) {
+        p *= 0.5;
+        vec2 ap = abs(p);
+        vec2 sp = step(ap, vec2(0.5));
+        p += 0.5;
+        p.y = 1.0-p.y;
+        vec4 tcol = texture(image, p);
+        col = mix(col, tcol.xyz*tcol.xyz, tcol.w*sp.x*sp.y);
+        return col;
+      }
+
+      vec3 effect(vec2 p) {
+        vec3 col = vec3(0.0);
+        vec2 p0 = p;
+        vec2 p1 = p;
+        col = imageCol(col, p1);
+        float aa = 4.0/RESOLUTION.y;
+        return col;
+      }
+
+      void main() {
+        vec2 q = v_texcoord;
+        vec2 p = -1. + 2. * q;
+        p.x *= RESOLUTION.x/RESOLUTION.y;
+        vec3 col = effect(p);
+
+        frag_color = vec4(col, 1.0);
+      }
+    </script>
+
+    <script id="fs_moody_post" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE
+      // -----------------------------------------------------------------------------
+      precision highp float;
+
+      uniform float     time              ;
+      uniform vec2      resolution        ;
+      uniform sampler2D frequency_data    ;
+      uniform sampler2D time_domain_data  ;
+
+      in vec2 v_texcoord  ;
+
+      out vec4 frag_color ;
+
+      #define TIME        time
+      #define RESOLUTION  resolution
+
+      #define PI          3.141592654
+      #define TAU         (2.0*PI)
+      #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
+
+      const float bstart = 25.76;
+      const float bpm    = 125.0;
+      const float bhz    = bpm/60.0;
+      const float bperiod= 8.0/bhz;
+
+      #define BTIME(n) ((n)*bperiod+bstart)
+
+      float beatCount(float tm) {
+        return (tm-bstart)*bhz;
+      }
+
+      float beat(float tm) {
+        return smoothstep(0.25, 1.0, cos(TAU*beatCount(tm)));
+      }
+
+      // -----------------------------------------------------------------------------
+      // SHADER
+      // -----------------------------------------------------------------------------
+
+      uniform sampler2D prev_frame    ;
+      uniform sampler2D prev_pass     ;
+
+      uniform sampler2D texts  ;
+
+      const float TextHeight = 1.0/8.0;
+
+      vec4 textsCol(vec2 p, float n) {
+        p *= 0.5;
+        if (abs(p.y) > 0.5*TextHeight) {
+          return vec4(0.0);
+        }
+        p += 0.5;
+        p.y -= TextHeight*0.5;
+        p.y -= (n-4.0)*TextHeight;
+        p.y = 1.0-p.y;
+        vec4 tcol = texture(texts, p);
+        return vec4(tcol.xyz*tcol.xyz, tcol.w);
+      }
+
+      const mat2 brot = ROT(2.399);
+      //  simplyfied version of Dave Hoskins blur
+      vec3 dblur(vec2 q,float rad) {
+        vec3 acc=vec3(0);
+        const float m = 0.002;
+        vec2 pixel=vec2(m*resolution.y/resolution.x,m);
+        vec2 angle=vec2(0,rad);
+        rad=1.;
+        const int iter = 24;
+        for (int j=0; j<iter; ++j) {
+          rad += 1./rad;
+          angle*=brot;
+          vec4 col=texture(prev_frame,q+pixel*(rad-1.)*angle);
+          col.xyz*=col.xyz;
+          acc+=col.xyz;
+        }
+        return acc*(1.0/float(iter));
+      }
+
+      void main(void) {
+        const float top   = (1.0-4.0*TextHeight);
+        const float bot   = (-1.0+2.0*3.0/2.0*TextHeight);
+        const float mid   = (top+bot)*0.5;
+
+        vec2 q = v_texcoord;
+        vec2 p = -1.0+2.0*q;
+        vec2 pp = p;
+        float r = RESOLUTION.x/RESOLUTION.y;
+        p.x *= r;
+        vec2 zp = 0.95*p;
+        zp.x /= r;
+        vec2 zq = 0.5+0.5*zp;
+        vec3 col = texture(prev_pass,q).xyz;
+        float ftm = TAU*TIME*0.5;
+        float flash = smoothstep(-0.5, 0.5, sin(ftm+p.x)*sin(sqrt(0.5)*ftm+p.y)*sin(sqrt(3.0)*ftm+p.x+p.y));
+        col = min(col, mix(0.33, 1.0, flash*step(mid, p.y)));
+        vec2 sp = 40.0*p+TAU*TIME/5.0;
+        float rad = 2.0*mix(0.5, 1.5, 0.5+0.5*sin(sp.x)*sin(sp.y));
+
+        float fade = smoothstep(top*1.1, top, p.y)*smoothstep(1.125*bot, bot, p.y);
+
+        vec3 bcol = dblur(zq, rad);
+        bcol = tanh(2.0*bcol);
+        if (p.y > mid) {
+          bcol *= bcol.z;
+          bcol *= 2.0/3.0*vec3(0.25, 0.5, 1.0);
+        } else {
+          bcol *= bcol.x;
+          bcol *= 2.0/3.0*vec3(1.0, 0.75, 0.5);
+        }
+        bcol *= fade;
+        col += bcol;
+        col *= smoothstep(1.5, 0.5, length(pp));
+
+        vec2 p0 = p;
+        p0.y -= -1.0+TextHeight*3.0/2.0;
+        p0 *= 2.0/3.0;
+        vec4 tcol0 = textsCol(p0, 1.0);
+
+        vec2 p1 = p;
+        p1.y -= 1.0-TextHeight;
+        vec4 tcol1 = textsCol(p1, 2.0);
+
+        vec2 p2 = p;
+        p2.y -= 1.0-TextHeight*3.0;
+        vec4 tcol2 = textsCol(p2, 3.0);
+
+        float fi = smoothstep(4.0, 17.0, TIME+4.0*p.y-4.0);
+        col = mix(col, tcol0.xyz, fi*tcol0.w);
+        col = mix(col, tcol1.xyz, fi*tcol1.w);
+        col = mix(col, tcol2.xyz, fi*tcol2.w);
+        col *= smoothstep(25.7, 24.7, TIME);
+        col = sqrt(col);
+        frag_color = vec4(col, 1.0);
+      }
+    </script>
+
+    <script type = "text/javascript">
+      const analyze_audio   = false;
+      const demo_system     = new DemoSystemV2(analyze_audio);
+
+      const global_uniforms = [
+      ];
+
+      function override_nearest(image) {
+        return [image, (gl) => {
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+//          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_NEAREST);
+        }];
+      }
+
+      const all_textures = {
+        tribute__1989 : {
+          image : (gl) => override_nearest(document.getElementById("tribute__1989")),
+        },
+        tribute__texts : {
+          image : (gl) => document.getElementById("tribute__texts"),
+        },
+      }
+
+      const all_scenes = {
+        red_scene : {
+          passes:[
+            {
+              vs: "vs_default",
+              fs: "fs_red"    ,
+            },
+          ],
+        },
+        moody_scene : {
+          passes:[
+            {
+              vs: "vs_default",
+              fs: "fs_moody"  ,
+              pre_render: (gl, time, scene, pass) => {
+                // Texture 0-3 is reserved
+                gl.activeTexture(gl.TEXTURE4);
+                gl.bindTexture(gl.TEXTURE_2D, all_textures.tribute__1989.texture);
+                gl.uniform1i(pass.uniformLocations.image, 4);
+              },
+            },
+            {
+              vs: "vs_default"    ,
+              fs: "fs_moody_post" ,
+              pre_render: (gl, time, scene, pass) => {
+                // Texture 0-3 is reserved
+                gl.activeTexture(gl.TEXTURE4);
+                gl.bindTexture(gl.TEXTURE_2D, all_textures.tribute__texts.texture);
+                gl.uniform1i(pass.uniformLocations.texts, 4);
+              },
+            },
+          ],
+          uniforms: ["image", "texts"],
+        },
+      };
+
+      const bstart  = 25.76;
+      const bpm     = 125.0;
+      const bhz     = bpm/60.0;
+      function btime(b) {
+        return (8.0*b/bhz+bstart);
+      }
+
+      const max_time_slots  = 128;
+      const time_slots      = new Array(max_time_slots);
+      const script = [
+        {
+          begin       :  0                                ,
+          scene       :  all_scenes.red_scene             ,
+        },
+      ];
+
+      function populate_time_slots() {
+        let current_script = script[0];
+        let slot = 0;
+        for (const idx in script) {
+          const next_script = script[idx];
+          while(slot < max_time_slots && slot < next_script.begin) {
+            time_slots[slot] = current_script;
+            ++slot;
+          }
+          current_script = next_script;
+        }
+        while(slot < max_time_slots) {
+            time_slots[slot] = current_script;
+            ++slot;
+        }
+      }
+      populate_time_slots();
+
+      function get_slot(time) {
+        if (time < bstart) {
+          return all_scenes.moody_scene;
+        }
+        const i = clamp(Math.floor((time-bstart)*bhz/8.0), 0, max_time_slots-1);
+        return time_slots[i];
+      }
+
+      function handleKeyDown(event) {
+        if (event.altKey && event.key === 'Enter') {
+          event.preventDefault();
+          const music = document.getElementById("music");
+          music.play();
+        }
+      }
+
+      function on_init_complete(width, height) {
+        const label = document.getElementById("info_label");
+        label.textContent = "🚀 Ready, click play to run or hit Alt+Enter";
+
+        const music = document.getElementById("music");
+        music.style.visibility = "visible";
+
+        document.addEventListener('keydown', handleKeyDown);
+      }
+
+      // Called after user clicked play
+      function on_started() {
+        const information = document.getElementById("information");
+        information.style.display = "none";
+      }
+      // Called before each shader is compiled
+      function on_loading_scene(key) {
+        const label = document.getElementById("info_label");
+        label.textContent = "🔄 Compiling: " + key;
+      }
+
+      function pre_render(gl, time, scene, pass) {
+      }
+
+      // Called each frame to select which scene to render
+      function on_select_scene(gl, time) {
+        const slot = get_slot(time);
+        if(slot && slot.scene) {
+          return slot.scene;
+        } else {
+          return all_scenes.moody_scene;
+        }
+      }
+
+    </script>
+  </head>
+
+  <body onload="demo_system.run_demo()">
+    <audio id="music" style="visibility: hidden;" controls src="soundlogic_-_rise_up_-_amigaremix_03445.mp3"></audio>
+    <div id="information" style="margin-left: 16pt;">
+      <h1>Our tribute to Red Sector</h1>
+
+      <p id="info_label">Please wait... </p>
+    </div>
+    <div class="center-flex">
+      <div>
+        <canvas id="screen_canvas" class="gl">
+          Your browser doesn't appear to support the HTML5 <code>&lt;canvas&gt;</code> element.
+        </canvas>
+      </div>
+    </div>
+    <img id="tribute__texts" src="tribute__texts.png" style="display: none"/>
+    <img id="tribute__1989" src="tribute__1989.jpg" style="display: none"/>
+  </body>
+</html>
