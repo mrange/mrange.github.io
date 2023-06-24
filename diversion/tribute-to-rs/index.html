@@ -98,7 +98,7 @@
       #define TAU         (2.0*PI)
       #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
 
-      const float bstart = 25.76;
+      const float bstart = 25.61;
       const float bpm    = 125.0;
       const float bhz    = bpm/60.0;
       const float bperiod= 8.0/bhz;
@@ -146,7 +146,7 @@
       #define TAU         (2.0*PI)
       #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
 
-      const float bstart = 25.76;
+      const float bstart = 25.61;
       const float bpm    = 125.0;
       const float bhz    = bpm/60.0;
       const float bperiod= 8.0/bhz;
@@ -219,7 +219,7 @@
       #define TAU         (2.0*PI)
       #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
 
-      const float bstart = 25.76;
+      const float bstart = 25.61;
       const float bpm    = 125.0;
       const float bhz    = bpm/60.0;
       const float bperiod= 8.0/bhz;
@@ -329,7 +329,7 @@
         col = mix(col, tcol0.xyz, fi*tcol0.w);
         col = mix(col, tcol1.xyz, fi*tcol1.w);
         col = mix(col, tcol2.xyz, fi*tcol2.w);
-        col *= smoothstep(25.7, 24.7, TIME);
+        col *= smoothstep(bstart, bstart-1.0, TIME);
         col = sqrt(col);
         frag_color = vec4(col, 1.0);
       }
@@ -394,7 +394,7 @@
         },
       };
 
-      const bstart  = 25.76;
+      const bstart  = 25.61;
       const bpm     = 125.0;
       const bhz     = bpm/60.0;
       function btime(b) {

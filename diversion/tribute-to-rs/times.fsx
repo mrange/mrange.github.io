@@ -1,4 +1,4 @@
-let bstart    = 25.76
+let bstart    = 25.61
 let bpm       = 125.0
 let bhz       = bpm/60.0
 let bperiod   = 8.0/bhz
