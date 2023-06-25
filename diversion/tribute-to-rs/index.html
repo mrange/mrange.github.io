@@ -1562,13 +1562,23 @@
           ],
           uniforms: ["almost_mono", "red_sector", "texts"],
         },
-        beatbox_scene : {
+        beatbox_scene_0 : {
           passes:[
             {
               vs: "vs_default"  ,
               fs: "fs_beatbox"  ,
             }
           ],
+          defines:["DF0"]
+        },
+        beatbox_scene_1 : {
+          passes:[
+            {
+              vs: "vs_default"  ,
+              fs: "fs_beatbox"  ,
+            }
+          ],
+          defines:["DF4"]
         },
       };
 
@@ -1588,7 +1598,11 @@
         },
         {
           begin       :  3                                ,
-          scene       :  all_scenes.beatbox_scene         ,
+          scene       :  all_scenes.beatbox_scene_0       ,
+        },
+        {
+          begin       :  5                                ,
+          scene       :  all_scenes.beatbox_scene_1       ,
         },
         {
           begin       :  9                                ,
