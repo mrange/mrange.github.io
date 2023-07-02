@@ -458,18 +458,20 @@ void main(void) {
   draw_scene() {
     if (!this.playing) return;
 
-    if (this.analyze_audio) {
+    const before = this.now();
+    const time  = (before - this.start_time) / 1000.0;
+
+    const scene = on_select_scene(this.gl, time);
+
+    const analyze_audio = this.analyze_audio && scene.analyze_audio;
+
+    if (analyze_audio) {
       this.audio_analyzer.getByteTimeDomainData(this.time_domain_data);
       this.audio_analyzer.getByteFrequencyData(this.frequency_data);
 
       this.render_bins_texture(this.texture_time_domain_data, this.time_domain_data);
       this.render_bins_texture(this.texture_frequency_data  , this.frequency_data);
     }
-
-    const before = this.now();
-    const time  = (before - this.start_time) / 1000.0;
-
-    const scene = on_select_scene(this.gl, time);
 
     const passes = scene.passes;
     if (passes.length > 0) {
@@ -616,12 +618,14 @@ void main(void) {
       const passes = scene.passes.concat(scene.present_pass);
       for (const passKey in passes) {
         const pass = passes[passKey];
-        this.init_pass(sceneKey, passKey, uniforms, prelude, pass)
+        this.init_pass(sceneKey, passKey, uniforms, prelude, scene, pass)
       }
     }
   }
 
-  init_pass(sceneKey, passKey, uniforms, prelude, pass) {
+  init_pass(sceneKey, passKey, uniforms, prelude, scene, pass) {
+    const analyze_audio = this.analyze_audio && scene.analyze_audio;
+
     const vertexShader    = pass.vs_inline
       ? this.compile_shader(prelude, this.vertex_shader_type, pass.vs_inline)
       : this.get_shader(prelude, pass.vs)
@@ -680,12 +684,12 @@ void main(void) {
       this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.verticesTextureCoordBuffer);
       this.gl.vertexAttribPointer(pass.textureCoordAttribute, 2, this.gl.FLOAT, false, 0, 0);
     }
-    if (this.analyze_audio && pass.uniformLocations.frequency_data) {
+    if (analyze_audio && pass.uniformLocations.frequency_data) {
       this.gl.activeTexture(this.gl.TEXTURE0);
       this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture_frequency_data);
       this.gl.uniform1i(pass.uniformLocations.frequency_data, 0);
     }
-    if (this.analyze_audio && pass.uniformLocations.time_domain_data) {
+    if (analyze_audio && pass.uniformLocations.time_domain_data) {
       this.gl.activeTexture(this.gl.TEXTURE1);
       this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture_time_domain_data);
       this.gl.uniform1i(pass.uniformLocations.time_domain_data, 1);

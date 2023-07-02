@@ -2440,7 +2440,9 @@
         float dib = 1E6;
         const int around = 1;
         for (int i = -around; i <=around ;++i) {
-          float fft = texture(frequency_data, vec2((n+float(i))*st*1.5, 0.5)).x;
+          float fft = texture(frequency_data, vec2((n+float(i))*st*1.5  , 0.5)).x;
+          fft *= fft;
+          fft *= 2.0;
           float dibb = box(p-vec2(st*float(i), 0.0), vec2(st*0.25, 0.05*fft+0.001));
           dib = min(dib, dibb);
         }
@@ -2549,9 +2551,10 @@
         const float samples = 5.0;
         const float st = 0.01;
         for (float i = 0.0; i < samples; ++i) {
-          beat += texture(frequency_data, vec2(st*1.0+st*i, 0.5)).x;
+          float fft = texture(frequency_data, vec2(st*1.0+st*i, 0.5)).x;
+          beat += fft;
         }
-        return smoothstep(0.66, 1.0, beat/samples);
+        return smoothstep(0.75, 1.0, beat/samples);
       }
 
       // Post processing I found somewhere on shadertoy years ago
@@ -2621,8 +2624,10 @@
         di = min(di, ds);
         float dg = di;
 
-        float off = -0.3 + 0.75*p.x-p.y;
-        float angle = -0.5+off-TTIME/16.0;
+        float off = -p.x+p.y+0.75*sin(TIME);
+        float ttm = TTIME;
+        ttm = TAU*10.0;
+        float angle = -0.5+off-ttm/16.0;
 
         float gmix = pow(PSIN(angle), 14.0);
         float gmix2 = mix(1.0, abs(1.0/(mod(angle, PI)-PI*0.5)), beat*smoothstep(1.75, 1.55, abs(off)));
@@ -2788,6 +2793,7 @@
           uniforms: ["image", "texts"],
         },
         solo_scene : {
+          analyze_audio: true   ,
           passes:[
             {
               vs: "vs_default"  ,
