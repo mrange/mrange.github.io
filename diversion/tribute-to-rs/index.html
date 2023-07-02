@@ -486,7 +486,7 @@
       #define MAX_RAY_MARCHES 70
       #define NORM_OFF        0.001
 
-      //#define DF0
+      #define DF0
       //#define FLAIR
       //#define BOXY
 
@@ -690,18 +690,221 @@
       , Nop
       );
 
-      float funkyBeat(float time) {
-        const float btime3 = BTIME(3.0);
-        const float btime9 = BTIME(9.0);
+      const int[] track4_twist = int[64*3]
+      (
+        0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0   // 8
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0  // 16
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0 // 24
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0 // 32
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0 // 40
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0 // 48
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0
+      , 0 // 56
+      , 0
+      , 0
+      , 0
+      , 1 // Hey
+      , 1
+      , 1
+      , 1
+      , 1 // 0 - break
+      , 1
+      , 1
+      , 1
+      , 0 // Hey
+      , 0
+      , 0
+      , 0
+      , 0 // 8
+      , 0
+      , 0
+      , 0
+      , 1 // Hey
+      , 1
+      , 1
+      , 1
+      , 1 // 16
+      , 1
+      , 1
+      , 1
+      , 0 // Hey
+      , 0
+      , 0
+      , 0
+      , 0 // 24
+      , 0
+      , 0
+      , 0
+      , 1 // Hey
+      , 1
+      , 1
+      , 1
+      , 1 // 32
+      , 1
+      , 1
+      , 1
+      , 2 // Hey
+      , 2
+      , 2
+      , 2
+      , 2 // 40
+      , 2
+      , 2
+      , 2
+      , 0 // Hey
+      , 0
+      , 0
+      , 0
+      , 0 // 48
+      , 0
+      , 0
+      , 0
+      , 2 // Hey
+      , 2
+      , 2
+      , 2
+      , 2 // 56
+      , 2
+      , 2
+      , 2
+      , 1 // Hey
+      , 1 //
+      , 0 // Hey
+      , 0
+      , 0 // 0 -break
+      , 0
+      , 0
+      , 0
+      , 2 // Hey
+      , 2
+      , 2
+      , 2
+      , 2 // 8
+      , 2
+      , 2
+      , 2
+      , 1 // Hey
+      , 1
+      , 1
+      , 1
+      , 1 // 16
+      , 1
+      , 1
+      , 1
+      , 0 // Hey
+      , 0
+      , 0
+      , 0
+      , 0 // 24
+      , 0
+      , 0
+      , 0
+      , 1 // Hey
+      , 1
+      , 1
+      , 1
+      , 1 // 32
+      , 1
+      , 1
+      , 1
+      , 2 // Hey
+      , 2
+      , 2
+      , 2
+      , 2 // 40
+      , 2
+      , 2
+      , 2
+      , 0 // Hey
+      , 0
+      , 0
+      , 0
+      , 0 // 48
+      , 0
+      , 0
+      , 0
+      , 1 // Hey
+      , 1
+      , 1
+      , 1
+      , 1 // 56
+      , 1
+      , 1
+      , 1
+      , 0 // Hey
+      , 0
+      , 0
+      , 0
+      );
+
+      const float btime3    = BTIME(3.0);
+      const float btime_fi  = BTIME(3.0+0.125);
+      const float btime_fo  = BTIME(9.0-0.125);
+      const float btime9    = BTIME(9.0);
+
+      float funkyBeat(float time, out int from, out int to, out float anim) {
         const float diff   = btime9-btime3;
         const float len    = float(track4.length());
         const float beat   = diff/len;
-
         float tm = time-btime3;
-        float bt = 1.0-mod(tm, beat)/beat;
+        float lt = mod(tm, beat)/beat;
+        float bt = 1.0-lt;
         float idx = floor(tm/beat);
+        anim = lt;
         if (idx >= 0.0 && idx < len) {
-          float effect = track4[int(idx)];
+          int i = int(idx);
+          float effect = track4[i];
+          from = track4_twist[max(i-1, 0)];
+          to = track4_twist[i];
           return effect*(bt);
         } else {
           return Nop;
@@ -725,6 +928,7 @@
       const vec3 skyCol     = HSV2RGB(vec3(hoff+0.75, 0.70, 0.25));
       const vec3 glowCol0   = HSV2RGB(vec3(hoff+0.025, 0.85, 0.00125));
       const vec3 glowCol1   = HSV2RGB(vec3(hoff+0.95, 0.85, 0.05));
+      const vec3 glowCol2   = HSV2RGB(vec3(hoff+0.95, 0.70, 8.0));
       const vec3 sunCol1    = HSV2RGB(vec3(hoff+0.55, 0.50, 0.5));
       const vec3 sunCol2    = HSV2RGB(vec3(hoff+0.95, 0.75, 25.0));
       const vec3 diffCol    = HSV2RGB(vec3(hoff+0.40, 0.75, 0.125));
@@ -842,7 +1046,7 @@
         return (max(q.x,max(q.y,q.z)));
       }
 
-      float dfbase(vec3 p, out float ogd) {
+      float df0(vec3 p, out float ogd) {
         float sz = mix(3.0, 3.25, g_funkyBeat0*g_funkyBeat0);
         vec3 p0 = p;
         float d0 = box(p0, vec3(sz));
@@ -857,76 +1061,16 @@
         return d;
       }
 
-      #if defined(DF0)
-      float dfeffect(vec3 p, out float ogd) {
-        return dfbase(p, ogd);
-      }
-      #elif defined(DF1)
-      #if !defined(BOXY)
-      #define BACKSTEP
-      #endif
-
-      float dfeffect(vec3 p, out float ogd) {
+      float df1(vec3 p, out float ogd) {
+        float sz = mix(3.0, 3.25, g_funkyBeat0*g_funkyBeat0);
       #if defined(BOXY)
-        float d0 = box(p, vec3(3.0));
-        float d1 = boxf(p, vec3(2.98), 0.)-0.01;
+        float d0 = box(p, vec3(sz));
+        float d1 = boxf(p, vec3(sz+0.01), 0.0)-0.01;
       #else
-        float d0 = sphere8(p, (3.));
-      #endif
-        vec3 p2 = p;
-        const vec3 rot0 = vec3(0.0, 1.0, 0.0)*ROTZ(-PI/4.0);
-        const vec3 rot1 = vec3(0.0, 1.0, 0.0)*ROTX(PI/4.0);
-        p2 = abs(p2);
-        ref(p2, rot0);
-        ref(p2, rot1);
-        p2.y -= 3.0;
-        float d2 = torus(p2, vec2(1.5, 0.025));
-
-        vec3 p3 = p2;
-        const float r3 = 0.75;
-        p3.y -= r3;
-        float d3 = length(p3) - r3;
-
-        vec3 p4 = p2;
-        p4.y -= 0.05;
-        float d4 = length(p4)-0.05;
-
-        float gd = d2;
-      #if defined(BOXY)
-        gd = min(gd, d1);
-      #endif
-        gd = min(gd, d4);
-        gd = abs(gd);
-
-
-        float d = d0;
-
-        d = pmax(d, -(gd-0.00), 0.1);
-      #if defined(BOXY)
-        d = min(d, d1);
-      #endif
-        d = min(d, d2);
-        d = pmax(d, -d3, 1.);
-        d = min(d, d4);
-
-        ogd = gd;
-
-        return d;
-      }
-      #elif defined(DF2)
-      #if !defined(BOXY)
-      #define BACKSTEP
+        float d0 = sphere8(p, (sz));
       #endif
 
-      float dfeffect(vec3 p, out float ogd) {
-      #if defined(BOXY)
-        float d0 = box(p, vec3(3.0));
-        float d1 = boxf(p, vec3(3.01), 0.0)-0.01;
-      #else
-        float d0 = sphere8(p, (3.));
-      #endif
-
-        float d3 = length(p)-(3.-0.12);
+        float d3 = length(p)-(sz-0.12);
 
         float d = d0;
         d = pmax(d, -d3, 1.0);
@@ -945,16 +1089,11 @@
 
         ogd = gd;
 
-
         return d;
 
       }
-      #elif defined(DF3)
-      #if !defined(BOXY)
-      #define BACKSTEP
-      #endif
 
-      float dfeffect(vec3 p, out float ogd) {
+      float df2(vec3 p, out float ogd) {
         float sz = mix(3.0, 3.25, g_funkyBeat0*g_funkyBeat0);
       #if defined(BOXY)
         float d0 = box(p, vec3(sz));
@@ -989,301 +1128,67 @@
         return d;
 
       }
-      #elif defined(DF4)
-      #if !defined(BOXY)
-      #define BACKSTEP
-      #endif
 
-      #define ZOOM        (1.)
-      #define FWD(x)      exp2((x)*ZOOM)
-      #define REV(x)      (log2(x)/ZOOM)
-
-      float dfeffect(vec3 p, out float ogd) {
-        float sz = mix(3.0, 3.25, g_funkyBeat0*g_funkyBeat0);
-      #if defined(BOXY)
-
-        float d0 = box(p, vec3(sz));
-        float d1 = boxf(p, vec3(sz+0.01), 0.0)-0.01;
-      #else
-        float d0 = sphere8(p, (sz));
-      #endif
-        float d3 = sphere4(p, sz);
-        float d4 = min(min(abs(p.x), abs(p.y)), abs(p.z))-0.015;
-      #if defined(FLAIR)
-        float d5 = max(d0, d4);
-      #endif
-        vec3 p2 = p;
-
-        p2 = abs(p2);
-        p2 -= 3.0;
-
-        vec3 fp2 = FWD(abs(p2));
-
-        float n = floor(max(max(fp2.x, fp2.y), fp2.z));
-
-        float x0 = REV(n);
-        float x1 = REV(n+1.0);
-
-        float m = (x0+x1)*0.5;
-        float w = x1-x0;
-
-        float d2 = abs(bbox(p2, vec3(m)))-(w*0.5)+0.015;
-
-        d0 = max(d0, d2);
-
-        float d = d0;
-        d = min(d, d3);
-      #if defined(FLAIR)
-        d = min(d, d5);
-      #endif
-      #if defined(BOXY)
-        d = min(d, d1);
-      #endif
-
-        float gd = d3;
-      #if defined(FLAIR)
-        gd = min(gd, d5);
-      #endif
-      #if defined(BOXY)
-        gd = min(gd, d1);
-      #endif
-        ogd = gd;
-
-        return d;
-
-      }
-
-      #elif defined(DF5)
-      #if !defined(BOXY)
-      #define BACKSTEP
-      #endif
-
-      #define ZOOM        (1.-.1)
-      #define FWD(x)      exp2((x)*ZOOM)
-      #define REV(x)      (log2(x)/ZOOM)
-
-      float dfeffect(vec3 p, out float ogd) {
-      #if defined(BOXY)
-        float d0 = box(p, vec3(3.0));
-        float d1 = boxf(p, vec3(3.01), 0.0)-0.01;
-      #else
-        float d0 = sphere8(p, (3.));
-      #endif
-        float d3 = sphere4(p, 3.0-.001);
-
-        vec3 p2 = p;
-        p2 = abs(p2);
-        p2 -= 3.0;
-        float fp2 = FWD(length(p2));
-
-        float n = floor(fp2);
-
-        float x0 = REV(n);
-        float x1 = REV(n+1.0);
-
-        float m = (x0+x1)*0.5;
-        float w = x1-x0;
-
-        float d2 = abs(length(p2)-m)-(w*0.5)+0.025;
-      #if defined(FLAIR)
-        float d5 = abs(length(p2)-m)-0.005;
-        d5 = max(d0, d5);
-      #endif
-
-        d0 = max(d0, d2);
-
-        float d = d0;
-        d = min(d, d3);
-      #if defined(BOXY)
-        d = min(d, d1);
-      #endif
-
-        float gd = d3;
-      #if defined(FLAIR)
-        gd = min(gd, d5);
-      #endif
-      #if defined(BOXY)
-        gd = min(gd, d1);
-      #endif
-
-        ogd = gd;
-
-        return d;
-
-      }
-
-      #elif defined(DF6)
-      #define BACKSTEP
-
-
-      const float fixed_radius2 = 1.9;
-      const float min_radius2 = 0.1;
-      const float folding_limit = 1.0;
-      const float scale = -2.4;
-
-      void sphere_fold(inout vec3 z, inout float dz) {
-        float r2 = dot(z, z);
-        if(r2 < min_radius2) {
-          float temp = (fixed_radius2 / min_radius2);
-          z *= temp;
-          dz *= temp;
-        } else if(r2 < fixed_radius2) {
-          float temp = (fixed_radius2 / r2);
-          z *= temp;
-          dz *= temp;
-        }
-      }
-
-      void box_fold(inout vec3 z, inout float dz) {
-        z = clamp(z, -folding_limit, folding_limit) * 2.0 - z;
-      }
-
-      float mb(vec3 z, out float ddd) {
-        vec3 offset = z;
-        float dr = 1.0;
-      #if defined(FLAIR)
-        float d2 = 1E3;
-      #else
-        float d2 = sphere4(z,mix(2.1, 2.3, g_funkyBeat0));
-      #endif
-
-        for(int n = 0; n < 5; ++n) {
-          box_fold(z, dr);
-          sphere_fold(z, dr);
-
-          z = scale * z + offset;
-          dr = dr * abs(scale) + 1.5;
-      #if defined(FLAIR)
-          if (n < 2) {
-            float d = (length(z))/abs(dr)-0.06;
-            d2 = min(d, d2);
-          }
-      #endif
-        }
-
-        float d = (length(z))/abs(dr)-0.04;
-      #if !defined(FLAIR)
-        d2 = pmax(d2, -d, 0.5);
-      #endif
-        d = min(d, d2);
-
-        ddd = d2;
-
-        return d;
-      }
-
-
-      float dfeffect(vec3 p, out float ogd) {
-        const float z = 1.5;
-        vec3 p0 = p/z;
-        float d2;
-        float d0 = mb(p0, d2);
-        d0 *= z;
-        float d1 = d2*z;
-
-        ogd = d1;
-
-        float d = d0;
-        d = min(d, d1);
-        return d0;
-
-      }
-      #elif defined(DF7)
-      #if !defined(BOXY)
-      #define BACKSTEP
-      #endif
-
-      #define ZOOM        (0.2025)
-      #define REV(x)      exp2((x)*ZOOM)
-      #define FWD(x)      (log2(x)/ZOOM)
-
-      float dfeffect(vec3 p, out float ogd) {
-      #if defined(BOXY)
-        float d0 = box(p, vec3(3.0));
-        float d1 = boxf(p, vec3(3.01), 0.0)-0.01;
-      #else
-        float d0 = sphere8(p, (3.));
-      #endif
-        float d3 = sphere4(p, 3.0-.001);
-
-        vec3 p4 = p;
-        p4 = abs(p4);
-        p4 -= 3.0-0.75;
-
-        float d4 = sphere(p4, 0.75);
-
-        vec3 p2 = p;
-        p2 = abs(p2);
-        p2 -= 3.0;
-        float fp2 = FWD(length(p2));
-
-        float n = floor(fp2);
-
-        float x0 = REV(n);
-        float x1 = REV(n+1.0);
-
-        float m = (x0+x1)*0.5;
-        float w = x1-x0;
-
-        float d2 = abs(length(p2)-m)-(w*0.5)+0.025;
-      #if defined(FLAIR)
-        float d5 = abs(length(p2)-m)-0.005;
-      #endif
-        d0 = max(d0, d2);
-
-        float d = d0;
-        d = min(d, d3);
-      #if defined(BOXY)
-        d = min(d, d1);
-      #endif
-        d = pmax(d, -d4, 0.5);
-        d = min(d, d4);
-        float gd = d3;
-      #if defined(FLAIR)
-        gd = min(gd, max(d5, d0));
-      #endif
-      #if defined(BOXY)
-        gd = min(gd, d1);
-      #endif
-        gd = pmax(gd, -d4, 0.5);
-        ogd = gd;
-
-        return d;
-
-      }
-      #else
-      float dfeffect(vec3 p, out float ogd) {
-        return dfbase(p, ogd);
-      }
-      #endif
-
-      mat3 g_rot;
+      int g_from  ;
+      int g_to    ;
+      float g_anim;
       float g_gd;
 
-      //#define FADER
+      mat3 g_rot;
 
-      float df(vec3 p) {
-        p *= g_rot;
-        float gd1;
-        float d1 = dfeffect(p, gd1);
+      float df(vec3 p, out float ogd) {
+        float ogd0;
+        float d0 = df0(p, ogd0);
+        float ogd1;
+        float d1 = df1(p, ogd1);
+        ogd = ogd1;
+        float ogd2;
+        float d2 = df2(p, ogd2);
 
-      #if defined(FADER)
-        float gd0;
-        float d0 = dfbase(p, gd0);
+        float dfrom;
+        float dto;
+        float ogdfrom;
+        float ogdto;
 
-        float m = fader;
-        float d = mix(d1, d0, m);
-        float gd = mix(gd1, gd0, m);
-      #else
-        float d = d1;
-        float gd = gd1;
-      #endif
-        g_gd = min(g_gd, gd);
+        int from = g_from;
+        int to   = g_to;
 
-        return d;
+        float anim = g_anim;
+
+        if (from == 0) {
+          dfrom = d0;
+          ogdfrom = ogd0;
+        } else if (from == 1) {
+          dfrom = d1;
+          ogdfrom = ogd1;
+        } else {
+          dfrom = d2;
+          ogdfrom = ogd2;
+        }
+
+        if (to == 0) {
+          dto = d0;
+          ogdto = ogd0;
+        } else if (to == 1) {
+          dto = d1;
+          ogdto = ogd1;
+        } else {
+          dto = d2;
+          ogdto = ogd2;
+        }
+
+        ogd = mix(ogdfrom, ogdto, g_anim);
+        return mix(dfrom, dto, g_anim);
       }
 
+      float df(vec3 p) {
+        float ogd;
+        p *= g_rot;
+        float d = df(p, ogd);
+        g_gd = min(g_gd, ogd);
+        return d;
 
+      }
       vec3 normal(vec3 pos) {
         vec2  eps = vec2(NORM_OFF,0.0);
         vec3 nor;
@@ -1444,10 +1349,16 @@
 
 
       vec3 effect(vec2 p, vec2 pp) {
-        float funkyBeat =funkyBeat(TIME);
+        int from;
+        int to;
+        float anim;
+        float funkyBeat =funkyBeat(TIME, from, to, anim);
         g_funkyBeat0 = max(0.0, funkyBeat);
         g_funkyBeat1 = max(0.0, -funkyBeat);
-        float tm  = 0.5*TIME+10.0;
+        g_from = from;
+        g_to   = to;
+        g_anim = anim;
+        float tm  = TIME+10.0;
         g_rot = rotX(0.333*tm)*rotZ(0.5*tm)*rotY(0.23*tm);
 
         vec3 ro = 1.75*vec3(5.0, 1., 0.);
@@ -1464,6 +1375,10 @@
         vec3 col = render1(ro, rd, p);
 
         col -= 0.05*length(pp);
+
+        float gd = abs(p.y)+0.25*p.x*p.x;
+        col += smoothstep(btime_fi, btime3, TIME)*glowCol2/gd;
+        col *= smoothstep(btime9, btime_fo, TIME);
         col = aces_approx(col);
 
         col = max(col,0.0);
@@ -2630,32 +2545,13 @@
           ],
           uniforms: ["almost_mono", "red_sector", "texts"],
         },
-        beatbox_scene_0 : {
+        beatbox_scene : {
           passes:[
             {
               vs: "vs_default"  ,
               fs: "fs_beatbox"  ,
             }
           ],
-          defines:["DF0"]
-        },
-        beatbox_scene_1 : {
-          passes:[
-            {
-              vs: "vs_default"  ,
-              fs: "fs_beatbox"  ,
-            }
-          ],
-          defines:["DF4"]
-        },
-        beatbox_scene_2 : {
-          passes:[
-            {
-              vs: "vs_default"  ,
-              fs: "fs_beatbox"  ,
-            }
-          ],
-          defines:["DF6"]
         },
         dawn_scene : {
           passes:[
@@ -2718,15 +2614,7 @@
         },
         {
           begin       :  3                                ,
-          scene       :  all_scenes.beatbox_scene_0       ,
-        },
-        {
-          begin       :  5                                ,
-          scene       :  all_scenes.beatbox_scene_1       ,
-        },
-        {
-          begin       :  7                                ,
-          scene       :  all_scenes.beatbox_scene_2       ,
+          scene       :  all_scenes.beatbox_scene         ,
         },
         {
           begin       :  9                                ,
