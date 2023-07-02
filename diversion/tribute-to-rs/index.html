@@ -1536,6 +1536,7 @@
 
       const float btime9 = BTIME(9.0);
       const float btime11 = BTIME(11.0);
+      const float btime_fo = BTIME(13.0-0.125);
       const float btime13 = BTIME(13.0);
 
       const vec2 impulse_sca0 = SCA(0.0);
@@ -2037,6 +2038,7 @@
         col = impulseCol(col, p);
         col *= smoothstep(btime9, btime9+1.0, TIME);
         col = aces_approx(col);
+        col += smoothstep(btime_fo, btime13, TIME);
         col = sRGB(col);
         return col;
       }
@@ -2050,6 +2052,7 @@
 
         frag_color = vec4(col,1.0);
       }
+
     </script>
 
 
@@ -2157,11 +2160,11 @@
         col *= 0.25;
         vec2 p1 = p;
         col = imageCol(col, p1);
-        col *= smoothstep(btime13, btime_fi, TIME);
 
         float tm = TIME-btime_fo+p.y-0.5;
         tm *= 4.0;
-        p.x += 0.1*exp(-tm*tm);
+        float np = mod(floor(p.y/0.01), 2.0)-0.5;
+        p.x += 0.25*sign(np)*exp(-tm*tm);
         vec2 p2 = p;
         p2 -= vec2(-0.5, 0.);
         float t2 = romeoT(p2, mix(0.05, 0.33, fi0));
@@ -2170,6 +2173,7 @@
         float t3 = knightT(p3, mix(0.05, 0.33, fi1));
         col = mix(col, mix(col, vec3(1.0, 0.0, 0.), fi0), t2);
         col = mix(col, mix(col, vec3(1.0, 1.0, 1.0), fi1), t3);
+        col += smoothstep(btime_fi, btime13, TIME);
 
         col = sqrt(col);
         return col;
