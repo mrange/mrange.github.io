@@ -340,8 +340,8 @@ void main(void) {
       this.pong_texture         = this.create_blank_texture(this.Width, this.Height);
 
       if (this.analyze_audio) {
-        this.texture_frequency_data   = this.create_bins_texture(this.time_domain_data);
-        this.texture_time_domain_data = this.create_bins_texture(this.frequency_data);
+        this.texture_time_domain_data = this.create_bins_texture(this.time_domain_data);
+        this.texture_frequency_data   = this.create_bins_texture(this.frequency_data);
       }
 
       this.init_buffers();
@@ -459,11 +459,11 @@ void main(void) {
     if (!this.playing) return;
 
     if (this.analyze_audio) {
-      this.audio_analyzer.getByteFrequencyData(this.frequency_data);
       this.audio_analyzer.getByteTimeDomainData(this.time_domain_data);
+      this.audio_analyzer.getByteFrequencyData(this.frequency_data);
 
-      this.render_bins_texture(this.texture_frequency_data  , this.frequency_data);
       this.render_bins_texture(this.texture_time_domain_data, this.time_domain_data);
+      this.render_bins_texture(this.texture_frequency_data  , this.frequency_data);
     }
 
     const before = this.now();
