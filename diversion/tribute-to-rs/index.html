@@ -2619,8 +2619,8 @@
       #define SHAPE0 Lantern
       #define SHAPE1 Lantern
       #else
-      #define SHAPE0 Lantern
-      #define SHAPE1 Lantern
+      #define SHAPE0 FlatFish
+      #define SHAPE1 FlatFish
       #endif
 
 
@@ -2683,43 +2683,49 @@
           ));
       }
 
+      const int[] indexIdMap = int[](
+          0
+        , 1
+        , 2
+        , 2
+        , 1
+        , 3
+        );
 
-      const vec2[6] duv0 = vec2[](
+      const vec2[4] duv0 = vec2[](
           vec2(0.0, 0.0)
         , dux
         , duy
-        , duy
-        , dux
         , du
         );
 
-      const vec2[6] duv1 = vec2[](
-          duv0[1]   - duv0[0]
-        , duv0[2]   - duv0[1]
-        , duv0[0]   - duv0[2]
-        , duv0[4]   - duv0[3]
-        , duv0[5]   - duv0[4]
-        , duv0[3]   - duv0[5]
+      const vec2[4] duv1 = vec2[](
+          duv0[1] - duv0[0]
+        , duv0[2] - duv0[1]
+        , duv0[0] - duv0[2]
+        , duv0[2] - duv0[3]
         );
 
-      const vec2[6] duv2 = vec2[](
-          duv0[2]   - duv0[0]
-        , duv0[0]   - duv0[1]
-        , duv0[1]   - duv0[2]
-        , duv0[5]   - duv0[3]
-        , duv0[3]   - duv0[4]
-        , duv0[4]   - duv0[5]
+      const vec2[4] duv2 = vec2[](
+          duv0[2] - duv0[0]
+        , duv0[0] - duv0[1]
+        , duv0[1] - duv0[2]
+        , duv0[1] - duv0[3]
         );
-
 
       void main() {
 
         float i   = float(gl_InstanceID);
-        int   vid = gl_VertexID;
+
+      #if defined(INDEXED_DRAW)
+        int idxId = gl_VertexID;
+      #else
+        int idxId = indexIdMap[gl_VertexID];
+      #endif
         vec2 uv   = uv(i);
-        vec2 duv0 = duv0[vid];
-        vec2 duv1 = duv1[vid];
-        vec2 duv2 = duv2[vid];
+        vec2 duv0 = duv0[idxId];
+        vec2 duv1 = duv1[idxId];
+        vec2 duv2 = duv2[idxId];
 
         const float btime19 = BTIME(19.0);
         const float btime23 = BTIME(23.0);
@@ -2929,6 +2935,26 @@
         float tp = tp1;
         tp = max(tp0,tp1);
         if (tp > 0.0) {
+          vec3 pos  = ro + tp*rd;
+          const float fz = 0.25;
+          const float bz = 1.0/fz;
+          vec2 p2 = pos.xz;
+          p2.y += -4.0*TIME;
+          vec2 bpos = p2/bz;
+          float db = blobs(bpos)*bz;
+          db = abs(db);
+          vec2 pp = p2*fz;
+          float m = 0.5+0.25*(sin(3.0*pp.x+TIME*2.1)+sin(3.3*pp.y+TIME*2.0));
+          m *= m;
+          m *= m;
+          pp = fract(pp+0.5)-0.5;
+          float dp = pmin(abs(pp.x), abs(pp.y), 0.125);
+          dp = min(dp, db);
+          vec3 hsv = vec3(0.4+mix(0.15,0.0, m), tanh_approx(mix(50.0, 10.0, m)*dp), 1.0);
+          vec3 pcol = 1.5*hsv2rgb(hsv)*exp(-mix(30.0, 10.0, m)*dp);
+
+          float f = 1.0-tanh_approx(0.1*length(pos.xz));
+          col = mix(col, pcol , f);
         }
 
 
@@ -3239,6 +3265,39 @@
         },
       }
 
+      function create_magic_scene(def) {
+        return {
+          passes:[
+            {
+              vs: "vs_magic"                ,
+              fs: "fs_magic"                ,
+              requires_clear: true          ,
+              instances: 16384              ,
+              pre_render: (gl, time, scene, pass) => {
+                gl.enable(gl.CULL_FACE);
+                gl.cullFace(gl.BACK);
+
+                gl.enable(gl.DEPTH_TEST);
+                gl.depthFunc(gl.LESS);
+
+                gl.uniformMatrix4fv(pass.uniformLocations.proj, false, projection_magic);
+                gl.uniformMatrix4fv(pass.uniformLocations.view, false, view_magic);
+              },
+            },
+            {
+              vs: "vs_default"    ,
+              fs: "fs_magic_sky"  ,
+              pre_render: (gl, time, scene, pass) => {
+                gl.disable(gl.CULL_FACE);
+                gl.disable(gl.DEPTH_TEST);
+              },
+            }
+          ],
+          uniforms: ["proj", "view"],
+          defines: ["INDEXED_DRAW", def],
+        };
+      }
+
       const all_scenes = {
         red_scene : {
           passes:[
@@ -3341,35 +3400,10 @@
             }
           ],
         },
-        magic_scene : {
-          passes:[
-            {
-              vs: "vs_magic"                ,
-              fs: "fs_magic"                ,
-              requires_clear: true          ,
-              instances: 16384              ,
-              pre_render: (gl, time, scene, pass) => {
-                gl.enable(gl.CULL_FACE);
-                gl.cullFace(gl.FRONT);
-
-                gl.enable(gl.DEPTH_TEST);
-                gl.depthFunc(gl.LESS);
-
-                gl.uniformMatrix4fv(pass.uniformLocations.proj, false, projection_magic);
-                gl.uniformMatrix4fv(pass.uniformLocations.view, false, view_magic);
-              },
-            },
-            {
-              vs: "vs_default"    ,
-              fs: "fs_magic_sky"  ,
-              pre_render: (gl, time, scene, pass) => {
-                gl.disable(gl.CULL_FACE);
-                gl.disable(gl.DEPTH_TEST);
-              },
-            }
-          ],
-          uniforms: ["proj", "view"],
-        },
+        magic19_scene: create_magic_scene("SEGMENT19"),
+        magic20_scene: create_magic_scene("SEGMENT20"),
+        magic21_scene: create_magic_scene("SEGMENT21"),
+        magic22_scene: create_magic_scene("SEGMENT22"),
       };
 
       const bstart  = 25.61;
@@ -3404,10 +3438,22 @@
         },
         {
           begin       :  19                               ,
-          scene       :  all_scenes.magic_scene           ,
+          scene       :  all_scenes.magic19_scene         ,
         },
         {
-          begin       :  40                               ,
+          begin       :  20                               ,
+          scene       :  all_scenes.magic20_scene         ,
+        },
+        {
+          begin       :  21                               ,
+          scene       :  all_scenes.magic21_scene         ,
+        },
+        {
+          begin       :  22                               ,
+          scene       :  all_scenes.magic22_scene         ,
+        },
+        {
+          begin       :  23                               ,
           scene       :  all_scenes.red_scene             ,
         },
       ];
