@@ -6,13 +6,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="princess_14_2.png">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-    <Content Include="princess_14.Png">
+    <Content Include="princess_15.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Compile Include="Program.fs" />
+    <Compile Include="Program.fs">
+      <CopyToOutputDirectory>Never</CopyToOutputDirectory>
+    </Compile>
   </ItemGroup>
 
   <ItemGroup />

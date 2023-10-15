@@ -10,7 +10,7 @@ let main argv =
 
     use img = Image.Load "princess_orig.png"
 
-    let quantizerOptions = QuantizerOptions (MaxColors = 14)
+    let quantizerOptions = QuantizerOptions (MaxColors = 15)
     let quantizer = WuQuantizer quantizerOptions
 
     let quantize (x : IImageProcessingContext) = 
@@ -20,7 +20,7 @@ let main argv =
       ()
     img.Mutate quantize
 
-    img.Save ("colors14.png")
+    img.Save ("colors15.png")
 
     0
   with
