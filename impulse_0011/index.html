@@ -143,6 +143,7 @@
       #define EFFECT2     3
       #define EFFECT3     4
       #define EFFECT4     5
+      #define EFFECT5     6
 
       #define FLASH       1
 
@@ -158,8 +159,8 @@
         , SCRIPT(EFFECT4, FREQ1   , FLASH)
         , SCRIPT(EFFECT1, FREQ1   , FLASH)
         , SCRIPT(EFFECT1, FREQ1   , FLASH)
-        , SCRIPT(EFFECT4, FREQ2   , FLASH)
-        , SCRIPT(EFFECT4, FREQ2   , FLASH)
+        , SCRIPT(EFFECT5, FREQ2   , FLASH)
+        , SCRIPT(EFFECT5, FREQ2   , FLASH)
         , SCRIPT(EFFECT0, COMPUTER, FLASH)
         , SCRIPT(EFFECT0, COMPUTER, FLASH)
         , SCRIPT(EFFECT4, COMPUTER, FLASH)
@@ -872,6 +873,102 @@
         return d;
       }
 
+      const float
+        pi    = acos(-1.)
+      , tau   = pi*2.
+      , phi   = (1.+sqrt(5.))*0.5
+      , phi2  = phi*phi
+      , phi4  = phi2*phi2
+      , iphi4 = 1./phi4
+      ;
+
+      float superCircle4(vec2 p, float r) {
+        p *= p;
+        return pow(dot(p,p), 1./4.)-r;
+      }
+
+      float superCircle8(vec2 p, float r) {
+        p *= p;
+        p *= p;
+        return pow(dot(p,p), 1./8.)-r;
+      }
+
+      float geometric(float a, float r) {
+        return a/(1.-r);
+      }
+
+      float igeometric(float a, float r, float x) {
+        return log2(1.-x*(1.-r)/a)/log2(r);
+      }
+
+      vec2 geometric2(float a, float r, float n) {
+        float rn = pow(r, n);
+        float rn1 = rn*r;
+        return (a/(1.-r))*(1.-vec2(rn, rn1));
+      }
+
+      vec4 boxySpiralCoord(vec2 p, float z) {
+        float px = p.x;
+        float ax = abs(px);
+        float sx = sign(px);
+        float a = px > 0. ? phi2 : 1.;
+        a *= z;
+        float gdx     = geometric(a, iphi4);
+        ax            -= gdx;
+        float x       = igeometric(a, iphi4, -ax);
+        float nx      = floor(x);
+        vec2  lx      = geometric2(a, iphi4, nx)-gdx;
+        float minx    = lx.x;
+        float maxx    = lx.y;
+        float radiusx = (maxx-minx)*0.5;
+        float meanx   = minx+radiusx;
+
+        p -= vec2(-1.,1./3.)*meanx*sx;
+        return vec4(p, radiusx, 2.*nx+(sx>0.?0.:1.));
+      }
+
+      float dfeffect5(vec2 p, vec2 pp) {
+        float ppf = 0.4*dot(pp, pp);
+        p /= 1.+ppf;
+        float tm = 0.5*g_btime;
+        float pft = fract(tm);
+        float nft = floor(tm);
+        float piz = exp2(log2(phi4)*pft);
+        mat2 rot0 = ROT(-tm-ppf*(g_ftime*g_ftime*g_ftime));
+        p *= rot0;
+        vec4 gcx = boxySpiralCoord(p, piz);
+        vec4 gcy = boxySpiralCoord(vec2(p.y,-p.x), phi*piz);
+
+        vec2 l = vec2(1.,0.)+2.*vec2(1.+gcx.w, gcy.w);
+
+        vec2 n = l+4.*nft;
+        vec2 a = -0.634*n+tm;
+        vec2 na = floor(a);
+        vec2 fa = fract(a);
+        vec2 gc = vec2(gcx.z, gcy.z);
+
+        const float msz = 0.99;
+        vec2 br0 = gc*msz*fa;
+        vec2 lw = 0.5*(1.0-fa);
+        vec2 br1 = gc*(msz-lw);
+        vec2 ol1 = lw*gc;
+
+        vec2 dbb = vec2(
+            superCircle4(gcx.xy, 0.)
+          , superCircle4(gcy.xy, 0.)
+          );
+
+        vec2 db0 = dbb-br0;
+        vec2 db1 = abs(dbb-br1)-ol1;
+
+
+        vec2 db = mix(db0, db1, mod(na, vec2(2.0)));
+
+      /*
+      */
+        float d = min(db.x, db.y);
+        return d;
+      }
 
       float df(vec2 p, vec2 pp) {
         switch(g_state.x) {
@@ -885,6 +982,8 @@
           return dfeffect3(p, p);
         case EFFECT4:
           return dfeffect4(p, p);
+        case EFFECT5:
+          return dfeffect5(p, p);
         default:
           return 1E3;
         }
@@ -981,12 +1080,13 @@
       const max_time_slots  = 400;
       const time_slots      = new Array(max_time_slots);
 
-      const EFFECT_NONE      = 0;
-      const EFFECT_BLOBS     = 1;
-      const EFFECT_MANDEL    = 2;
-      const EFFECT_APOLLO    = 3;
-      const EFFECT_DIGITS    = 4;
-      const EFFECT_CIRCLES   = 5;
+      const EFFECT_NONE     = 0;
+      const EFFECT_BLOBS    = 1;
+      const EFFECT_MANDEL   = 2;
+      const EFFECT_APOLLO   = 3;
+      const EFFECT_DIGITS   = 4;
+      const EFFECT_CIRCLES  = 5;
+      const EFFECT_BOXES    = 6;
 
       const OVERLAY_NONE     = 0;
       const OVERLAY_COMPUTER = 1;
@@ -1015,8 +1115,8 @@
         glow_fields_slot( 16, EFFECT_CIRCLES, OVERLAY_VUMETER1, FLASH_ON  ),
         glow_fields_slot( 24, EFFECT_MANDEL , OVERLAY_VUMETER1, FLASH_ON  ),
         glow_fields_slot( 32, EFFECT_MANDEL , OVERLAY_VUMETER1, FLASH_ON  ),
-        glow_fields_slot( 40, EFFECT_CIRCLES, OVERLAY_VUMETER2, FLASH_ON  ),
-        glow_fields_slot( 48, EFFECT_CIRCLES, OVERLAY_VUMETER2, FLASH_ON  ),
+        glow_fields_slot( 40, EFFECT_BOXES  , OVERLAY_VUMETER2, FLASH_ON  ),
+        glow_fields_slot( 48, EFFECT_BOXES  , OVERLAY_VUMETER2, FLASH_ON  ),
         glow_fields_slot( 56, EFFECT_BLOBS  , OVERLAY_COMPUTER, FLASH_ON  ),
         glow_fields_slot( 64, EFFECT_BLOBS  , OVERLAY_COMPUTER, FLASH_ON  ),
         glow_fields_slot( 72, EFFECT_CIRCLES, OVERLAY_COMPUTER, FLASH_ON  ),
