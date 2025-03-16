@@ -135,7 +135,6 @@ class DemoSystemV1 {
       this.initialized = true;
 
       on_init_complete();
-      // requestAnimationFrame(this.on_requestAnimationFrame);
     } else {
       console.log("Failed to initialize. Maybe webgl 2 is not supported on your browser");
     }
@@ -271,7 +270,7 @@ class DemoSystemV1 {
     const before = this.now();
     const time  = (before - this.start_time) / 1000.0;
 
-    const scene = on_select_scene(this.gl, time);
+    const [scene, payload] = on_select_scene(this.gl, time);
 
     const bcr    = this.canvas.getBoundingClientRect();
     const width  = bcr.width;
@@ -300,7 +299,11 @@ class DemoSystemV1 {
       this.gl.uniform1i(scene.uniformLocations.time_domain_data, 1);
     }
 
-    on_set_uniforms(this.gl, time, scene);
+    if (scene.set_uniforms) {
+      scene.set_uniforms(gl, time, scene);
+    }
+
+    on_render_scene(this.gl, time, scene, payload);
 
     this.gl.bindBuffer(this.gl.ELEMENT_ARRAY_BUFFER, this.verticesIndexBuffer);
     this.gl.drawElements(this.gl.TRIANGLES, 6, this.gl.UNSIGNED_SHORT, 0);
