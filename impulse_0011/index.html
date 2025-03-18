@@ -1464,9 +1464,6 @@
         }
 
         col = aces_approx(col);
-        // HARDCODED TIMING - LOVE EM!
-        float ca = step(g_ntime, 117.)+step(120.,g_ntime);
-        col *= ca;
         col = sqrt(col);
         return col;
       }
@@ -1955,7 +1952,7 @@
 
       const vec2
         path_a = vec2(.33, .41)*0.5
-      , path_b = vec2(1.0,sqrt(0.5))*2.;
+      , path_b = vec2(1.0,sqrt(0.5))*2.
       ;
 
       vec3 offset(float z) {
@@ -2193,6 +2190,11 @@
           fs: "fs-glow-fields",
           uniforms: ["g_state"],
         },
+        travel : {
+          vs: "vs-default"  ,
+          fs: "fs-travel",
+          uniforms: ["g_state"],
+        },
       };
 
       const bpm   = 60.0;
@@ -2229,6 +2231,14 @@
         };
       }
 
+      function travel_slot(begin, overlay) {
+        return         {
+          begin   : begin                   ,
+          scene   : all_scenes.travel  ,
+          g_state : [0, overlay, 0],
+        };
+      }
+
       const script = [
         /*{
           begin       : 0                                 ,
@@ -2239,31 +2249,21 @@
         glow_fields_slot(  8, EFFECT_BLOBS  , OVERLAY_VUMETER1, FLASH_ON  ),
         glow_fields_slot( 16, EFFECT_CIRCLES, OVERLAY_VUMETER1, FLASH_ON  ),
         glow_fields_slot( 24, EFFECT_MANDEL , OVERLAY_VUMETER1, FLASH_ON  ),
-        glow_fields_slot( 32, EFFECT_MANDEL , OVERLAY_VUMETER1, FLASH_ON  ),
         glow_fields_slot( 40, EFFECT_BOXES  , OVERLAY_VUMETER2, FLASH_ON  ),
-        glow_fields_slot( 48, EFFECT_BOXES  , OVERLAY_VUMETER2, FLASH_ON  ),
         glow_fields_slot( 56, EFFECT_BLOBS  , OVERLAY_COMPUTER, FLASH_ON  ),
-        glow_fields_slot( 64, EFFECT_BLOBS  , OVERLAY_COMPUTER, FLASH_ON  ),
         glow_fields_slot( 72, EFFECT_CIRCLES, OVERLAY_COMPUTER, FLASH_ON  ),
-        glow_fields_slot( 80, EFFECT_CIRCLES, OVERLAY_COMPUTER, FLASH_ON  ),
         glow_fields_slot( 88, EFFECT_MANDEL , OVERLAY_VUMETER1, FLASH_ON  ),
-        glow_fields_slot( 96, EFFECT_MANDEL , OVERLAY_VUMETER1, FLASH_ON  ),
         glow_fields_slot(104, EFFECT_CIRCLES, OVERLAY_VUMETER2, FLASH_ON  ),
         glow_fields_slot(112, EFFECT_DIGITS , OVERLAY_VUMETER2, FLASH_ON  ),
+        glow_fields_slot(118, EFFECT_NONE   , OVERLAY_NONE    , FLASH_OFF ),
         glow_fields_slot(120, EFFECT_APOLLO , OVERLAY_VUMETER2, FLASH_ON  ),
-        glow_fields_slot(128, EFFECT_APOLLO , OVERLAY_VUMETER2, FLASH_ON  ),
         glow_fields_slot(136, EFFECT_MANDEL , OVERLAY_VUMETER2, FLASH_ON  ),
-        glow_fields_slot(144, EFFECT_MANDEL , OVERLAY_VUMETER2, FLASH_ON  ),
         glow_fields_slot(152, EFFECT_CIRCLES, OVERLAY_VUMETER1, FLASH_ON  ),
         glow_fields_slot(160, EFFECT_BLOBS  , OVERLAY_VUMETER1, FLASH_ON  ),
-        glow_fields_slot(168, EFFECT_DIGITS , OVERLAY_COMPUTER, FLASH_ON  ),
-        glow_fields_slot(176, EFFECT_DIGITS , OVERLAY_COMPUTER, FLASH_ON  ),
+        travel_slot     (172, OVERLAY_COMPUTER),
         glow_fields_slot(184, EFFECT_APOLLO , OVERLAY_VUMETER2, FLASH_ON  ),
-        glow_fields_slot(192, EFFECT_APOLLO , OVERLAY_VUMETER2, FLASH_ON  ),
         glow_fields_slot(200, EFFECT_MANDEL , OVERLAY_VUMETER2, FLASH_ON  ),
-        glow_fields_slot(208, EFFECT_MANDEL , OVERLAY_VUMETER2, FLASH_ON  ),
         glow_fields_slot(216, EFFECT_NONE   , OVERLAY_COMPUTER, FLASH_OFF ),
-        glow_fields_slot(224, EFFECT_NONE   , OVERLAY_COMPUTER, FLASH_OFF ),
       ];
 
 
