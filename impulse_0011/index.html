@@ -86,6 +86,49 @@
       }
     </script>
 
+    <script id="fs-gaussian-blur-scene" type="x-shader/x-fragment">
+      // -----------------------------------------------------------------------------
+      // PRELUDE - BEGIN
+      // -----------------------------------------------------------------------------
+      precision highp float;
+      #define RESOLUTION  resolution
+      uniform vec2      resolution        ;
+
+      //#define DEMO_MODE
+
+      #ifdef DEMO_MODE
+      uniform vec2 stp;
+      #else
+      const vec2 stp = vec2(1.0, 0.);
+      #endif
+
+      in vec2 v_texcoord  ;
+      out vec4 frag_color ;
+
+      uniform sampler2D logos  ;
+
+
+      void main() {
+        vec2 q = v_texcoord;
+        float tsz = 1./RESOLUTION.y;
+        float a = exp(-3.);
+
+        vec3 col = texture(logos, q).xyz;
+        float agg = 1.;
+        for (float  i = 1.; i < 20.; ++i) {
+          float off = tsz*i;
+          float mul = exp(-a*i*i);
+          col += mul*texture(logos, q - stp*off).xyz;
+          col += mul*texture(logos, q + stp*off).xyz;
+          agg += 2.*mul;
+        }
+
+        col /= agg;
+
+        frag_color = vec4(col, 1.0);
+      }
+    </script>
+
     <script id="fs-glow-fields" type="x-shader/x-fragment">
       // -----------------------------------------------------------------------------
       // PRELUDE - BEGIN
@@ -2388,12 +2431,20 @@
         }];
       }
 
-      const all_textures = {};
+      const all_textures = {
+        dlogos : {
+          image : () => document.getElementById("dlogos"),
+        },
+      };
 
       const all_scenes = {
         red_scene : {
           vs: "vs-default"  ,
           fs: "fs-red-scene",
+        },
+        gaussian_blur_scene : {
+          vs: "vs-default"  ,
+          fs: "fs-gaussian-blur-scene",
         },
         glow_fields : {
           vs: "vs-default"  ,
@@ -2479,8 +2530,8 @@
         glow_fields_slot(104, EFFECT_CIRCLES, OVERLAY_VUMETER2, FLASH_ON  ),
         glow_fields_slot(112, EFFECT_DIGITS , OVERLAY_VUMETER2, FLASH_ON  ),
         glow_fields_slot(118, EFFECT_NONE   , OVERLAY_NONE    , FLASH_OFF ),
-        fractal_slot    (120, OVERLAY_VUMETER2),
-//        glow_fields_slot(120, EFFECT_APOLLO , OVERLAY_VUMETER2, FLASH_ON  ),
+//        fractal_slot    (120, OVERLAY_VUMETER2),
+        glow_fields_slot(120, EFFECT_APOLLO , OVERLAY_VUMETER2, FLASH_ON  ),
         glow_fields_slot(136, EFFECT_MANDEL , OVERLAY_VUMETER2, FLASH_ON  ),
         glow_fields_slot(152, EFFECT_CIRCLES, OVERLAY_VUMETER1, FLASH_ON  ),
         glow_fields_slot(160, EFFECT_BLOBS  , OVERLAY_VUMETER1, FLASH_ON  ),
@@ -2574,4 +2625,5 @@
       </div>
     </div>
     <canvas id="offscreen-canvas" width="512" height="512" style="display: none"></canvas>
+    <img id="dlogos"    src="dlogos.png"    style="display: none"/>
 </html>
