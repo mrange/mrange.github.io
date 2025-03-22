@@ -30,7 +30,7 @@ function smoothstep(edge0, edge1, x) {
   return t * t * (3.0 - 2.0 * t);
 }
 
-function createTextImage(...texts) {
+function create_text_image(...texts) {
   const image = document.getElementById("offscreen-canvas");
   const ctx   = image.getContext("2d");
 
@@ -46,6 +46,21 @@ function createTextImage(...texts) {
   ctx.restore();
 
   return image;
+}
+
+function read_shader_script(prelude, shader_script) {
+  let theSource = prelude;
+  let currentChild = shader_script.firstChild;
+
+  while(currentChild) {
+    if (currentChild.nodeType == 3) {
+      theSource += currentChild.textContent;
+    }
+
+    currentChild = currentChild.nextSibling;
+  }
+
+  return theSource;
 }
 
 
@@ -347,9 +362,28 @@ class DemoSystemV1 {
         : ""
         ;
       const prelude = "#version 300 es\n" + defines;
+      let vs_prelude = prelude;
+      if (preludes.vs) {
+        const shaderScript = document.getElementById(preludes.vs);
+        if (!shaderScript) {
+          console.log("Couldn't find the vertex shader prelude:" + preludes.vs);
+        } else {
+          vs_prelude = read_shader_script(prelude, shaderScript);
+        }
+      }
 
-      const vertexShader    = this.get_shader(prelude, scene.vs);
-      const fragmentShader  = this.get_shader(prelude, scene.fs);
+      let fs_prelude = prelude;
+      if (preludes.fs) {
+        const shaderScript = document.getElementById(preludes.fs);
+        if (!shaderScript) {
+          console.log("Couldn't find the fragment shader prelude:" + preludes.fs);
+        } else {
+          fs_prelude = read_shader_script(prelude, shaderScript);
+        }
+      }
+
+      const vertexShader    = this.get_shader(vs_prelude, scene.vs);
+      const fragmentShader  = this.get_shader(fs_prelude, scene.fs);
 
       scene.shaderProgram = this.gl.createProgram();
       this.gl.attachShader(scene.shaderProgram, vertexShader);
@@ -383,22 +417,13 @@ class DemoSystemV1 {
     const shaderScript = document.getElementById(id);
 
     if (!shaderScript) {
-      console.log("Didn't find the shader script:" + id);
+      console.log("Couldn't find the shader script:" + id);
       return null;
     }
 
-    var theSource    = prelude;
-    var currentChild = shaderScript.firstChild;
+    let theSource = read_shader_script(prelude, shaderScript);
 
-    while(currentChild) {
-      if (currentChild.nodeType == 3) {
-        theSource += currentChild.textContent;
-      }
-
-      currentChild = currentChild.nextSibling;
-    }
-
-    var shader;
+    let shader    = undefined;
 
     if (shaderScript.type == "x-shader/x-fragment") {
       shader = this.gl.createShader(this.gl.FRAGMENT_SHADER);

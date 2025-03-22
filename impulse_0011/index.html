@@ -73,63 +73,7 @@
       }
     </script>
 
-    <script id="fs-red-scene" type="x-shader/x-fragment">
-      precision highp float;
-
-      in vec2 v_texcoord  ;
-      out vec4 frag_color ;
-
-      void main(void) {
-        vec3 col = vec3(0.0, 0.0, 0.0);
-
-        frag_color = vec4(col, 1.0);
-      }
-    </script>
-
-    <script id="fs-gaussian-blur-scene" type="x-shader/x-fragment">
-      // -----------------------------------------------------------------------------
-      // PRELUDE - BEGIN
-      // -----------------------------------------------------------------------------
-      precision highp float;
-      #define RESOLUTION  resolution
-      uniform vec2      resolution        ;
-
-      //#define DEMO_MODE
-
-      #ifdef DEMO_MODE
-      uniform vec2 stp;
-      #else
-      const vec2 stp = vec2(1.0, 0.);
-      #endif
-
-      in vec2 v_texcoord  ;
-      out vec4 frag_color ;
-
-      uniform sampler2D logos  ;
-
-
-      void main() {
-        vec2 q = v_texcoord;
-        float tsz = 1./RESOLUTION.y;
-        float a = exp(-3.);
-
-        vec3 col = texture(logos, q).xyz;
-        float agg = 1.;
-        for (float  i = 1.; i < 20.; ++i) {
-          float off = tsz*i;
-          float mul = exp(-a*i*i);
-          col += mul*texture(logos, q - stp*off).xyz;
-          col += mul*texture(logos, q + stp*off).xyz;
-          agg += 2.*mul;
-        }
-
-        col /= agg;
-
-        frag_color = vec4(col, 1.0);
-      }
-    </script>
-
-    <script id="fs-glow-fields" type="x-shader/x-fragment">
+    <script id="fs-shader-prelude" type="x-shader/x-fragment">
       // -----------------------------------------------------------------------------
       // PRELUDE - BEGIN
       // -----------------------------------------------------------------------------
@@ -142,6 +86,7 @@
       uniform vec2      resolution        ;
       uniform sampler2D frequency_data    ;
       uniform sampler2D time_domain_data  ;
+      uniform sampler2D logos             ;
 
       in vec2 v_texcoord  ;
       out vec4 frag_color ;
@@ -149,7 +94,7 @@
       #ifdef DEMO_MODE
       uniform ivec3 g_state;
       #else
-      ivec3 g_state;
+      ivec3 g_state = ivec3(0,0,0);
       #endif
 
       float g_ntime;
@@ -165,8 +110,9 @@
       #define BPM         60.
 
       #define COMPUTER    1
-      #define FREQ1       2
-      #define FREQ2       3
+      #define VUMETER1    2
+      #define VUMETER2    3
+      #define MRANGE      4
 
       #define FLASH       1
 
@@ -185,17 +131,6 @@
       // License: WTFPL, author: sam hocevar, found: https://stackoverflow.com/a/17897228/418488
       //  Macro version of above to enable compile-time constants
       #define HSV2RGB(c)  (c.z * mix(hsv2rgb_K.xxx, clamp(abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www) - hsv2rgb_K.xxx, 0.0, 1.0), c.y))
-
-      const vec3 lightDir0    = normalize(vec3(-1.,-1., 0.));
-      const vec3 lightCol0    = HSV2RGB(vec3(0.6, .2, 1E-2));
-      const vec3 lightDir1    = normalize(vec3(1.,1., -1.));
-      const vec3 lightCol1    = HSV2RGB(vec3(0.6, 0.2, 2E-3));
-      const vec3 bottomBoxCol = HSV2RGB(vec3(0.7, 0.5, 0.25));
-      const vec3 topBoxCol    = HSV2RGB(vec3(0.6, 0.2, 0.95));
-      const vec3 sbase        = HSV2RGB(vec3(0.0, 0.9, 1.));
-      const vec3 seye         = HSV2RGB(vec3(0.03, 0.75, 16.));
-      const vec3 sbase4       = HSV2RGB(vec3(0.6, 0.6, 1.));
-      const vec3 glowCol      = HSV2RGB(vec3(0.0, 0.9, 1E-3));
 
 
       // License: MIT OR CC-BY-NC-4.0, author: mercury, found: https://mercury.sexy/hg_sdf/
@@ -437,10 +372,17 @@
       }
 
       vec3 render0(vec3 ro, vec3 rd) {
-        vec3 col = vec3(0.0);
+        const vec3 lightDir0    = normalize(vec3(-1.,-1., 0.));
+        const vec3 lightCol0    = HSV2RGB(vec3(0.6, .2, 1E-2));
+        const vec3 lightDir1    = normalize(vec3(1.,1., -1.));
+        const vec3 lightCol1    = HSV2RGB(vec3(0.6, 0.2, 2E-3));
+        const vec3 bottomBoxCol = HSV2RGB(vec3(0.7, 0.5, 0.25));
+        const vec3 topBoxCol    = HSV2RGB(vec3(0.6, 0.2, 0.95));
 
         const vec4 pp0 = vec4(normalize(vec3(0.0, -1.0, 0.0)), -5.0);
         const vec4 pp1 = vec4(normalize(vec3(-2., 2.0, 1.0)), -6.);
+        vec3 col = vec3(0.0);
+
         float tp0  = rayPlane(ro, rd, pp0);
         float tp1  = rayPlane(ro, rd, pp1);
 
@@ -468,6 +410,12 @@
       }
 
       vec3 thecomputer(vec3 col, vec2 p, vec2 pp) {
+        const vec3 glowCol      = HSV2RGB(vec3(0.0, 0.9, 1E-3));
+
+        const vec3 sbase        = HSV2RGB(vec3(0.0, 0.9, 1.));
+        const vec3 seye         = HSV2RGB(vec3(0.03, 0.75, 16.));
+        const vec3 sbase4       = HSV2RGB(vec3(0.6, 0.6, 1.));
+
         float voice = 0.;
         const float vc = 4.0;
         for (float i = 0.; i<vc;++i) {
@@ -582,57 +530,162 @@
         g_rot1        = ROT(1.234*a);
       }
 
+      float dlogos(vec2 p, float sel) {
+        p.y += 1./12.0;
+        if (p.y < 0.0 || p.y > 1./6.) {
+          return 1E3;
+        }
+        p.y += (2.0-sel)/6.0;
+        p += 0.5;
+
+        p.y = 1.0 - p.y;
+        float x = texture(logos, p).x;
+
+        return (0.75-x)/32.;
+      }
+      const float logoHeightScale = 0.0025;
+      float hlogos(vec2 p, float sel) {
+        float o = 0.00125;
+        float h = logoHeightScale*smoothstep(-o, o, dlogos(p, sel));
+        return h;
+      }
+
+      vec3 nlogos(vec2 p, float sel, float eps) {
+        vec2 v;
+        vec2 w;
+        vec2 e = vec2(eps, 0);
+
+        vec3 n;
+        n.x = (hlogos(p + e.xy, sel) - hlogos(p - e.xy, sel));
+        n.y = -(hlogos(p + e.yx, sel) - hlogos(p - e.yx, sel));
+        n.z = 2.0*e.x;
+
+        return normalize(n);
+      }
+
+      float mountains(vec2 p) {
+        float h = 0.;
+        float a = 1./16.;
+        float x = 2.*p.x+1.;
+        for (int i = 0; i < 5; ++i) {
+          h += a*sin(x);
+          a *= 0.5;
+          x *= 2.03;
+          x += 123.4;
+        }
+        return h;
+      }
+
+      vec3 logo(vec3 col, vec2 p, vec4 po, vec3 co, float z, float sel) {
+        float aa = sqrt(2.0)/RESOLUTION.y;
+        vec2 dp = p;
+        dp /= z;
+        vec2 p2 = dp*3.;
+        dp += po.xy;
+      //  dp.y -= -0.75;
+        float d = dlogos(dp, sel)*z;
+        vec3 n = nlogos(dp, sel, aa);
+        vec3 p3 = vec3(dp, 0.0);
+        vec3 eye = vec3(0.0,00, 8.0);
+        vec3 lp = vec3(0.20,-1.0, 4.0)/3.;
+        vec3 ld = normalize(lp-p3);
+        vec3 rd = normalize(p3-eye);
+        vec3 r  = reflect(rd, n);
+        p2.y += 0.025+po.z;
+        float l2 = dot(p2, p2);
+        vec3 skyCol = hsv2rgb(vec3(0.6+co.x, 1.2*smoothstep(-0.25, 0.3, p2.y), smoothstep(0.866, 0.125, p2.y)));
+        skyCol += vec3(2E-2)/max(l2, 1E-2);
+        vec3 groundCol = hsv2rgb(vec3(0.85+co.y, 2.0/3.0, smoothstep(0.0, 0.2, -p2.y)));
+        float h = mountains(p2+vec2(po.w, 0.0))-p2.y;
+        float haa = 2E-3;
+        vec3 mcol = vec3(0.0);
+        mcol += mix(groundCol, skyCol, smoothstep(haa, -haa, h));
+        mcol *= (0.75+0.25*sin(vec3(0,1,2)+p.y*RESOLUTION.y*TAU/6.0));
+        mcol *= 2.0;
+        mcol -= 0.1*vec3(2.0, 3.0, 1.0)*(length(p2)+0.25);
+        vec3 speCol = hsv2rgb(vec3(0.75+co.z, 0.5, 5.0));
+        mcol += speCol*pow(max(dot(ld, r), 0.0), 80.0);
+        col = mix(col, vec3(0.0), smoothstep(aa, -aa, d-2E-3));
+        col = mix(col, mcol, smoothstep(aa, -aa, d));
+        return col;
+      }
+
+
+      vec3 postProc(vec3 col, vec2 p, vec2 pp) {
+        const vec3 flashCol  = HSV2RGB(vec3(0.55, 0.7, 1E-3));
+        if (g_state.z == 1) {
+          col += smoothstep(0.25, 0., g_ftime)*2E5*flashCol*flashCol/max(dot(p, p), 1E-2);
+        }
+
+        col *= smoothstep(1.5, sqrt(0.5), length(pp));
+        switch(g_state.y) {
+        case COMPUTER:
+          col = thecomputer(col, p, pp);
+          break;
+        case VUMETER1:
+          col = vumeters(col, p, pp, 0.);
+          break;
+        case VUMETER2:
+          col = vumeters(col, p, pp, 1.);
+          break;
+        case MRANGE:
+          col = logo(col, p, vec4(-0.06,0.0,0.,0.1), vec3(0.0,0.0,0.0),4.0,2.0);
+          break;
+        default:
+          break;
+        }
+
+
+        col = aces_approx(col);
+        col = sqrt(col);
+
+        return col;
+      }
+
       // -----------------------------------------------------------------------------
       // PRELUDE - END
       // -----------------------------------------------------------------------------
 
+    </script>
 
+    <script id="fs-red-scene" type="x-shader/x-fragment">
+      void main(void) {
+        vec3 col = vec3(0.0, 0.0, 0.0);
+
+        frag_color = vec4(col, 1.0);
+      }
+    </script>
+
+    <script id="fs-gaussian-blur-scene" type="x-shader/x-fragment">
+      const vec2 stp = vec2(1.0, 0.0);
+      void main() {
+        vec2 q = v_texcoord;
+        float tsz = 1./RESOLUTION.y;
+        float a = exp(-3.);
+
+        vec3 col = texture(logos, q).xyz;
+        float agg = 1.;
+        for (float  i = 1.; i < 20.; ++i) {
+          float off = tsz*i;
+          float mul = exp(-a*i*i);
+          col += mul*texture(logos, q - stp*off).xyz;
+          col += mul*texture(logos, q + stp*off).xyz;
+          agg += 2.*mul;
+        }
+
+        col /= agg;
+
+        frag_color = vec4(col, 1.0);
+      }
+    </script>
+
+    <script id="fs-glow-fields" type="x-shader/x-fragment">
       #define EFFECT0     1
       #define EFFECT1     2
       #define EFFECT2     3
       #define EFFECT3     4
       #define EFFECT4     5
       #define EFFECT5     6
-
-      #define SCRIPT(a,b,c) ((a << 3)+(b<<1)+c)
-      #define NONE        0
-
-      #ifdef DEMO_MODE
-      #else
-      const int g_scriptCount = 29;
-
-      const int[] g_script = int[g_scriptCount](
-          SCRIPT(NONE   , COMPUTER, NONE)
-        , SCRIPT(EFFECT0, FREQ1   , FLASH)
-        , SCRIPT(EFFECT4, FREQ1   , FLASH)
-        , SCRIPT(EFFECT1, FREQ1   , FLASH)
-        , SCRIPT(EFFECT1, FREQ1   , FLASH)
-        , SCRIPT(EFFECT5, FREQ2   , FLASH)
-        , SCRIPT(EFFECT5, FREQ2   , FLASH)
-        , SCRIPT(EFFECT0, COMPUTER, FLASH)
-        , SCRIPT(EFFECT0, COMPUTER, FLASH)
-        , SCRIPT(EFFECT4, COMPUTER, FLASH)
-        , SCRIPT(EFFECT4, COMPUTER, FLASH)
-        , SCRIPT(EFFECT1, FREQ1   , FLASH)
-        , SCRIPT(EFFECT1, FREQ1   , FLASH)
-        , SCRIPT(EFFECT4, FREQ2   , FLASH)
-        , SCRIPT(EFFECT3, FREQ2   , FLASH)
-        , SCRIPT(EFFECT2, FREQ2   , FLASH)
-        , SCRIPT(EFFECT2, FREQ2   , FLASH)
-        , SCRIPT(EFFECT1, FREQ2   , FLASH)
-        , SCRIPT(EFFECT1, FREQ2   , FLASH)
-        , SCRIPT(EFFECT4, FREQ1   , FLASH)
-        , SCRIPT(EFFECT0, FREQ1   , FLASH)
-        , SCRIPT(EFFECT3, COMPUTER, FLASH)
-        , SCRIPT(EFFECT3, COMPUTER, FLASH)
-        , SCRIPT(EFFECT2, FREQ2   , FLASH)
-        , SCRIPT(EFFECT2, FREQ2   , FLASH)
-        , SCRIPT(EFFECT1, FREQ2   , FLASH)
-        , SCRIPT(EFFECT1, FREQ2   , FLASH)
-        , SCRIPT(NONE   , COMPUTER, NONE )
-        , SCRIPT(NONE   , COMPUTER, NONE )
-        );
-      #endif
 
       const float
           ExpBy     = log2(4.1)
@@ -1038,30 +1091,11 @@
 
       vec3 effect(vec2 p, vec2 pp) {
         setup(TIME);
-        #ifdef DEMO_MODE
-        #else
-        int script    = g_script[int(g_ntime/8.)];
-        g_state       = ivec3(script>>3, (script>>1)&0x3, script&0x1);
-        #endif
         vec3 col;
         col = mainEffect(col, p, pp);
-        col *= smoothstep(1.5, sqrt(0.5), length(pp));
-        switch(g_state.y) {
-        case COMPUTER:
-          col = thecomputer(col, p, pp);
-          break;
-        case FREQ1:
-          col = vumeters(col, p, pp, 0.);
-          break;
-        case FREQ2:
-          col = vumeters(col, p, pp, 1.);
-          break;
-        default:
-          break;
-        }
 
-        col = aces_approx(col);
-        col = sqrt(col);
+        col = postProc(col, p, pp);
+
         return col;
       }
 
@@ -1073,468 +1107,10 @@
         vec3 col = effect(p, pp);
         frag_color = vec4(col,1.0);
       }
-      // -----------------------------------------------------------------------------
 
     </script>
 
     <script id="fs-travel" type="x-shader/x-fragment">
-      // -----------------------------------------------------------------------------
-      // PRELUDE - BEGIN
-      // -----------------------------------------------------------------------------
-      precision highp float;
-
-      #define DEMO_MODE
-
-
-      uniform float     time              ;
-      uniform vec2      resolution        ;
-      uniform sampler2D frequency_data    ;
-      uniform sampler2D time_domain_data  ;
-
-      in vec2 v_texcoord  ;
-      out vec4 frag_color ;
-
-      #ifdef DEMO_MODE
-      uniform ivec3 g_state;
-      #else
-      ivec3 g_state;
-      #endif
-
-      float g_ntime;
-      float g_ftime;
-      float g_btime;
-
-      mat2  g_rot0;
-      mat2  g_rot1;
-
-      #define TIME        time
-      #define RESOLUTION  resolution
-      #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
-      #define BPM         60.
-
-      #define COMPUTER    1
-      #define FREQ1       2
-      #define FREQ2       3
-
-      #define FLASH       1
-
-      const float
-          PI        = acos(-1.)
-        , TAU       = 2.*PI
-        ;
-
-
-      // License: WTFPL, author: sam hocevar, found: https://stackoverflow.com/a/17897228/418488
-      const vec4 hsv2rgb_K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-      vec3 hsv2rgb(vec3 c) {
-        vec3 p = abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www);
-        return c.z * mix(hsv2rgb_K.xxx, clamp(p - hsv2rgb_K.xxx, 0.0, 1.0), c.y);
-      }
-      // License: WTFPL, author: sam hocevar, found: https://stackoverflow.com/a/17897228/418488
-      //  Macro version of above to enable compile-time constants
-      #define HSV2RGB(c)  (c.z * mix(hsv2rgb_K.xxx, clamp(abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www) - hsv2rgb_K.xxx, 0.0, 1.0), c.y))
-
-      const vec3 lightDir0    = normalize(vec3(-1.,-1., 0.));
-      const vec3 lightCol0    = HSV2RGB(vec3(0.6, .2, 1E-2));
-      const vec3 lightDir1    = normalize(vec3(1.,1., -1.));
-      const vec3 lightCol1    = HSV2RGB(vec3(0.6, 0.2, 2E-3));
-      const vec3 bottomBoxCol = HSV2RGB(vec3(0.7, 0.5, 0.25));
-      const vec3 topBoxCol    = HSV2RGB(vec3(0.6, 0.2, 0.95));
-      const vec3 sbase        = HSV2RGB(vec3(0.0, 0.9, 1.));
-      const vec3 seye         = HSV2RGB(vec3(0.03, 0.75, 16.));
-      const vec3 sbase4       = HSV2RGB(vec3(0.6, 0.6, 1.));
-      const vec3 glowCol      = HSV2RGB(vec3(0.0, 0.9, 1E-3));
-
-
-      // License: MIT OR CC-BY-NC-4.0, author: mercury, found: https://mercury.sexy/hg_sdf/
-      float mod1(inout float p, float size) {
-        float halfsize = size*0.5;
-        float c = floor((p + halfsize)/size);
-        p = mod(p + halfsize, size) - halfsize;
-        return c;
-      }
-
-      // License: MIT OR CC-BY-NC-4.0, author: mercury, found: https://mercury.sexy/hg_sdf/
-      vec2 mod2(inout vec2 p, vec2 size) {
-        vec2 c = floor((p + size*0.5)/size);
-        p = mod(p + size*0.5,size) - size*0.5;
-        return c;
-      }
-
-      // License: MIT OR CC-BY-NC-4.0, author: mercury, found: https://mercury.sexy/hg_sdf/
-      float modPolar(inout vec2 p, float repetitions) {
-        float angle = 2.*PI/repetitions;
-        float a = atan(p.y, p.x) + angle/2.;
-        float r = length(p);
-        float c = floor(a/angle);
-        a = mod(a,angle) - angle/2.;
-        p = vec2(cos(a), sin(a))*r;
-        // For an odd number of repetitions, fix cell index of the cell in -x direction
-        // (cell index would be e.g. -5 and 5 in the two halves of the cell):
-        if (abs(c) >= (repetitions/2.)) c = abs(c);
-        return c;
-      }
-
-
-      // License: Unknown, author: Matt Taylor (https://github.com/64), found: https://64.github.io/tonemapping/
-      vec3 aces_approx(vec3 v) {
-        v = max(v, 0.0);
-        v *= 0.6;
-        float a = 2.51;
-        float b = 0.03;
-        float c = 2.43;
-        float d = 0.59;
-        float e = 0.14;
-        return clamp((v*(a*v+b))/(v*(c*v+d)+e), 0.0, 1.0);
-
-      }
-
-      // License: Unknown, author: Claude Brezinski, found: https://mathr.co.uk/blog/2017-09-06_approximating_hyperbolic_tangent.html
-      float tanh_approx(float x) {
-        //  Found this somewhere on the interwebs
-        //  return tanh(x);
-        float x2 = x*x;
-        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
-      }
-      // License: MIT, author: Inigo Quilez, found: https://www.iquilezles.org/www/articles/smin/smin.htm
-      float pmin(float a, float b, float k) {
-        float h = clamp(0.5+0.5*(b-a)/k, 0.0, 1.0);
-        return mix(b, a, h) - k*h*(1.0-h);
-      }
-
-      float pmax(float a, float b, float k) {
-        return -pmin(-a, -b, k);
-      }
-
-      // License: Unknown, author: Unknown, found: don't remember
-      float hash(float co) {
-        return fract(sin(co*12.9898) * 13758.5453);
-      }
-
-      float pabs(float a, float k) {
-        return -pmin(a, -a, k);
-      }
-
-      float segmenty(vec2 p, float h, float w) {
-        float hh = 0.5*h;
-        p.y = abs(p.y);
-        p.y -= hh;
-        float d0 = length(p);
-        float d1 = abs(p.x);
-        float d = p.y > 0.0 ? d0 : d1;
-        d -= w;
-        return d;
-      }
-
-      float segmentx(vec2 p, vec2 dim) {
-        p.x = abs(p.x);
-        float o = 0.5*max(dim.x-dim.y, 0.0);
-        if (p.x < o) {
-          return abs(p.y) - dim.y;
-        }
-        return length(p-vec2(o, 0.0))-dim.y;
-      }
-
-      const int[16] digits = int[16](
-        0x7D // 0
-      , 0x50 // 1
-      , 0x4F // 2
-      , 0x57 // 3
-      , 0x72 // 4
-      , 0x37 // 5
-      , 0x3F // 2
-      , 0x51 // 7
-      , 0x7F // 8
-      , 0x77 // 9
-      , 0x7B // A
-      , 0x3E // B
-      , 0x2D // C
-      , 0x5E // D
-      , 0x2F // E
-      , 0x2B // F
-      );
-
-
-      float sphere(vec3 p, float t) {
-        return length(p)-t;
-      }
-
-      float circle(vec2 p, float r) {
-        return length(p) - r;
-      }
-
-      float circle4(vec2 p, float r) {
-        p *= p;
-        return pow(dot(p, p), 0.25) - r;
-      }
-
-      float plane(vec2 p, vec3 pp) {
-        return dot(p, pp.xy)+pp.z;
-      }
-
-
-      // License: MIT, author: Inigo Quilez, found: https://iquilezles.org/articles/intersectors/
-      float rayPlane(vec3 ro, vec3 rd, vec4 p) {
-        return -(dot(ro,p.xyz)+p.w)/dot(rd,p.xyz);
-      }
-
-      // License: MIT, author: Inigo Quilez, found: https://iquilezles.org/articles/distfunctions/
-      float box(vec2 p, vec2 b) {
-        vec2 d = abs(p)-b;
-        return length(max(d,0.0)) + min(max(d.x,d.y),0.0);
-      }
-
-      void sphere(vec2 p, float r, out vec3 sp, out vec3 sn) {
-        float z2 = (r*r-dot(p, p));
-        if (z2 > 0.0) {
-          float z = sqrt(z2);
-          vec3 cp = vec3(p, z);
-          vec3 cn = normalize(cp);
-          sp = cp;
-          sn = cn;
-        } else {
-          sp = vec3(p, 0.);
-          sn = vec3(0.);
-        }
-
-      }
-
-      // The normal here is not correct, but the effect is designed around it being buggy
-      void buggySphere4(vec2 p, float r, out vec3 sp, out vec3 sn) {
-        vec2 p2 = p;
-        p2 *= p;
-        float z4 = (r*r*r*r-dot(p2, p2));
-        if (z4 > 0.0) {
-          float z = pow(z4, 0.25);
-          vec3 cp = vec3(p, z);
-          vec3 cn = normalize(cp);
-          sp = cp;
-          sn = cn;
-        } else {
-          sp = vec3(p, 0.);
-          sn = vec3(0.);
-        }
-
-      }
-
-      float digit(vec2 p, float n) {
-        const vec2 dim = vec2(0.75, 0.075);
-        const float eps = 0.01;
-        vec2 ap = abs(p);
-        if (ap.x > (1.+dim.y+eps)) return 1E3;
-        if (ap.y > (1.5+dim.y+eps)) return 1E3;
-        float m = mod(floor(n), 16.0);
-        int digit = digits[int(m)];
-
-        vec2 cp = (p-0.5);
-        vec2 cn = round(cp);
-
-        vec2 p0 = p;
-        p0.y -= 0.5;
-        p0.y = p0.y-0.5;
-        float n0 = round(p0.y);
-        p0.y -= n0;
-        float d0 = segmentx(p0, dim);
-
-        vec2 p1 = p;
-        vec2 n1 = sign(p1);
-        p1 = abs(p1);
-        p1 -= 0.5;
-        p1 = p1.yx;
-        float d1 = segmentx(p1, dim);
-
-        vec2 p2 = p;
-        p2.y = abs(p.y);
-        p2.y -= 0.5;
-        p2 = abs(p2);
-        float d2 = dot(normalize(vec2(1.0, -1.0)), p2);
-
-        float d = d0;
-        d = min(d, d1);
-
-        float sx = 0.5*(n1.x+1.0) + (n1.y+1.0);
-        float sy = -n0;
-        float s  = d2 > 0.0 ? (3.0+sx) : sy;
-        // Praying bit shift operations aren't TOO slow
-        return ((digit & (1 << int(s))) == 0) ? 1E3 : d;
-      }
-
-      vec4 dthecomputer(vec2 p, float f) {
-        const float sm = 0.015;
-        const vec3 pp = vec3(normalize(vec2(1., 1.)), -0.1);
-        float d0 = circle4(p, 0.48);
-        float d1 = plane(p, pp);
-        float d2 = circle(p, 0.225);
-        float d3 = abs(d2-0.05-f*4.)-0.02;
-        d3 = abs(d3-f*2.)-0.01;
-        d3 = abs(d3-f);
-        float d4 = d1;
-        float d5 = abs(d0-0.015);
-        d1 = abs(d1)-0.2;
-        d1 = abs(d1)-0.1;
-        float d = d0;
-        d =  pmax(d, -d1, sm);
-        d2 = max(d2, d4);
-        d3 = max(d3, d4);
-        d2 = pmax(d2, -(d-0.01), sm);
-        d3 = pmax(d3, -(d-0.01), sm);
-        d = min(d, d2);
-        d = min(d, d5);
-
-        return vec4(d, d2, d0, min(d5, d3));
-      }
-
-      vec3 render0(vec3 ro, vec3 rd) {
-        vec3 col = vec3(0.0);
-
-        const vec4 pp0 = vec4(normalize(vec3(0.0, -1.0, 0.0)), -5.0);
-        const vec4 pp1 = vec4(normalize(vec3(-2., 2.0, 1.0)), -6.);
-        float tp0  = rayPlane(ro, rd, pp0);
-        float tp1  = rayPlane(ro, rd, pp1);
-
-        if (tp0 > 0.0) {
-          vec3 bcol = bottomBoxCol*exp(-0.5*(1.+length((ro + tp0*rd).xz)));
-          bcol /=  0.05*(tp0*tp0);;
-          col += bcol;
-        }
-
-        if (tp1 > 0.0) {
-          vec3 pos  = ro + tp1*rd;
-          vec2 pp = pos.xz;
-          float db = box(pp, vec2(8.0, 1.))-2.;
-          vec3 tcol = vec3(0.);
-          tcol += topBoxCol*smoothstep(0.25, 0.0, db);
-          col += 0.2*topBoxCol*exp(-max(db, 0.0));
-      //    tcol += 0.25*(topBoxCol)*max(-db, 0.0);
-          tcol /= 0.025*(tp1*tp1);
-          col += tcol;
-        }
-
-        col += lightCol0/(1.0090-dot(lightDir0, rd));
-        col += lightCol1/(1.0025-dot(lightDir1, rd));
-        return clamp(col, 0., 10.);
-      }
-
-      vec3 thecomputer(vec3 col, vec2 p, vec2 pp) {
-        float voice = 0.;
-        const float vc = 4.0;
-        for (float i = 0.; i<vc;++i) {
-          voice += max((texture(frequency_data, vec2(0.05+0.05*i, 0.0)).x-0.3), 0.0);
-        }
-        voice *= 1./vc;
-        voice *= voice;
-        voice = smoothstep(0.0, 0.2, voice);
-        float ntime = g_ntime;
-        float ftime = g_ftime;
-        float time = ntime+ftime;
-        // HARDCODED TIMING - LOVE EM!
-        float va =
-              smoothstep(3., 2., time)
-            +  step(8., time)
-            -  step(168., time)
-            +  step(172., time)
-            ;
-        voice *= va;
-
-
-        float aa = sqrt(2.)/RESOLUTION.y;
-
-        vec4 d = dthecomputer(p, 0.025*voice);
-        const vec3 ro = vec3(0., 0., 8.);
-        vec3 sn;
-        vec3 sp;
-        sphere(p, 0.225, sp, sn);
-        vec3 srd  = normalize(sp-ro);
-        vec3 sr   = reflect(srd, sn);
-        vec3 srcol= render0(sp, sr);
-        float sfre= 1.+dot(srd, sn);
-        sfre *= sfre;
-        vec3 sfre3 = mix(2.*sbase, vec3(2.), sfre);
-        vec3 scol = vec3(0.);
-        scol = srcol*sfre3;
-        scol += pow(max(-dot(srd,sn),0.), 10.)*sbase;
-        scol += pow(max(-dot(srd,sn),0.), mix(20., 10., voice))*seye*(voice);
-
-        vec3 scol4 = vec3(0.);
-        vec3 sn4;
-        vec3 sp4;
-        buggySphere4(p, 0.48, sp4, sn4);
-
-        vec3 srd4  = normalize(sp4-ro);
-        vec3 sr4   = reflect(srd4, sn4);
-        vec3 srcol4= render0(sp4, sr4);
-        float sfre4= 1.+dot(srd4, sn4);
-        sfre4 *= sfre4;
-        vec3 sfre34 = mix(2.*sbase4, vec3(2.), sfre4);
-
-        scol4 += srcol4*sfre34;
-        vec3 gcol = 0.0001*sbase/(1.00003+dot(srd, vec3(0.0, 0.0, 1.)))*smoothstep(aa, -aa, d.z);
-      //  gcol += srcol4*sqrt(sbase)*sfre4*0.5;
-
-        vec3 ccol = gcol;
-
-        ccol = mix(ccol, scol4, smoothstep(aa, -aa, d.x));
-        ccol = mix(ccol, scol, smoothstep(aa, -aa, d.y));
-        ccol -= 6E-2*vec3(2.,3.,1.)*dot(p, p);
-        col *= 1.-exp(-50.*max(d.z*d.z, 0.));
-        col = mix(col, ccol, smoothstep(aa, -aa, d.z));
-        col += glowCol/max(d.w, 1E-3);
-        col += 2E-3*seye*(pow(voice, 3.))/max((dot(p,p)), 1E-1);
-        return col;
-      }
-
-      float dvumeters(vec2 p, float off) {
-        vec2 p3 = p;
-        p3.y = abs(p3.y);
-        p3.y -= off;
-        const float cw = 0.1;
-        float n3 = mod1(p3.x, cw);
-        n3 = abs(n3);
-        n3 += 3.0;
-        float fft = texture(frequency_data, vec2(0.02*n3, 0.0)).x;
-        fft -= 0.3;
-        fft = max(fft, 0.0);
-        fft *= fft;
-        fft *= 3.;
-        float d3 = segmenty(p3, fft, 0.4*cw);
-        float d = d3;
-        return d;
-      }
-
-      vec3 vumeters(vec3 col, vec2 p, vec2 pp, float off) {
-        float ftime = g_ftime;
-        float aa = sqrt(2.)/RESOLUTION.y;
-        float df = dvumeters(p, off);
-        float sy = sign(p.y);
-        vec3 fcol = 2.*(1.5+0.5*sy)*(0.5+0.5*sin(vec3(0.,1.,2.)+abs(p.x)+TIME+0.125*sy));
-        col = mix(col, mix(fcol, col, ftime*ftime*ftime), smoothstep(aa, -aa, df));
-        return col;
-      }
-
-
-      void setup(float tm) {
-        const float off          = 16.;
-        float beat    = (BPM/60.)*(tm);
-        float ntime   = floor(beat);
-        float ftime   = fract(beat);
-        float btime   = (TIME+(ntime+log2(1.+(off-1.)*ftime)/log2(off)));
-        g_ntime       = ntime;
-        g_ftime       = ftime;
-        g_btime       = btime;
-      #ifdef DEMO_MODE
-      #else
-      #endif
-        float t       = TAU*btime;
-        float a       = t*TAU/107.0;
-        g_rot0        = ROT(a);
-        g_rot1        = ROT(1.234*a);
-      }
-
-      // -----------------------------------------------------------------------------
-      // PRELUDE - END
-      // -----------------------------------------------------------------------------
-
-
       // #define RENDER1_BACKSTEP
 
       const int
@@ -1597,7 +1173,7 @@
         float a1 = smoothstep(0.99, 1.0, sin(0.125*(p.y-0.5*mix(2.0, 4.0, h2)*g_btime)+TAU*h1));
         c1.xz *= ROT(8.0*p.y);
         c1 -= 0.04;
-        float d4 = length(c1.xz)-mix(-0.001, 0.005, a1);
+        float d4 = length(c1.xz)-0.005*a1;
         float d = d0;
         d = min(d, d1);
         d = min(d,d2);
@@ -1728,22 +1304,8 @@
 
         vec3 col = render1(ro, rd);
 
-        col *= smoothstep(1.5, sqrt(0.5), length(pp));
-        switch(g_state.y) {
-        case COMPUTER:
-          col = thecomputer(col, p, pp);
-          break;
-        case FREQ1:
-          col = vumeters(col, p, pp, 0.);
-          break;
-        case FREQ2:
-          col = vumeters(col, p, pp, 1.);
-          break;
-        default:
-          break;
-        }
-        col = aces_approx(col);
-        col = sqrt(col);
+        col = postProc(col, p, pp);
+
         return col;
       }
 
@@ -1758,463 +1320,6 @@
     </script>
 
     <script id="fs-fractal" type="x-shader/x-fragment">
-      // -----------------------------------------------------------------------------
-      // PRELUDE - BEGIN
-      // -----------------------------------------------------------------------------
-      precision highp float;
-
-      #define DEMO_MODE
-
-
-      uniform float     time              ;
-      uniform vec2      resolution        ;
-      uniform sampler2D frequency_data    ;
-      uniform sampler2D time_domain_data  ;
-
-      in vec2 v_texcoord  ;
-      out vec4 frag_color ;
-
-      #ifdef DEMO_MODE
-      uniform ivec3 g_state;
-      #else
-      ivec3 g_state;
-      #endif
-
-      float g_ntime;
-      float g_ftime;
-      float g_btime;
-
-      mat2  g_rot0;
-      mat2  g_rot1;
-
-      #define TIME        time
-      #define RESOLUTION  resolution
-      #define ROT(a)      mat2(cos(a), sin(a), -sin(a), cos(a))
-      #define BPM         60.
-
-      #define COMPUTER    1
-      #define FREQ1       2
-      #define FREQ2       3
-
-      #define FLASH       1
-
-      const float
-          PI        = acos(-1.)
-        , TAU       = 2.*PI
-        ;
-
-
-      // License: WTFPL, author: sam hocevar, found: https://stackoverflow.com/a/17897228/418488
-      const vec4 hsv2rgb_K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-      vec3 hsv2rgb(vec3 c) {
-        vec3 p = abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www);
-        return c.z * mix(hsv2rgb_K.xxx, clamp(p - hsv2rgb_K.xxx, 0.0, 1.0), c.y);
-      }
-      // License: WTFPL, author: sam hocevar, found: https://stackoverflow.com/a/17897228/418488
-      //  Macro version of above to enable compile-time constants
-      #define HSV2RGB(c)  (c.z * mix(hsv2rgb_K.xxx, clamp(abs(fract(c.xxx + hsv2rgb_K.xyz) * 6.0 - hsv2rgb_K.www) - hsv2rgb_K.xxx, 0.0, 1.0), c.y))
-
-      const vec3 lightDir0    = normalize(vec3(-1.,-1., 0.));
-      const vec3 lightCol0    = HSV2RGB(vec3(0.6, .2, 1E-2));
-      const vec3 lightDir1    = normalize(vec3(1.,1., -1.));
-      const vec3 lightCol1    = HSV2RGB(vec3(0.6, 0.2, 2E-3));
-      const vec3 bottomBoxCol = HSV2RGB(vec3(0.7, 0.5, 0.25));
-      const vec3 topBoxCol    = HSV2RGB(vec3(0.6, 0.2, 0.95));
-      const vec3 sbase        = HSV2RGB(vec3(0.0, 0.9, 1.));
-      const vec3 seye         = HSV2RGB(vec3(0.03, 0.75, 16.));
-      const vec3 sbase4       = HSV2RGB(vec3(0.6, 0.6, 1.));
-      const vec3 glowCol      = HSV2RGB(vec3(0.0, 0.9, 1E-3));
-
-
-      // License: MIT OR CC-BY-NC-4.0, author: mercury, found: https://mercury.sexy/hg_sdf/
-      float mod1(inout float p, float size) {
-        float halfsize = size*0.5;
-        float c = floor((p + halfsize)/size);
-        p = mod(p + halfsize, size) - halfsize;
-        return c;
-      }
-
-      // License: MIT OR CC-BY-NC-4.0, author: mercury, found: https://mercury.sexy/hg_sdf/
-      vec2 mod2(inout vec2 p, vec2 size) {
-        vec2 c = floor((p + size*0.5)/size);
-        p = mod(p + size*0.5,size) - size*0.5;
-        return c;
-      }
-
-      // License: MIT OR CC-BY-NC-4.0, author: mercury, found: https://mercury.sexy/hg_sdf/
-      float modPolar(inout vec2 p, float repetitions) {
-        float angle = 2.*PI/repetitions;
-        float a = atan(p.y, p.x) + angle/2.;
-        float r = length(p);
-        float c = floor(a/angle);
-        a = mod(a,angle) - angle/2.;
-        p = vec2(cos(a), sin(a))*r;
-        // For an odd number of repetitions, fix cell index of the cell in -x direction
-        // (cell index would be e.g. -5 and 5 in the two halves of the cell):
-        if (abs(c) >= (repetitions/2.)) c = abs(c);
-        return c;
-      }
-
-
-      // License: Unknown, author: Matt Taylor (https://github.com/64), found: https://64.github.io/tonemapping/
-      vec3 aces_approx(vec3 v) {
-        v = max(v, 0.0);
-        v *= 0.6;
-        float a = 2.51;
-        float b = 0.03;
-        float c = 2.43;
-        float d = 0.59;
-        float e = 0.14;
-        return clamp((v*(a*v+b))/(v*(c*v+d)+e), 0.0, 1.0);
-
-      }
-
-      // License: Unknown, author: Claude Brezinski, found: https://mathr.co.uk/blog/2017-09-06_approximating_hyperbolic_tangent.html
-      float tanh_approx(float x) {
-        //  Found this somewhere on the interwebs
-        //  return tanh(x);
-        float x2 = x*x;
-        return clamp(x*(27.0 + x2)/(27.0+9.0*x2), -1.0, 1.0);
-      }
-      // License: MIT, author: Inigo Quilez, found: https://www.iquilezles.org/www/articles/smin/smin.htm
-      float pmin(float a, float b, float k) {
-        float h = clamp(0.5+0.5*(b-a)/k, 0.0, 1.0);
-        return mix(b, a, h) - k*h*(1.0-h);
-      }
-
-      float pmax(float a, float b, float k) {
-        return -pmin(-a, -b, k);
-      }
-
-      // License: Unknown, author: Unknown, found: don't remember
-      float hash(float co) {
-        return fract(sin(co*12.9898) * 13758.5453);
-      }
-
-      float pabs(float a, float k) {
-        return -pmin(a, -a, k);
-      }
-
-      float segmenty(vec2 p, float h, float w) {
-        float hh = 0.5*h;
-        p.y = abs(p.y);
-        p.y -= hh;
-        float d0 = length(p);
-        float d1 = abs(p.x);
-        float d = p.y > 0.0 ? d0 : d1;
-        d -= w;
-        return d;
-      }
-
-      float segmentx(vec2 p, vec2 dim) {
-        p.x = abs(p.x);
-        float o = 0.5*max(dim.x-dim.y, 0.0);
-        if (p.x < o) {
-          return abs(p.y) - dim.y;
-        }
-        return length(p-vec2(o, 0.0))-dim.y;
-      }
-
-      const int[16] digits = int[16](
-        0x7D // 0
-      , 0x50 // 1
-      , 0x4F // 2
-      , 0x57 // 3
-      , 0x72 // 4
-      , 0x37 // 5
-      , 0x3F // 2
-      , 0x51 // 7
-      , 0x7F // 8
-      , 0x77 // 9
-      , 0x7B // A
-      , 0x3E // B
-      , 0x2D // C
-      , 0x5E // D
-      , 0x2F // E
-      , 0x2B // F
-      );
-
-
-      float sphere(vec3 p, float t) {
-        return length(p)-t;
-      }
-
-      float circle(vec2 p, float r) {
-        return length(p) - r;
-      }
-
-      float circle4(vec2 p, float r) {
-        p *= p;
-        return pow(dot(p, p), 0.25) - r;
-      }
-
-      float plane(vec2 p, vec3 pp) {
-        return dot(p, pp.xy)+pp.z;
-      }
-
-
-      // License: MIT, author: Inigo Quilez, found: https://iquilezles.org/articles/intersectors/
-      float rayPlane(vec3 ro, vec3 rd, vec4 p) {
-        return -(dot(ro,p.xyz)+p.w)/dot(rd,p.xyz);
-      }
-
-      // License: MIT, author: Inigo Quilez, found: https://iquilezles.org/articles/distfunctions/
-      float box(vec2 p, vec2 b) {
-        vec2 d = abs(p)-b;
-        return length(max(d,0.0)) + min(max(d.x,d.y),0.0);
-      }
-
-      void sphere(vec2 p, float r, out vec3 sp, out vec3 sn) {
-        float z2 = (r*r-dot(p, p));
-        if (z2 > 0.0) {
-          float z = sqrt(z2);
-          vec3 cp = vec3(p, z);
-          vec3 cn = normalize(cp);
-          sp = cp;
-          sn = cn;
-        } else {
-          sp = vec3(p, 0.);
-          sn = vec3(0.);
-        }
-
-      }
-
-      // The normal here is not correct, but the effect is designed around it being buggy
-      void buggySphere4(vec2 p, float r, out vec3 sp, out vec3 sn) {
-        vec2 p2 = p;
-        p2 *= p;
-        float z4 = (r*r*r*r-dot(p2, p2));
-        if (z4 > 0.0) {
-          float z = pow(z4, 0.25);
-          vec3 cp = vec3(p, z);
-          vec3 cn = normalize(cp);
-          sp = cp;
-          sn = cn;
-        } else {
-          sp = vec3(p, 0.);
-          sn = vec3(0.);
-        }
-
-      }
-
-      float digit(vec2 p, float n) {
-        const vec2 dim = vec2(0.75, 0.075);
-        const float eps = 0.01;
-        vec2 ap = abs(p);
-        if (ap.x > (1.+dim.y+eps)) return 1E3;
-        if (ap.y > (1.5+dim.y+eps)) return 1E3;
-        float m = mod(floor(n), 16.0);
-        int digit = digits[int(m)];
-
-        vec2 cp = (p-0.5);
-        vec2 cn = round(cp);
-
-        vec2 p0 = p;
-        p0.y -= 0.5;
-        p0.y = p0.y-0.5;
-        float n0 = round(p0.y);
-        p0.y -= n0;
-        float d0 = segmentx(p0, dim);
-
-        vec2 p1 = p;
-        vec2 n1 = sign(p1);
-        p1 = abs(p1);
-        p1 -= 0.5;
-        p1 = p1.yx;
-        float d1 = segmentx(p1, dim);
-
-        vec2 p2 = p;
-        p2.y = abs(p.y);
-        p2.y -= 0.5;
-        p2 = abs(p2);
-        float d2 = dot(normalize(vec2(1.0, -1.0)), p2);
-
-        float d = d0;
-        d = min(d, d1);
-
-        float sx = 0.5*(n1.x+1.0) + (n1.y+1.0);
-        float sy = -n0;
-        float s  = d2 > 0.0 ? (3.0+sx) : sy;
-        // Praying bit shift operations aren't TOO slow
-        return ((digit & (1 << int(s))) == 0) ? 1E3 : d;
-      }
-
-      vec4 dthecomputer(vec2 p, float f) {
-        const float sm = 0.015;
-        const vec3 pp = vec3(normalize(vec2(1., 1.)), -0.1);
-        float d0 = circle4(p, 0.48);
-        float d1 = plane(p, pp);
-        float d2 = circle(p, 0.225);
-        float d3 = abs(d2-0.05-f*4.)-0.02;
-        d3 = abs(d3-f*2.)-0.01;
-        d3 = abs(d3-f);
-        float d4 = d1;
-        float d5 = abs(d0-0.015);
-        d1 = abs(d1)-0.2;
-        d1 = abs(d1)-0.1;
-        float d = d0;
-        d =  pmax(d, -d1, sm);
-        d2 = max(d2, d4);
-        d3 = max(d3, d4);
-        d2 = pmax(d2, -(d-0.01), sm);
-        d3 = pmax(d3, -(d-0.01), sm);
-        d = min(d, d2);
-        d = min(d, d5);
-
-        return vec4(d, d2, d0, min(d5, d3));
-      }
-
-      vec3 render0(vec3 ro, vec3 rd) {
-        vec3 col = vec3(0.0);
-
-        const vec4 pp0 = vec4(normalize(vec3(0.0, -1.0, 0.0)), -5.0);
-        const vec4 pp1 = vec4(normalize(vec3(-2., 2.0, 1.0)), -6.);
-        float tp0  = rayPlane(ro, rd, pp0);
-        float tp1  = rayPlane(ro, rd, pp1);
-
-        if (tp0 > 0.0) {
-          vec3 bcol = bottomBoxCol*exp(-0.5*(1.+length((ro + tp0*rd).xz)));
-          bcol /=  0.05*(tp0*tp0);;
-          col += bcol;
-        }
-
-        if (tp1 > 0.0) {
-          vec3 pos  = ro + tp1*rd;
-          vec2 pp = pos.xz;
-          float db = box(pp, vec2(8.0, 1.))-2.;
-          vec3 tcol = vec3(0.);
-          tcol += topBoxCol*smoothstep(0.25, 0.0, db);
-          col += 0.2*topBoxCol*exp(-max(db, 0.0));
-      //    tcol += 0.25*(topBoxCol)*max(-db, 0.0);
-          tcol /= 0.025*(tp1*tp1);
-          col += tcol;
-        }
-
-        col += lightCol0/(1.0090-dot(lightDir0, rd));
-        col += lightCol1/(1.0025-dot(lightDir1, rd));
-        return clamp(col, 0., 10.);
-      }
-
-      vec3 thecomputer(vec3 col, vec2 p, vec2 pp) {
-        float voice = 0.;
-        const float vc = 4.0;
-        for (float i = 0.; i<vc;++i) {
-          voice += max((texture(frequency_data, vec2(0.05+0.05*i, 0.0)).x-0.3), 0.0);
-        }
-        voice *= 1./vc;
-        voice *= voice;
-        voice = smoothstep(0.0, 0.2, voice);
-        float ntime = g_ntime;
-        float ftime = g_ftime;
-        float time = ntime+ftime;
-        // HARDCODED TIMING - LOVE EM!
-        float va =
-              smoothstep(3., 2., time)
-            +  step(8., time)
-            -  step(168., time)
-            +  step(172., time)
-            ;
-        voice *= va;
-
-
-        float aa = sqrt(2.)/RESOLUTION.y;
-
-        vec4 d = dthecomputer(p, 0.025*voice);
-        const vec3 ro = vec3(0., 0., 8.);
-        vec3 sn;
-        vec3 sp;
-        sphere(p, 0.225, sp, sn);
-        vec3 srd  = normalize(sp-ro);
-        vec3 sr   = reflect(srd, sn);
-        vec3 srcol= render0(sp, sr);
-        float sfre= 1.+dot(srd, sn);
-        sfre *= sfre;
-        vec3 sfre3 = mix(2.*sbase, vec3(2.), sfre);
-        vec3 scol = vec3(0.);
-        scol = srcol*sfre3;
-        scol += pow(max(-dot(srd,sn),0.), 10.)*sbase;
-        scol += pow(max(-dot(srd,sn),0.), mix(20., 10., voice))*seye*(voice);
-
-        vec3 scol4 = vec3(0.);
-        vec3 sn4;
-        vec3 sp4;
-        buggySphere4(p, 0.48, sp4, sn4);
-
-        vec3 srd4  = normalize(sp4-ro);
-        vec3 sr4   = reflect(srd4, sn4);
-        vec3 srcol4= render0(sp4, sr4);
-        float sfre4= 1.+dot(srd4, sn4);
-        sfre4 *= sfre4;
-        vec3 sfre34 = mix(2.*sbase4, vec3(2.), sfre4);
-
-        scol4 += srcol4*sfre34;
-        vec3 gcol = 0.0001*sbase/(1.00003+dot(srd, vec3(0.0, 0.0, 1.)))*smoothstep(aa, -aa, d.z);
-      //  gcol += srcol4*sqrt(sbase)*sfre4*0.5;
-
-        vec3 ccol = gcol;
-
-        ccol = mix(ccol, scol4, smoothstep(aa, -aa, d.x));
-        ccol = mix(ccol, scol, smoothstep(aa, -aa, d.y));
-        ccol -= 6E-2*vec3(2.,3.,1.)*dot(p, p);
-        col *= 1.-exp(-50.*max(d.z*d.z, 0.));
-        col = mix(col, ccol, smoothstep(aa, -aa, d.z));
-        col += glowCol/max(d.w, 1E-3);
-        col += 2E-3*seye*(pow(voice, 3.))/max((dot(p,p)), 1E-1);
-        return col;
-      }
-
-      float dvumeters(vec2 p, float off) {
-        vec2 p3 = p;
-        p3.y = abs(p3.y);
-        p3.y -= off;
-        const float cw = 0.1;
-        float n3 = mod1(p3.x, cw);
-        n3 = abs(n3);
-        n3 += 3.0;
-        float fft = texture(frequency_data, vec2(0.02*n3, 0.0)).x;
-        fft -= 0.3;
-        fft = max(fft, 0.0);
-        fft *= fft;
-        fft *= 3.;
-        float d3 = segmenty(p3, fft, 0.4*cw);
-        float d = d3;
-        return d;
-      }
-
-      vec3 vumeters(vec3 col, vec2 p, vec2 pp, float off) {
-        float ftime = g_ftime;
-        float aa = sqrt(2.)/RESOLUTION.y;
-        float df = dvumeters(p, off);
-        float sy = sign(p.y);
-        vec3 fcol = 2.*(1.5+0.5*sy)*(0.5+0.5*sin(vec3(0.,1.,2.)+abs(p.x)+TIME+0.125*sy));
-        col = mix(col, mix(fcol, col, ftime*ftime*ftime), smoothstep(aa, -aa, df));
-        return col;
-      }
-
-
-      void setup(float tm) {
-        const float off          = 16.;
-        float beat    = (BPM/60.)*(tm);
-        float ntime   = floor(beat);
-        float ftime   = fract(beat);
-        float btime   = (TIME+(ntime+log2(1.+(off-1.)*ftime)/log2(off)));
-        g_ntime       = ntime;
-        g_ftime       = ftime;
-        g_btime       = btime;
-      #ifdef DEMO_MODE
-      #else
-      #endif
-        float t       = TAU*btime;
-        float a       = t*TAU/107.0;
-        g_rot0        = ROT(a);
-        g_rot1        = ROT(1.234*a);
-      }
-
-      // -----------------------------------------------------------------------------
-      // PRELUDE - END
-      // -----------------------------------------------------------------------------
-
-
       // #define RENDER1_BACKSTEP
 
       const int
@@ -2389,22 +1494,7 @@
 
         vec3 col = render1(ro, rd);
 
-        col *= smoothstep(1.5, sqrt(0.5), length(pp));
-        switch(g_state.y) {
-        case COMPUTER:
-          col = thecomputer(col, p, pp);
-          break;
-        case FREQ1:
-          col = vumeters(col, p, pp, 0.);
-          break;
-        case FREQ2:
-          col = vumeters(col, p, pp, 1.);
-          break;
-        default:
-          break;
-        }
-        col = aces_approx(col);
-        col = sqrt(col);
+        col = postProc(col, p, pp);
         return col;
       }
 
@@ -2422,7 +1512,7 @@
       const analyze_audio   = true;
       const demo_system     = new DemoSystemV1(analyze_audio);
 
-      const global_uniforms = [];
+      const global_uniforms = ["g_state", "logos"];
 
       function override_nearest(image) {
         return [image, (gl) => {
@@ -2437,6 +1527,11 @@
         },
       };
 
+      const preludes = {
+        vs: null,
+        fs: "fs-shader-prelude",
+      };
+
       const all_scenes = {
         red_scene : {
           vs: "vs-default"  ,
@@ -2449,17 +1544,14 @@
         glow_fields : {
           vs: "vs-default"  ,
           fs: "fs-glow-fields",
-          uniforms: ["g_state"],
         },
         travel : {
           vs: "vs-default"  ,
           fs: "fs-travel",
-          uniforms: ["g_state"],
         },
         fractal : {
           vs: "vs-default"  ,
           fs: "fs-fractal",
-          uniforms: ["g_state"],
         },
       };
 
@@ -2485,6 +1577,7 @@
       const OVERLAY_COMPUTER = 1;
       const OVERLAY_VUMETER1 = 2;
       const OVERLAY_VUMETER2 = 3;
+      const OVERLAY_MRANGE   = 4;
 
       const FLASH_OFF        = 0;
       const FLASH_ON         = 1;
@@ -2602,6 +1695,12 @@
         if (scene.uniformLocations.g_state && Array.isArray(payload.g_state) && payload.g_state.length === 3) {
           const v = payload.g_state;
           gl.uniform3i(scene.uniformLocations.g_state, v[0], v[1], v[2]);
+
+          // TEXTURE 0..1 is used for other things
+          gl.activeTexture(gl.TEXTURE2);
+          gl.bindTexture(gl.TEXTURE_2D, all_textures.dlogos.texture);
+          gl.uniform1i(scene.uniformLocations.logos, 2);
+
         }
       }
 
