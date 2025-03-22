@@ -657,19 +657,24 @@
     </script>
 
     <script id="fs-gaussian-blur-scene" type="x-shader/x-fragment">
-      const vec2 stp = vec2(1.0, 0.0);
+      #ifdef DEMO_MODE
+      uniform vec2 dir;
+      #else
+      const vec2 dir = vec2(0.0, 1.);
+      #endif
+
       void main() {
         vec2 q = v_texcoord;
-        float tsz = 1./RESOLUTION.y;
+        vec2 tsz = dir/RESOLUTION;
         float a = exp(-3.);
 
         vec3 col = texture(logos, q).xyz;
         float agg = 1.;
         for (float  i = 1.; i < 20.; ++i) {
-          float off = tsz*i;
+          vec2 off = tsz*i;
           float mul = exp(-a*i*i);
-          col += mul*texture(logos, q - stp*off).xyz;
-          col += mul*texture(logos, q + stp*off).xyz;
+          col += mul*texture(logos, q - off).xyz;
+          col += mul*texture(logos, q + off).xyz;
           agg += 2.*mul;
         }
 
@@ -1515,15 +1520,112 @@
       const global_uniforms = ["g_state", "logos"];
 
       function override_nearest(image) {
-        return [image, (gl) => {
+        return [image, (gl, texture) => {
           gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
           gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_NEAREST);
+          return texture;
         }];
+      }
+
+      function override_gaussian_blur(image) {
+        return [image, (gl, texture) => {
+          const float_buffer_ext = gl.getExtension("EXT_color_buffer_float");
+          if (!float_buffer_ext) {
+            console.log("EXT_color_buffer_float not supported");
+          }
+
+          const linear_floar_filter_ext = gl.getExtension('OES_texture_float_linear');
+          if (!linear_floar_filter_ext) {
+            console.log("OES_texture_float_linear not supported");
+          }
+
+          // Set input texture to linear filtering
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+
+          const width = 1024;
+          const height = 1024;
+          const framebuffer = gl.createFramebuffer();
+          gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+
+          const create_texture = () => {
+            const texture = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, width, height, 0, gl.RGBA, gl.FLOAT, null);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+            return texture;
+          }
+
+          const texture0 = create_texture();
+          const texture1 = create_texture();
+
+          const scene = all_scenes.gaussian_blur_scene;
+          gl.viewport(0, 0, width, height);
+          gl.useProgram(scene.shaderProgram);
+
+          gl.bindBuffer(gl.ARRAY_BUFFER, demo_system.verticesBuffer);
+          gl.vertexAttribPointer(scene.vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+          gl.bindBuffer(gl.ARRAY_BUFFER, demo_system.verticesTextureCoordBuffer);
+          gl.vertexAttribPointer(scene.textureCoordAttribute, 2, gl.FLOAT, false, 0, 0);
+
+          gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, demo_system.verticesIndexBuffer);
+
+          gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture0, 0);
+          if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+              console.error('Framebuffer not complete');
+              return;
+          }
+
+          gl.activeTexture(gl.TEXTURE2);
+          gl.bindTexture(gl.TEXTURE_2D, texture);
+          gl.uniform1i(scene.uniformLocations.logos, 2);
+
+          gl.uniform2f(scene.uniformLocations.resolution, width, height);
+
+          gl.uniform2f(scene.uniformLocations.dir, 1, 0);
+
+          gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+
+          gl.finish();
+
+          gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture1, 0);
+          if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+              console.error('Framebuffer not complete');
+              return;
+          }
+
+          gl.activeTexture(gl.TEXTURE2);
+          gl.bindTexture(gl.TEXTURE_2D, texture0);
+          gl.uniform1i(scene.uniformLocations.logos, 2);
+
+          gl.uniform2f(scene.uniformLocations.resolution, width, height);
+
+          gl.uniform2f(scene.uniformLocations.dir, 0, 1);
+
+          gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+
+          gl.finish();
+
+          // We wil be returning texture1, so delete the incoming texture
+          gl.deleteTexture(texture);
+
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+          gl.deleteTexture(texture0);
+          gl.deleteFramebuffer(framebuffer);
+
+          gl.bindTexture(gl.TEXTURE_2D, texture1);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
+
+          return texture1;
+       }];
       }
 
       const all_textures = {
         dlogos : {
-          image : () => document.getElementById("dlogos"),
+          image : () => override_gaussian_blur(document.getElementById("dlogos")),
         },
       };
 
@@ -1540,6 +1642,7 @@
         gaussian_blur_scene : {
           vs: "vs-default"  ,
           fs: "fs-gaussian-blur-scene",
+          uniforms: ["dir"],
         },
         glow_fields : {
           vs: "vs-default"  ,
@@ -1612,7 +1715,7 @@
           scene       : all_scenes.we_are_the_robots_baby ,
         },
         */
-        glow_fields_slot(  0, EFFECT_NONE   , OVERLAY_COMPUTER, FLASH_OFF ),
+        glow_fields_slot(  0, EFFECT_NONE   , OVERLAY_MRANGE, FLASH_OFF ),
         glow_fields_slot(  8, EFFECT_BLOBS  , OVERLAY_VUMETER1, FLASH_ON  ),
         glow_fields_slot( 16, EFFECT_CIRCLES, OVERLAY_VUMETER1, FLASH_ON  ),
         glow_fields_slot( 24, EFFECT_MANDEL , OVERLAY_VUMETER1, FLASH_ON  ),

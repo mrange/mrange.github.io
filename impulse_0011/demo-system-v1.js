@@ -96,7 +96,7 @@ class DemoSystemV1 {
   }
 
   create_texture_from_image(image, override) {
-    const texture = this.gl.createTexture();
+    let texture = this.gl.createTexture();
     this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
     this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, false);
     this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, image);
@@ -105,7 +105,7 @@ class DemoSystemV1 {
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR_MIPMAP_NEAREST);
     if (override) {
-      override(this.gl);
+      texture = override(this.gl, texture);
     }
     this.gl.generateMipmap(this.gl.TEXTURE_2D);
     return texture;
@@ -143,9 +143,9 @@ class DemoSystemV1 {
 
       await this.init_shaders();
 
-      this.init_textures();
-
       this.init_buffers();
+
+      this.init_textures();
 
       this.initialized = true;
 
@@ -287,10 +287,10 @@ class DemoSystemV1 {
 
     const [scene, payload] = on_select_scene(this.gl, time);
 
-    const bcr    = this.canvas.getBoundingClientRect();
-    const width  = bcr.width;
-    const height = bcr.height;
+    const width  = this.canvas.width;
+    const height = this.canvas.height;
 
+    this.gl.viewport(0, 0, width, height);
     this.gl.useProgram(scene.shaderProgram);
 
     // TODO: We always paint the entire screen, not needed then
