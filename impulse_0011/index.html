@@ -1176,9 +1176,9 @@
         float h1 = hash(n0.xz);
         float h2 = fract(8667.0*h1);
         float a1 = smoothstep(0.99, 1.0, sin(0.125*(p.y-0.5*mix(2.0, 4.0, h2)*g_btime)+TAU*h1));
-        c1.xz *= ROT(8.0*p.y);
+        c1.xz *= ROT((8.0*p.y+0.6));
         c1 -= 0.04;
-        float d4 = length(c1.xz)-0.005*a1;
+        float d4 = length(c1.xz)-mix(-0.001, 0.005, a1);
         float d = d0;
         d = min(d, d1);
         d = min(d,d2);
@@ -1274,10 +1274,15 @@
         float flash = smoothstep(0.25, 0., g_ftime);
         vec3 fcol = flashCol*mix(2.0, 20.0, flash);
 
+        g_gd = vec2(1E3, 0.0);
+        float dn = render1_df(p1);
+        vec2 gdn = g_gd;
+
         if (t1 < render1_max_length) {
           col = vec3(0.);
           col += 10.*fcol*pow(max(dot(ld11, r1),0.0),80.0)/max(8.0, dot(d11,d11));
           col += 10.*fcol*pow(max(dot(ld01, r1),0.0),20.0)/max(8.0, dot(d01,d01));
+          col += 8E-3*gdn.y*sqrt(sparkCol)/max(5E-4, gdn.x*gdn.x);
         }
 
         col *= exp(-4E-2*vec3(2.0,3.0,1.0)*t1);
@@ -1451,7 +1456,7 @@
       }
 
       const vec3 flashCol     = HSV2RGB(vec3(0.58, 0.8, 1.0));
-      const vec3 sparkCol     = HSV2RGB(vec3(0.42, 0.85, 9E-3));
+      const vec3 sparkCol     = HSV2RGB(vec3(0.70, 0.85, 9E-3));
 
       vec3 render1(vec3 ro, vec3 rd) {
         g_gd = vec2(1E3, 0.0);
@@ -1720,13 +1725,13 @@
         glow_fields_slot( 16, EFFECT_CIRCLES, OVERLAY_VUMETER1, FLASH_ON  ),
         glow_fields_slot( 24, EFFECT_MANDEL , OVERLAY_VUMETER1, FLASH_ON  ),
         glow_fields_slot( 40, EFFECT_BOXES  , OVERLAY_VUMETER2, FLASH_ON  ),
-        glow_fields_slot( 56, EFFECT_BLOBS  , OVERLAY_COMPUTER, FLASH_ON  ),
-        glow_fields_slot( 72, EFFECT_CIRCLES, OVERLAY_COMPUTER, FLASH_ON  ),
+        fractal_slot    ( 56, OVERLAY_COMPUTER),
+//        glow_fields_slot( 56, EFFECT_BLOBS  , OVERLAY_COMPUTER, FLASH_ON  ),
+        //glow_fields_slot( 72, EFFECT_CIRCLES, OVERLAY_COMPUTER, FLASH_ON  ),
         glow_fields_slot( 88, EFFECT_MANDEL , OVERLAY_VUMETER1, FLASH_ON  ),
         glow_fields_slot(104, EFFECT_CIRCLES, OVERLAY_VUMETER2, FLASH_ON  ),
         glow_fields_slot(112, EFFECT_DIGITS , OVERLAY_VUMETER2, FLASH_ON  ),
         glow_fields_slot(118, EFFECT_NONE   , OVERLAY_NONE    , FLASH_OFF ),
-//        fractal_slot    (120, OVERLAY_VUMETER2),
         glow_fields_slot(120, EFFECT_APOLLO , OVERLAY_VUMETER2, FLASH_ON  ),
         glow_fields_slot(136, EFFECT_MANDEL , OVERLAY_VUMETER2, FLASH_ON  ),
         glow_fields_slot(152, EFFECT_CIRCLES, OVERLAY_VUMETER1, FLASH_ON  ),
