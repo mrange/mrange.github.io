@@ -1343,8 +1343,8 @@
       ;
 
       const vec2
-        path_a = vec2(.33, .41)*2.
-      , path_b = vec2(1.0,sqrt(0.5))*0.5
+        path_a = vec2(1./13., 1./17.)*TAU
+      , path_b = vec2(0.707,1.0)
       ;
 
       vec3 offset(float z) {
@@ -1381,7 +1381,7 @@
       float apolloian(vec3 p, float s) {
         float scale = 1.0;
 
-        for(int i=0; i<5;i++) {
+        for(int i=0; i<5 ;i++) {
           p        = -1.0 + 2.0*fract(0.5*p+0.5);
           float r2 = dot(p,p);
           float k  = s/r2;
@@ -1398,25 +1398,27 @@
         return d-0.009;
       }
 
+      float g_flash;
+
       float render1_df(vec3 p) {
         warpWorld(p);
 
-        float d0 = length(p.xy)-0.125;
-        float d1 = apolloian(p, 1.15);
-        const float zz = 2.0;
+        float d0 = length(p.xy)-0.3;
+        float d1 = apolloian(p, 1.1+0.3*length(p.xy));
+        const float zz = 4.;
         float d2 = -((fract(zz*(length(p.xy)-0.25))/zz)-0.2);
         float d  = d1;
         d = max(d, -d0);
         d = max(d, d2);
         float d3 = d2;
-        d3 += 0.005;
-        d3 = abs(d3)-0.005;
+        d3 = abs(d3);
         float gd = d;
         gd = max(gd, d3);
 
         if (gd < g_gd.x) {
           g_gd = vec2(gd, 1.0);
         }
+
         return d;
       }
 
@@ -1435,7 +1437,11 @@
           if (d<dti.x) { dti=vec2(d,t); }
       #endif
           if (d < render1_tolerance || t > render1_max_length) {
-            break;
+            if (sf < 0.5) {
+              break;
+            };
+            sf = 0.125;
+            t = pt;
           }
           pt = t;
           t += sf*d;
@@ -1455,8 +1461,9 @@
           );
       }
 
-      const vec3 flashCol     = HSV2RGB(vec3(0.58, 0.8, 1.0));
-      const vec3 sparkCol     = HSV2RGB(vec3(0.70, 0.85, 9E-3));
+      const vec3 lightCol0    = HSV2RGB(vec3(0.58, 0.6, 8.0));
+      const vec3 lightCol1    = HSV2RGB(vec3(0.66, 0.3, 8.0));
+      const vec3 sparkCol     = HSV2RGB(vec3(0.06, 0.9, 1E-2));
 
       vec3 render1(vec3 ro, vec3 rd) {
         g_gd = vec2(1E3, 0.0);
@@ -1475,20 +1482,21 @@
         vec3 ld01 = normalize(d01);
         vec3 ld11 = normalize(d11);
 
-        float flash = smoothstep(0.25, 0., g_ftime);
-        vec3 fcol = flashCol*mix(2.0, 20.0, flash);
-
+        float flash = g_flash;
         if (t1 < render1_max_length) {
-          col += 10.*fcol*pow(max(dot(ld11, r1),0.0),80.0)/max(8.0, dot(d11,d11));
-          col += 10.*fcol*pow(max(dot(ld01, r1),0.0),20.0)/max(8.0, dot(d01,d01));
+          col += mix(1.0, 20.0, flash)*lightCol0*pow(max(dot(ld11, r1),0.0),80.0)/max(8.0, dot(d11,d11));
+          col += mix(1.0, 20.0, flash)*lightCol1*pow(max(dot(ld01, r1),0.0),20.0)/max(8.0, dot(d01,d01));
         }
 
-        col += flash*gd.y*sparkCol/max(1E-5, gd.x);
+        col += flash*gd.y*sparkCol/max(1E-3, gd.x);
+        col *= exp(-0.25*t1*vec3(2.0, 3.0, 1.0));
         return col;
       }
 
       vec3 effect(vec2 p, vec2 pp) {
         setup(TIME-0.1*length(p));
+        g_flash = smoothstep(0.25, 0., g_ftime);
+
 
         float tm  = g_btime;
 
@@ -1499,7 +1507,7 @@
         vec3 ww = normalize(dro);
         vec3 uu = normalize(cross(vec3(0,1,0)+4.*ddro, ww));
         vec3 vv = cross(ww, uu);
-        float rdd = 2.0-1.*length(pp);
+        float rdd = 1.+0.5*length(pp);
         vec3 rd = normalize(-p.x*uu + p.y*vv + rdd*ww);
 
         vec3 col = render1(ro, rd);
@@ -1715,30 +1723,24 @@
       }
 
       const script = [
-        /*{
-          begin       : 0                                 ,
-          scene       : all_scenes.we_are_the_robots_baby ,
-        },
-        */
         glow_fields_slot(  0, EFFECT_NONE   , OVERLAY_COMPUTER, FLASH_OFF ),
         glow_fields_slot(  8, EFFECT_BLOBS  , OVERLAY_VUMETER1, FLASH_ON  ),
-        glow_fields_slot( 16, EFFECT_CIRCLES, OVERLAY_VUMETER1, FLASH_ON  ),
-        glow_fields_slot( 24, EFFECT_MANDEL , OVERLAY_VUMETER1, FLASH_ON  ),
-        glow_fields_slot( 40, EFFECT_BOXES  , OVERLAY_VUMETER2, FLASH_ON  ),
-        fractal_slot    ( 56, OVERLAY_COMPUTER),
-//        glow_fields_slot( 56, EFFECT_BLOBS  , OVERLAY_COMPUTER, FLASH_ON  ),
-        //glow_fields_slot( 72, EFFECT_CIRCLES, OVERLAY_COMPUTER, FLASH_ON  ),
-        glow_fields_slot( 88, EFFECT_MANDEL , OVERLAY_VUMETER1, FLASH_ON  ),
-        glow_fields_slot(104, EFFECT_CIRCLES, OVERLAY_VUMETER2, FLASH_ON  ),
+        glow_fields_slot( 16, EFFECT_BOXES  , OVERLAY_VUMETER1, FLASH_ON  ),
+        glow_fields_slot( 24, EFFECT_CIRCLES, OVERLAY_VUMETER1, FLASH_ON  ),
+        glow_fields_slot( 40, EFFECT_MANDEL , OVERLAY_VUMETER1, FLASH_ON  ),
+        glow_fields_slot( 56, EFFECT_BOXES  , OVERLAY_COMPUTER, FLASH_ON  ),
+        glow_fields_slot( 72, EFFECT_CIRCLES, OVERLAY_COMPUTER, FLASH_ON  ),
+        glow_fields_slot( 88, EFFECT_MANDEL , OVERLAY_VUMETER2, FLASH_ON  ),
+        travel_slot     (104, OVERLAY_VUMETER2),
         glow_fields_slot(112, EFFECT_DIGITS , OVERLAY_VUMETER2, FLASH_ON  ),
         glow_fields_slot(118, EFFECT_NONE   , OVERLAY_NONE    , FLASH_OFF ),
-        glow_fields_slot(120, EFFECT_APOLLO , OVERLAY_VUMETER2, FLASH_ON  ),
-        glow_fields_slot(136, EFFECT_MANDEL , OVERLAY_VUMETER2, FLASH_ON  ),
-        glow_fields_slot(152, EFFECT_CIRCLES, OVERLAY_VUMETER1, FLASH_ON  ),
-        glow_fields_slot(160, EFFECT_BLOBS  , OVERLAY_VUMETER1, FLASH_ON  ),
+        fractal_slot    (120, OVERLAY_VUMETER2),
+        glow_fields_slot(136, EFFECT_APOLLO , OVERLAY_VUMETER2, FLASH_ON  ),
+        glow_fields_slot(152, EFFECT_BOXES  , OVERLAY_VUMETER1, FLASH_ON  ),
+        glow_fields_slot(160, EFFECT_CIRCLES, OVERLAY_VUMETER1, FLASH_ON  ),
         travel_slot     (172, OVERLAY_COMPUTER),
-        glow_fields_slot(184, EFFECT_APOLLO , OVERLAY_VUMETER2, FLASH_ON  ),
-        glow_fields_slot(200, EFFECT_MANDEL , OVERLAY_VUMETER2, FLASH_ON  ),
+        glow_fields_slot(184, EFFECT_APOLLO , OVERLAY_VUMETER1, FLASH_ON  ),
+        glow_fields_slot(200, EFFECT_MANDEL , OVERLAY_VUMETER1, FLASH_ON  ),
         glow_fields_slot(216, EFFECT_NONE   , OVERLAY_COMPUTER, FLASH_OFF ),
       ];
 
