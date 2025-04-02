@@ -1,5 +1,16 @@
 <canvas id=c width=1024 height=1024>
-<script>onload=d=>{with(g=c.getContext("webgl2")){p=createProgram();shaderSource(s=createShader(FRAGMENT_SHADER),`#version 300 es
-precision highp float;uniform float t;out vec4 o;void main(){int F=60,s;vec4 y,l=vec4(0,1,2,3);float e=t/1E2,x=cos(e),z=sin(e);mat2 R=mat2(x,z,-z,x);vec3 f=vec3((2.*gl_FragCoord.xy-1024.)/1024.,2),v=.1*(1.+sin(5.+.1*f.y+l.xyz))/max(.6-.5*f.y+.1*f.x*f.x,.1)-l.wzy*.03*length(f);for(e=.01;--F>0;y=abs(y/x),x=6e-5+e*e*.002,z=clamp(.5+.05*(y.w-y.y)/x,0.,1.),z=9.*x*z*(1.-z)+mix(y.y,y.w,z)-x,e+=.5*z,v+=(1.1+sin(l.xyz+log(length(y.xz))))/1e9/z/z/exp(6.*e))for(y=vec4(.15*l.yxx+normalize(f)*e,.25),y.wx*=R,y.yw*=R,x=1.,s=6;--s>0;y*=z)x*=z=2./dot(y-=2.*round(y*.5),y);o=vec4(sqrt(tanh(v)),1);}`);compileShader(s);attachShader(p,s);shaderSource(s=createShader(VERTEX_SHADER),`#version 300 es
-void main(){gl_Position.w=gl_PointSize=1024.;}`);compileShader(s);attachShader(p,s);linkProgram(p);useProgram(p);q=performance.now();requestAnimationFrame(function r(n){uniform1f(getUniformLocation(p,"t"),(n-q)/1000);drawArrays(POINTS,0,1);requestAnimationFrame(r)})}}
-</script>
+<script>onload=d=>{g=c.getContext("webgl2")
+p=g.createProgram(i=35634)
+g.shaderSource(s=g.createShader(--i),`#version 300 es
+precision highp float;uniform float t;out vec4 o;void main(){gl_Position.w=gl_PointSize=1024.;}`)
+g.compileShader(s)
+g.attachShader(p,s)
+g.shaderSource(s=g.createShader(--i),`#version 300 es
+precision highp float;uniform float t;out vec4 o;void main(){int F=60,s;vec4 y,l=vec4(0,1,2,3);float e,x=cos(t),z=sin(t);mat2 R=mat2(x,z,-z,x);vec3 f=vec3((2.*gl_FragCoord.xy-1024.)/1024.,2),v=.03*(l.yzw/max(.6-.5*f.y+.1*f.x*f.x,.1)-l.wzy*length(f));for(e=.01;--F>0;y=abs(y/x),x=6e-5+e*e*.002,z=clamp(.5+.05*(y.w-y.y)/x,0.,1.),z=9.*x*z*(1.-z)+mix(y.y,y.w,z)-x,e+=.5*z,v+=(1.1+sin(l.xyz+log(length(y.xz))))/1e9/z/z/exp(6.*e))for(y=vec4(.15*l.yxx+normalize(f)*e,.25),y.wx*=R,y.yw*=R,x=1.,s=6;--s>0;y*=z)x*=z=2./dot(y-=2.*round(y*.5),y);o=vec4(sqrt(tanh(v)),1);}`)
+g.compileShader(s)
+g.attachShader(p,s)
+g.linkProgram(p)
+g.useProgram(p)
+s=performance.now()
+requestAnimationFrame(function r(n){g.drawArrays(g.uniform1f(g.getUniformLocation(p,"t"),(n-s)/1E5),0,1)
+requestAnimationFrame(r)})}</script>
