@@ -1,0 +1,31 @@
+<canvas id=c style=width:100% width=1024 height=1024><script>onclick=d=>{document.body.style.margin=0
+g=c.getContext(`webgl2`)
+p=g.createProgram(i=35634)
+g.shaderSource(s=g.createShader(--i),`#version 300 es
+precision highp float;uniform float f;out vec4 v;void main(){gl_Position.w=gl_PointSize=1024.;}`)
+g.compileShader(s)
+g.attachShader(p,s)
+g.shaderSource(s=g.createShader(--i),`#version 300 es
+precision highp float;uniform float f;out vec4 v;void main(){int e=60,t;vec4 a,l=vec4(0,1,2,3);float g,r=cos(f),c=sin(f);mat2 m=mat2(r,c,-c,r);vec3 b=vec3((2.*gl_FragCoord.rg-1024.)/1024.,2),s=.03*(l.gba/max(.6-.5*b.g+.1*b.r*b.r,.1)-l.abg*length(b));for(g=.01;--e>0;a=abs(a/r),r=6e-5+g*g*.002,c=clamp(.5+.05*(a.a-a.g)/r,0.,1.),c=9.*r*c*(1.-c)+mix(a.g,a.a,c)-r,g+=.5*c,s+=(1.1+sin(l.rgb+log(length(a.rb))))/1e9/c/c/exp(6.*g))for(a=vec4(.15*l.grr+normalize(b)*g,.25),a.ar*=m,a.ga*=m,r=1.,t=6;--t>0;a*=c)r*=c=2./dot(a-=2.*round(a*.5),a);v=vec4(sqrt(tanh(s)),1);}`)
+g.compileShader(s)
+g.attachShader(p,s)
+g.linkProgram(p)
+g.useProgram(p)
+t=performance.now()
+requestAnimationFrame(function r(n){g.drawArrays(g.uniform1f(g.getUniformLocation(p,`f`),(n-t)/2e5),0,1)
+requestAnimationFrame(r)})
+a=[[68,61,80,76,73,71,63],[68,61,81,80,73,71,63],[68,61,80,76,73,71,63],[68,61,83,80,73,71,63],[68,61,85,83,76,71,63],[68,61,81,80,73,71,63],[68,61,80,76,73,71,63],[68,61,83,80,73,71,63],[68,61,78,75,73,71,63],[68,61,83,80,76,71,63],[68,61,87,83,80,71,63],[68,61,85,76,73,71,63]],
+o=i=>382+6*((Math.sin(i*12.9898)*13758.5453)%1)
+s=i=>Math.sin(6.2832*i)
+r=i=>i/i**i*Math.min(3-i,1)
+h=i=>(2**.8*Math.sign((i/384e3+.5)%1-.5)*Math.abs((i/384e3+.5)%1-.5)**1.8+~~(i/384e3+.5))*32
+d=i=>s(i)+.2*s(2*i)+.1*s(3*i)+.02*s(4*i)+.02*s(5*i)+.02*s(6*i)+.1*s(8*i)
+l=(i,n)=>i*2**((n-69)/12)
+u=(i,n)=>d(l(i,a[~~(h(n)/84)%a.length][~~h(n)%7])*n/48e3)*r(3*h(n)%3)
+f=new AudioContext()
+A=f.createScriptProcessor(1024,e=0,1)
+A.onaudioprocess=d=>{for(B=0;B<1024;){i=48e3*++e/f.sampleRate
+n=2*u(385,i)
+for(c=0;++c<24;)n+=.9**c*u(o(c-1),-Math.min(2e4*c-i,0))
+d.outputBuffer.getChannelData(0)[B++]=n/9}}
+A.connect(f.destination)}</script>

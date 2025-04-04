@@ -1,31 +1,122 @@
-<canvas id=c width=1024 height=1024>
-<script>onclick=d=>{g=c.getContext("webgl2")
-p=g.createProgram(i=35634)
-g.shaderSource(s=g.createShader(--i),`#version 300 es
-precision highp float;uniform float f;out vec4 v;void main(){gl_Position.w=gl_PointSize=1024.;}`)
-g.compileShader(s)
-g.attachShader(p,s)
-g.shaderSource(s=g.createShader(--i),`#version 300 es
-precision highp float;uniform float f;out vec4 v;void main(){int e=60,t;vec4 a,l=vec4(0,1,2,3);float g,r=cos(f),c=sin(f);mat2 m=mat2(r,c,-c,r);vec3 b=vec3((2.*gl_FragCoord.rg-1024.)/1024.,2),s=.03*(l.gba/max(.6-.5*b.g+.1*b.r*b.r,.1)-l.abg*length(b));for(g=.01;--e>0;a=abs(a/r),r=6e-5+g*g*.002,c=clamp(.5+.05*(a.a-a.g)/r,0.,1.),c=9.*r*c*(1.-c)+mix(a.g,a.a,c)-r,g+=.5*c,s+=(1.1+sin(l.rgb+log(length(a.rb))))/1e9/c/c/exp(6.*g))for(a=vec4(.15*l.grr+normalize(b)*g,.25),a.ar*=m,a.ga*=m,r=1.,t=6;--t>0;a*=c)r*=c=2./dot(a-=2.*round(a*.5),a);v=vec4(sqrt(tanh(s)),1);}`)
-g.compileShader(s)
-g.attachShader(p,s)
-g.linkProgram(p)
-g.useProgram(p)
-t=performance.now()
-requestAnimationFrame(function r(n){g.drawArrays(g.uniform1f(g.getUniformLocation(p,"f"),(n-t)/1e5),0,1)
-requestAnimationFrame(r)})
-m=i=>{a=[[68,61,80,76,73,71,63],[68,61,81,80,73,71,63],[68,61,80,76,73,71,63],[68,61,83,80,73,71,63],[68,61,85,83,76,71,63],[68,61,81,80,73,71,63],[68,61,80,76,73,71,63],[68,61,83,80,73,71,63],[68,61,78,75,73,71,63],[68,61,83,80,76,71,63],[68,61,87,83,80,71,63],[68,61,85,76,73,71,63]],
-o=i=>382+6*((Math.sin(i*12.9898)*13758.5453)%1)
-s=i=>Math.sin(6.2832*i)
-r=i=>i/i**i*Math.min(3-i,1)
-h=i=>(2**.8*Math.sign((i/384e3+.5)%1-.5)*Math.abs((i/384e3+.5)%1-.5)**1.8+~~(i/384e3+.5))*32
-d=i=>s(i)+.2*s(2*i)+.1*s(3*i)+.02*s(4*i)+.02*s(5*i)+.02*s(6*i)+.1*s(8*i)
-l=(i,n)=>i*2**((n-69)/12)
-u=(i,n)=>d(l(i,a[~~(h(n)/84)%a.length][~~h(n)%7])*n/48e3)*r(3*h(n)%3)
-n=2*u(385,i)
-for(c=0;++c<24;)n+=.9**c*u(o(c-1),-Math.min(2e4*c-i,0))
-return n/9}
-f=new AudioContext()
-a=f.createScriptProcessor(1024,e=0,1)
-a.onaudioprocess=d=>{for(i=0;i<1024;++i)d.outputBuffer.getChannelData(0)[i]=m(48e3*++e/f.sampleRate)}
-a.connect(f.destination)}</script>
+<!--
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+-->
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Forest of Fractal Fluorescent Filaments</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Josefin+Slab&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Josefin Slab';
+            font-size: 2vw;
+            color: white;
+            background-color: black;
+        }
+        a:link {
+          text-decoration: none;
+          color: #FF8240;
+        }
+        a:visited {
+          text-decoration: none;
+          color: #FF8240;
+        }
+        a:hover {
+          text-decoration: underline;
+          color: #DFF180;
+        }
+        a:active {
+          text-decoration: underline;
+          color: #DFF180;
+        }
+        canvas.gl {
+          position:fixed;
+          z-index:-1;
+          top:0;
+          left: 0;
+          height: 100%;
+          width: 100%;
+          background-color: black;
+        }
+        div.center-flex {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+    </style>
+  </head>
+  <body>
+    <div id="information" style="margin-left: 16pt;">
+      <h1>Forest of Fractal Fluorescent Filaments</h1>
+
+      <a target=_none href="https://demozoo.org/sceners/32586/">mrange</a> here.
+
+      <p/>
+
+      I have dabbled in size-coding a bit and watching <a target=_none href="https://demozoo.org/parties/5201/#competition_19695">Lovebyte 2025</a> I got inspired by the demo <a target=_none href="https://demozoo.org/productions/367584/">Plane parasite</a> to attempt a 1KiB brotli compressed HTML demo myself.
+
+      <p/>
+
+      I can create decent visuals but music is a mystery to me so I went to <a target=_none href="https://dollchan.net/bytebeat/">bytebeat composer</a> to look for something I could creatively "borrow". I found a really great bytebeat called <a target=_none href="https://battleofthebits.com/arena/Entry/pulsar/75362/">Pulsar</a> by <a target=_none href="https://battleofthebits.com/barracks/Profile/luna197/">luna197</a> which I tweaked a bit using my poor JavaScript skills to make it fit in 1KiB. I hope I didn't butcher the bytebeat too much while doing so.
+
+      <p/>
+
+      Extra big thanks to <a target=_none href="https://demozoo.org/sceners/44058/">Pestis</a> for letting me nerd snipe him with some optimizations problems and of course to <a target=_none href="https://battleofthebits.com/barracks/Profile/luna197/">luna197</a> for the beutiful music.
+
+      <p/>
+
+      The HTML demo when compressed with brotli is less than 1KiB. There are some drawbacks with 1KiB limit, in order to make it start you need to click in the middle of the screen to make it start. This is because Audio playback is prevented without user interaction. Unfortunately with 1KiB limit I don't have space to explain this issue in the screen itself. I recommmend putting the browser in fullscreen mode (often F11 is used to do this) to enjoy a...
+
+      <p/>
+
+<a target=_none href="forest-of-fractal-fluorescent-filaments.html">Forest of Fractal Fluorescent Filaments</a>
+
+      <h1>Greetings goto<h1>
+
+      <h2>The Twitch Tribe</h2>
+      <ul>
+        <li>🎉 <b>clayman_dev</b> ✨</li>
+        <li>🎉 <b>essenbee</b> ✨</li>
+        <li>🎧 <b>h0ffman</b> 🎶🎵</li>
+        <li>🎧 <b>lug00ber</b> 🎶🎵</li>
+        <li>⚡ <b>ggn2</b> 🔥</li>
+        <li>⚡ <b>proton_fig</b> 🔥</li>
+        <li>⚡ <b>SlayRadio</b> 🔥</li>
+        <li>🎨 <b>StyxColor</b> 🎨</li>
+        <li>🏴‍☠️ <b>The Captain Coder</b>⚓</li>
+        <li>😡 <b>TheGrumpyGameDev</b> 😄</li>
+        <li>🧙 <b>Thindal</b> ✨</li>
+      </ul>
+
+      <h2>Shader gods</h2>
+      <ul>
+        <li>🦅 <b>Big Wings</b> 🎨</li>
+        <li>🧠 <b>Byt3 M3chanic</b> 🌈</li>
+        <li>🧪 <b>Dave Hoskins</b> 🤯</li>
+        <li>😈 <b>EvilRyu</b> 🔥</li>
+        <li>🌑 <b>Evvvil</b> 😱</li>
+        <li>🤔 <b>IQ</b> 🚀</li>
+        <li>🧙‍♀️ <b>Kali</b> ✨</li>
+        <li>⛵ <b>Nimitz</b> 🎆</li>
+        <li>⛵ <b>Pestis</b> 🎆</li>
+        <li>🎶 <b>Shane</b> 💃</li>
+        <li>🎨 <b>Totetmatt</b> 🔧</li>
+      </ul>
+
+    </div>
+  </body>
+</html>
